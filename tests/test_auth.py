@@ -1,6 +1,6 @@
 """
-Unit Tests for Supabase Bearer JWT Authentication Foundation & Reusable Dependencies
-Verifies token parsing, algorithm safety, claim validation, user_id extraction, and error handling.
+Unit Tests for Supabase Bearer JWT Authentication Foundation & Auth Sync Endpoint.
+Verifies token parsing, algorithm safety, claim validation, user_id extraction, and POST /auth/sync.
 """
 
 import time
@@ -16,8 +16,11 @@ from app.core.security import (
     get_current_user_id,
     verify_jwt_token,
 )
+from app.db.models import StudentProfile
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
+
+from tests.db import TestingSessionLocal
 
 TEST_JWT_SECRET = "test_supabase_jwt_secret_32_bytes_long_minimum!!"
 
@@ -216,50 +219,73 @@ def test_client_supplied_user_id_cannot_override_jwt_sub(auth_test_client: TestC
     assert data["authenticated_user_id"] != attacker_supplied_uuid
 
 
-# --- Gate 2.10: GET /api/v1/auth/me Endpoint Tests ---
+# --- Gate 2.10.1: POST /api/v1/auth/sync Endpoint Tests ---
 
 
-def test_get_auth_me_valid_jwt_returns_user_identity(client: TestClient):
-    """Test 9: GET /api/v1/auth/me returns 200 OK with authenticated user identity."""
+def test_post_auth_sync_valid_jwt_without_profile(client: TestClient):
+    """Test 9: POST /api/v1/auth/sync returns 200 OK with has_profile=False when profile absent."""
     user_uuid = uuid4()
     valid_token = generate_mock_jwt(user_id=user_uuid)
 
-    response = client.get(
-        "/api/v1/auth/me", headers={"Authorization": f"Bearer {valid_token}"}
+    response = client.post(
+        "/api/v1/auth/sync", headers={"Authorization": f"Bearer {valid_token}"}
     )
     assert response.status_code == 200
     data = response.json()
     assert data["user_id"] == str(user_uuid)
     assert data["email"] == "student@example.com"
-    assert data["role"] == "authenticated"
+    assert data["has_profile"] is False
 
 
-def test_get_auth_me_missing_header_returns_401(client: TestClient):
-    """Test 10: GET /api/v1/auth/me without Authorization header returns 401 UNAUTHORIZED."""
-    response = client.get("/api/v1/auth/me")
+def test_post_auth_sync_valid_jwt_with_profile(client: TestClient):
+    """Test 10: POST /api/v1/auth/sync returns 200 OK with has_profile=True when profile exists."""
+    user_uuid = uuid4()
+
+    db = TestingSessionLocal()
+    profile = StudentProfile(user_id=user_uuid, full_name="Synced Student")
+    db.add(profile)
+    db.commit()
+    db.close()
+
+    valid_token = generate_mock_jwt(user_id=user_uuid)
+    response = client.post(
+        "/api/v1/auth/sync", headers={"Authorization": f"Bearer {valid_token}"}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == str(user_uuid)
+    assert data["email"] == "student@example.com"
+    assert data["has_profile"] is True
+
+
+def test_post_auth_sync_missing_header_returns_401(client: TestClient):
+    """Test 11: POST /api/v1/auth/sync without Authorization header returns 401 UNAUTHORIZED."""
+    response = client.post("/api/v1/auth/sync")
     assert response.status_code == 401
     data = response.json()
     assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_get_auth_me_invalid_token_returns_401(client: TestClient):
-    """Test 11: GET /api/v1/auth/me with invalid JWT returns 401 UNAUTHORIZED."""
-    response = client.get(
-        "/api/v1/auth/me", headers={"Authorization": "Bearer invalid.token.value"}
+def test_post_auth_sync_invalid_token_returns_401(client: TestClient):
+    """Test 12: POST /api/v1/auth/sync with invalid JWT returns 401 UNAUTHORIZED."""
+    response = client.post(
+        "/api/v1/auth/sync", headers={"Authorization": "Bearer invalid.token.value"}
     )
     assert response.status_code == 401
     data = response.json()
     assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_get_auth_me_ignores_client_query_override_attempts(client: TestClient):
-    """Test 12: GET /api/v1/auth/me ignores client query parameters attempting identity override."""
+def test_post_auth_sync_ignores_client_body_or_query_overrides(client: TestClient):
+    """Test 13: POST /api/v1/auth/sync ignores client payload identity override attempts."""
     authenticated_uuid = uuid4()
     attacker_uuid = uuid4()
     valid_token = generate_mock_jwt(user_id=authenticated_uuid)
 
-    response = client.get(
-        f"/api/v1/auth/me?user_id={attacker_uuid}&email=hacker@evil.com",
+    malicious_payload = {"user_id": str(attacker_uuid), "email": "attacker@evil.com"}
+    response = client.post(
+        f"/api/v1/auth/sync?user_id={attacker_uuid}",
+        json=malicious_payload,
         headers={"Authorization": f"Bearer {valid_token}"},
     )
     assert response.status_code == 200

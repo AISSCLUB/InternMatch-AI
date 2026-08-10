@@ -1,6 +1,6 @@
 """
 Pytest Test Suite Configuration & Fixtures
-Provides shared test fixtures, app TestClient, and test JWT environment configuration.
+Provides shared test fixtures, app TestClient, and test database config.
 """
 
 import sys
@@ -15,10 +15,22 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from app.core.config import settings  # noqa: E402
+from app.db.models import StudentProfile  # noqa: E402,F401
+from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
+
+from tests.db import TestingSessionLocal, test_engine  # noqa: E402
 
 TEST_JWT_SECRET = "test_supabase_jwt_secret_32_bytes_long_minimum!!"
 TEST_SUPABASE_URL = "https://legitimate-project.supabase.co"
+
+def override_get_db():
+    """Override get_db dependency to use the shared SQLite test database."""
+    try:
+        db = TestingSessionLocal()
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture(autouse=True)
@@ -35,6 +47,21 @@ def configure_test_jwt_settings():
     settings.SUPABASE_JWT_SECRET = original_secret
     settings.SUPABASE_URL = original_url
 
+
+@pytest.fixture(autouse=True)
+def setup_test_database():
+    """Create all registered SQLAlchemy tables and configure the DB override."""
+    if "student_profiles" not in Base.metadata.tables:
+        raise RuntimeError(
+            "StudentProfile is not registered in Base.metadata before test setup."
+        )
+
+    Base.metadata.create_all(bind=test_engine)
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield
+
+    app.dependency_overrides.pop(get_db, None)
 
 @pytest.fixture
 def client() -> TestClient:

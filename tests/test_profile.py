@@ -7,49 +7,11 @@ Verifies authentication, user-scoped profile retrieval, upsert operations,
 from uuid import uuid4
 
 from app.db.models import StudentProfile
-from app.db.session import Base, get_db
-from app.main import app
 from app.repositories.student_profile import StudentProfileRepository
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
+from tests.db import TestingSessionLocal
 from tests.test_auth import generate_mock_jwt
-
-# SQLite in-memory database setup for fast unit testing
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
-
-test_engine = create_engine(
-    SQLALCHEMY_TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(
-    autocommit=False, autoflush=False, bind=test_engine
-)
-
-
-def override_get_db():
-    """Override get_db dependency to use SQLite in-memory test database."""
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-def setup_module():
-    """Create all test database tables in memory before tests run."""
-    Base.metadata.create_all(bind=test_engine)
-
-
-def teardown_module():
-    """Drop all test database tables after tests finish."""
-    Base.metadata.drop_all(bind=test_engine)
 
 
 def test_unauthenticated_profile_request_returns_401(client: TestClient):
