@@ -1,0 +1,39 @@
+name: internmatch-ai
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: internmatch_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: internmatch_worker
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: internmatch_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped

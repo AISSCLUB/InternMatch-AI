@@ -1,0 +1,7 @@
+# Developer Workstation & CI Test/Lint Dependencies
+# (Used on local developer host machines / CI runner virtualenvs)
+
+-r backend/requirements.txt
+
+pytest>=8.3.0,<9.0.0
+ruff>=0.6.0,<1.0.0

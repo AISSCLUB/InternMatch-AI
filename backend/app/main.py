@@ -1,0 +1,58 @@
+"""
+InternMatch AI — Backend FastAPI Application Entrypoint
+Authors: Mohammad & Selen (AISS Club — Üsküdar University)
+"""
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.router import api_router
+from app.api.v1.endpoints.health import HealthResponse, get_health
+from app.core.config import settings
+from app.core.logging import logger
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle events manager for application startup and shutdown."""
+    logger.info(
+        f"Starting {settings.PROJECT_NAME} backend v{settings.VERSION} [{settings.ENVIRONMENT}]"
+    )
+    yield
+    logger.info(f"Shutting down {settings.PROJECT_NAME} backend service.")
+
+
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description="AI-powered personalized internship matching and application assistant REST API.",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# CORS Configuration
+if settings.cors_origins_list:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Mount Versioned API Routes (/api/v1/...)
+app.include_router(api_router, prefix="/api")
+
+# Mount Root Liveness Endpoint (/health)
+app.add_api_route(
+    "/health",
+    endpoint=get_health,
+    response_model=HealthResponse,
+    methods=["GET"],
+    tags=["Health Operations"],
+    summary="Root Liveness Endpoint"
+)
