@@ -215,4 +215,3 @@ def test_generate_embedding_provider_exception_propagates(monkeypatch):
 
     with pytest.raises(RuntimeError, match="OpenAI API 500 Server Error"):
         generate_embedding("Software Engineer")
-
