@@ -1,5 +1,5 @@
 """Shared SQLite test database infrastructure."""
-from app.db.models import InternshipListing, StudentProfile  # noqa: F401
+from app.db.models import InternshipListing, ProcessingJob, StudentProfile  # noqa: F401
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

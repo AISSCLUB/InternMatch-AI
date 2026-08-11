@@ -238,6 +238,7 @@ CREATE TABLE public.processing_jobs (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     job_type TEXT NOT NULL CHECK (job_type IN ('cv_extraction', 'match_calculation', 'application_generation')),
     status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
+    progress_percent INT NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
     result JSONB,
     error TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -246,6 +247,7 @@ CREATE TABLE public.processing_jobs (
 ```
 
 ---
+
 
 ## 3. Database Indexes & Vector Optimization
 

@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from app.db.session import Base
-from sqlalchemy import ARRAY, JSON, String
+from sqlalchemy import ARRAY, JSON, CheckConstraint, DateTime, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -73,4 +74,51 @@ class InternshipListing(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+
+class ProcessingJob(Base):
+    """ORM Model mapping public.processing_jobs table."""
+
+    __tablename__ = "processing_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "job_type IN ('cv_extraction', 'match_calculation', 'application_generation')",
+            name="ck_processing_jobs_job_type",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'processing', 'completed', 'failed')",
+            name="ck_processing_jobs_status",
+        ),
+        CheckConstraint(
+            "progress_percent >= 0 AND progress_percent <= 100",
+            name="ck_processing_jobs_progress_percent",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False
+    )
+    job_type: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
+    progress_percent: Mapped[int] = mapped_column(
+        nullable=False, default=0
+    )
+    result: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )

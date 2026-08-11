@@ -15,7 +15,7 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from app.core.config import settings  # noqa: E402
-from app.db.models import InternshipListing, StudentProfile  # noqa: E402,F401
+from app.db.models import InternshipListing, ProcessingJob, StudentProfile  # noqa: E402,F401
 from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -54,6 +54,7 @@ def setup_test_database():
     if (
         "student_profiles" not in Base.metadata.tables
         or "internship_listings" not in Base.metadata.tables
+        or "processing_jobs" not in Base.metadata.tables
     ):
         raise RuntimeError(
             "Required models are not registered in Base.metadata before test setup."
@@ -65,6 +66,7 @@ def setup_test_database():
     yield
 
     app.dependency_overrides.pop(get_db, None)
+
 
 
 @pytest.fixture
