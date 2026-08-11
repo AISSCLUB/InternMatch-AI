@@ -1,13 +1,20 @@
-"""
+﻿"""
 Candidate Matches Endpoints
-Provides authenticated read access for pre-calculated internship matches.
+Provides authenticated read access for pre-calculated internship matches
+and POST trigger to enqueue match calculation.
 """
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.repositories.match import MatchRepository
-from app.schemas.match import MatchItemResponse, MatchListResponse
-from fastapi import APIRouter, Depends
+from app.repositories.processing_job import ProcessingJobRepository
+from app.schemas.match import (
+    MatchCalculationAcceptedResponse,
+    MatchItemResponse,
+    MatchListResponse,
+)
+from app.services.match_enqueue import enqueue_match_calculation
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -33,3 +40,60 @@ def get_my_matches(
     ]
 
     return MatchListResponse(matches=items)
+
+
+@router.post(
+    "/calculate",
+    response_model=MatchCalculationAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def calculate_matches(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Enqueue asynchronous candidate match calculation background processing job.
+    Requires valid Supabase Bearer JWT authentication token.
+    Identity is strictly derived from the validated JWT subject UUID.
+    Creates ProcessingJob record (status='queued'), commits before enqueue,
+    and dispatches task to Redis RQ queue.
+    """
+    try:
+        processing_job = ProcessingJobRepository.create(
+            db=db,
+            user_id=current_user.user_id,
+            job_type="match_calculation",
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    try:
+        enqueue_match_calculation(
+            job_id=processing_job.id,
+            user_id=current_user.user_id,
+            candidate_limit=50,
+        )
+    except Exception as exc:
+        err_msg = str(exc)
+        safe_error = err_msg[:1000] if len(err_msg) > 1000 else err_msg
+        try:
+            processing_job.status = "failed"
+            processing_job.progress_percent = 100
+            processing_job.result = None
+            processing_job.error = safe_error
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to enqueue match calculation job.",
+        )
+
+    return MatchCalculationAcceptedResponse(
+        job_id=processing_job.id,
+        status="queued",
+        message="Matching calculation enqueued.",
+    )

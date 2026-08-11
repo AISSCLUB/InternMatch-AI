@@ -1,10 +1,10 @@
 """
 Match API Response Schemas
-Provides Pydantic schemas for candidate pre-calculated match listing.
+Provides Pydantic schemas for candidate pre-calculated match listing and calculation enqueue.
 """
 
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,3 +52,13 @@ class MatchListResponse(BaseModel):
     """Top-level response schema for GET /api/v1/matches."""
 
     matches: List[MatchItemResponse]
+
+
+class MatchCalculationAcceptedResponse(BaseModel):
+    """Response schema for POST /api/v1/matches/calculate endpoint."""
+
+    job_id: UUID
+    status: Literal["queued"]
+    message: str
+
+    model_config = ConfigDict(from_attributes=True)
