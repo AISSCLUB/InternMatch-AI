@@ -15,7 +15,7 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from app.core.config import settings  # noqa: E402
-from app.db.models import StudentProfile  # noqa: E402,F401
+from app.db.models import InternshipListing, StudentProfile  # noqa: E402,F401
 from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -51,9 +51,12 @@ def configure_test_jwt_settings():
 @pytest.fixture(autouse=True)
 def setup_test_database():
     """Create all registered SQLAlchemy tables and configure the DB override."""
-    if "student_profiles" not in Base.metadata.tables:
+    if (
+        "student_profiles" not in Base.metadata.tables
+        or "internship_listings" not in Base.metadata.tables
+    ):
         raise RuntimeError(
-            "StudentProfile is not registered in Base.metadata before test setup."
+            "Required models are not registered in Base.metadata before test setup."
         )
 
     Base.metadata.create_all(bind=test_engine)
@@ -62,6 +65,7 @@ def setup_test_database():
     yield
 
     app.dependency_overrides.pop(get_db, None)
+
 
 @pytest.fixture
 def client() -> TestClient:
