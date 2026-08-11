@@ -186,6 +186,32 @@ The numeric scoring policy for InternMatch AI MVP v1 is defined as follows:
    - Pure scoring operations calculate and return full-precision `float` scores in range `[0.0, 100.0]`.
    - No integer rounding (`round()`, `int()`) occurs in the scoring service layer; integer rounding occurs ONCE later at the database `Match` persistence boundary.
 
+### 5.1.2 MVP Match Recalculation Persistence Policy (Authoritative)
+
+The persistence and synchronization rules for candidate match recalculation are defined as follows:
+
+1. **Set Synchronization & In-Place Update:**
+   - Recalculation synchronizes the candidate's active match set against the top retrieved vector candidates.
+   - Overlapping matches (`Match(student_id, internship_id)`) are updated in-place; their `Match.id` primary key and `created_at` timestamp are preserved.
+   - Stale previous `Match` records for the current student whose `internship_id` is no longer present in the new candidate set are deleted.
+   - If the new candidate set is empty, all prior `Match` records for the current student are deleted.
+   - Deletions are strictly tenant-scoped to the current student (`student_id`); matches belonging to other students are never modified or deleted.
+
+2. **Persistence Rounding Policy:**
+   - Float scores from the scoring service (`HybridScore`) are converted to database integer values exactly ONCE at the persistence boundary using non-negative round-half-up semantics (`int(score + 0.5)`).
+   - Component scores (`skill_score`, `vector_score`, `attribute_score`) and overall score (`overall_score`) are rounded independently from their respective `float` values.
+   - `overall_score` MUST be rounded directly from float `HybridScore.overall_score` and NOT recomputed from already-rounded component integers.
+
+3. **Stale Qualitative Output Invalidation:**
+   - Recalculation invalidates previous qualitative AI output.
+   - `why_you_match` is reset to `None`.
+   - `skill_gap_analysis` is rebuilt deterministically with `matching_skills` (matched required then matched preferred), `missing_skills` (missing required then missing preferred), `summary=""`, and `recommendations=[]`.
+
+4. **Transaction Ownership:**
+   - Match calculation and persistence operations perform `db.flush()` so ORM state and IDs are available, but NEVER call `db.commit()` or `db.rollback()`.
+   - The calling worker or API workflow owns the database transaction lifecycle (`commit`/`rollback`).
+
+
 
 ```mermaid
 flowchart LR

@@ -1,18 +1,18 @@
 """
 Match Repository Foundation
-Provides read-only database access for candidate internship matches.
+Provides database read and write operations for candidate internship matches.
 """
 
-from typing import List, Tuple
+from typing import List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from app.db.models import InternshipListing, Match, StudentProfile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 
 class MatchRepository:
-    """Repository handling database read operations for candidate matches."""
+    """Repository handling database read and write operations for candidate matches."""
 
     @staticmethod
     def get_matches_for_user(
@@ -32,3 +32,69 @@ class MatchRepository:
             .order_by(Match.overall_score.desc(), Match.created_at.desc())
         )
         return list(db.execute(stmt).all())
+
+    @staticmethod
+    def get_matches_by_student_id(db: Session, student_id: UUID) -> List[Match]:
+        """Fetch all existing Match records for a student."""
+        stmt = select(Match).where(Match.student_id == student_id)
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
+    def upsert_match(
+        db: Session,
+        student_id: UUID,
+        internship_id: UUID,
+        overall_score: int,
+        skill_score: int,
+        vector_score: int,
+        attribute_score: int,
+        skill_gap_analysis: dict,
+        existing_match: Optional[Match] = None,
+    ) -> Match:
+        """
+        Create a new Match or update an existing Match in place.
+        Preserves Match.id and created_at on update.
+        Resets why_you_match to None.
+        Does NOT commit or rollback.
+        """
+        if existing_match:
+            existing_match.overall_score = overall_score
+            existing_match.skill_score = skill_score
+            existing_match.vector_score = vector_score
+            existing_match.attribute_score = attribute_score
+            existing_match.skill_gap_analysis = skill_gap_analysis
+            existing_match.why_you_match = None
+            return existing_match
+
+        new_match = Match(
+            student_id=student_id,
+            internship_id=internship_id,
+            overall_score=overall_score,
+            skill_score=skill_score,
+            vector_score=vector_score,
+            attribute_score=attribute_score,
+            skill_gap_analysis=skill_gap_analysis,
+            why_you_match=None,
+        )
+        db.add(new_match)
+        return new_match
+
+    @staticmethod
+    def delete_stale_matches(
+        db: Session, student_id: UUID, current_internship_ids: Sequence[UUID]
+    ) -> int:
+        """
+        Delete Match rows for student_id whose internship_id is not in current_internship_ids.
+        If current_internship_ids is empty, deletes all Match rows for student_id.
+        Does NOT affect other students' matches. Does NOT commit or rollback.
+        """
+        if current_internship_ids:
+            stmt = delete(Match).where(
+                Match.student_id == student_id,
+                Match.internship_id.not_in(current_internship_ids),
+            )
+        else:
+            stmt = delete(Match).where(Match.student_id == student_id)
+
+        result = db.execute(stmt)
+        return result.rowcount
