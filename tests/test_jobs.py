@@ -79,7 +79,6 @@ def test_completed_job_returns_progress_100_and_result(client: TestClient):
     """Test 3: Completed job returns status='completed', progress_percent=100,
     and result payload."""
     user_id = uuid4()
-
     job_id = uuid4()
     token = generate_mock_jwt(user_id=user_id)
 
@@ -215,5 +214,118 @@ def test_repository_query_level_ownership_enforcement():
             db=db, job_id=job_id, user_id=user_b
         )
         assert non_owner_job is None
+    finally:
+        db.close()
+
+
+def test_repository_create_processing_job():
+    """Test 8: Repository create() creates queued ProcessingJob with progress=0
+    without auto-commit."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(
+            db=db, user_id=user_id, job_type="cv_extraction"
+        )
+        assert job.id is not None
+        assert job.user_id == user_id
+        assert job.job_type == "cv_extraction"
+        assert job.status == "queued"
+        assert job.progress_percent == 0
+
+        # Commit controlled by caller
+        db.commit()
+
+        # Verify retrieval via get_by_id
+        fetched = ProcessingJobRepository.get_by_id(db=db, job_id=job.id)
+        assert fetched is not None
+        assert fetched.id == job.id
+    finally:
+        db.close()
+
+
+def test_repository_get_by_id_and_update_state():
+    """Test 9: Repository get_by_id() and update_state() persist status, progress, result, error."""
+    user_id = uuid4()
+    unknown_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        # Unknown UUID returns None
+        assert ProcessingJobRepository.get_by_id(db=db, job_id=unknown_id) is None
+        assert (
+            ProcessingJobRepository.update_state(
+                db=db, job_id=unknown_id, status="completed", progress_percent=100
+            )
+            is None
+        )
+
+        job = ProcessingJobRepository.create(
+            db=db, user_id=user_id, job_type="match_calculation"
+        )
+        db.commit()
+
+        # Update progress and result
+        updated = ProcessingJobRepository.update_state(
+            db=db,
+            job_id=job.id,
+            status="completed",
+            progress_percent=100,
+            result={"matches_count": 5},
+        )
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.progress_percent == 100
+        assert updated.result == {"matches_count": 5}
+        db.commit()
+
+        # Update error state
+        job_error = ProcessingJobRepository.create(
+            db=db, user_id=user_id, job_type="application_generation"
+        )
+        db.commit()
+
+        updated_error = ProcessingJobRepository.update_state(
+            db=db,
+            job_id=job_error.id,
+            status="failed",
+            progress_percent=30,
+            error="LLM quota exceeded",
+        )
+        assert updated_error is not None
+        assert updated_error.status == "failed"
+        assert updated_error.progress_percent == 30
+        assert updated_error.error == "LLM quota exceeded"
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_repository_update_state_invalid_progress_raises():
+    """Test 10: Repository update_state() raises ValueError for progress outside 0..100."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(
+            db=db, user_id=user_id, job_type="cv_extraction"
+        )
+        db.commit()
+        job_id = job.id
+
+        with pytest.raises(ValueError, match="Invalid progress_percent"):
+            ProcessingJobRepository.update_state(
+                db=db, job_id=job_id, status="processing", progress_percent=-10
+            )
+
+        with pytest.raises(ValueError, match="Invalid progress_percent"):
+            ProcessingJobRepository.update_state(
+                db=db, job_id=job_id, status="processing", progress_percent=150
+            )
+
+        # Verify job state remains unchanged (status='queued', progress_percent=0)
+        db.rollback()
+        persisted = ProcessingJobRepository.get_by_id(db=db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "queued"
+        assert persisted.progress_percent == 0
     finally:
         db.close()
