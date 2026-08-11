@@ -8,10 +8,19 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from app.db.session import Base
-from sqlalchemy import ARRAY, JSON, CheckConstraint, DateTime, String, Text
+from sqlalchemy import (
+    ARRAY,
+    JSON,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 class StudentProfile(Base):
@@ -122,3 +131,60 @@ class ProcessingJob(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+class Match(Base):
+    """ORM Model mapping public.matches table."""
+
+    __tablename__ = "matches"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id", "internship_id", name="uq_matches_student_internship"
+        ),
+        CheckConstraint(
+            "overall_score >= 0 AND overall_score <= 100",
+            name="ck_matches_overall_score",
+        ),
+        CheckConstraint(
+            "skill_score >= 0 AND skill_score <= 100",
+            name="ck_matches_skill_score",
+        ),
+        CheckConstraint(
+            "vector_score >= 0 AND vector_score <= 100",
+            name="ck_matches_vector_score",
+        ),
+        CheckConstraint(
+            "attribute_score >= 0 AND attribute_score <= 100",
+            name="ck_matches_attribute_score",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    internship_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("internship_listings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    overall_score: Mapped[int] = mapped_column(nullable=False)
+    skill_score: Mapped[int] = mapped_column(nullable=False)
+    vector_score: Mapped[int] = mapped_column(nullable=False)
+    attribute_score: Mapped[int] = mapped_column(nullable=False)
+    why_you_match: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    skill_gap_analysis: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"), nullable=True, default=dict
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    student_profile: Mapped["StudentProfile"] = relationship("StudentProfile")
+    internship: Mapped["InternshipListing"] = relationship("InternshipListing")
