@@ -1,7 +1,7 @@
 """
 Unit & Repository Tests for Protected Student Profile Read & Write Endpoints.
 Verifies authentication, user-scoped profile retrieval, upsert operations,
-404 handling, and parameter override protection.
+404 handling, parameter override protection, and summary_embedding invalidation rules.
 """
 
 from uuid import uuid4
@@ -27,9 +27,7 @@ def test_authenticated_user_without_profile_returns_404(client: TestClient):
     no_profile_user_id = uuid4()
     token = generate_mock_jwt(user_id=no_profile_user_id)
 
-    response = client.get(
-        "/api/v1/profile", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get("/api/v1/profile", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
     data = response.json()
     assert data["detail"]["error"]["code"] == "NOT_FOUND"
@@ -54,9 +52,7 @@ def test_authenticated_user_with_profile_returns_own_profile(client: TestClient)
     db.close()
 
     token = generate_mock_jwt(user_id=user_id)
-    response = client.get(
-        "/api/v1/profile", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get("/api/v1/profile", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
     data = response.json()
@@ -305,3 +301,153 @@ def test_put_profile_persists_in_fresh_database_session(client: TestClient):
     assert persisted.full_name == "Persisted Student"
     assert persisted.headline == "Persisted Headline"
     db_fresh.close()
+
+
+# EMBEDDING INVALIDATION TESTS (13 - 19)
+
+
+def test_upsert_changing_headline_clears_summary_embedding():
+    """Test 13: Changing headline clears existing summary_embedding."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        prof = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Student", headline="Old Headline"
+        )
+        StudentProfileRepository.set_summary_embedding(db, prof, [0.1] * 1536)
+        db.commit()
+
+        # Update headline
+        updated = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Student", headline="New Headline"
+        )
+        assert updated.summary_embedding is None
+    finally:
+        db.close()
+
+
+def test_upsert_changing_preferences_clears_summary_embedding():
+    """Test 14: Changing preferences clears existing summary_embedding."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        prof = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Student", preferences={"work_types": ["remote"]}
+        )
+        StudentProfileRepository.set_summary_embedding(db, prof, [0.1] * 1536)
+        db.commit()
+
+        # Update preferences
+        updated = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Student", preferences={"work_types": ["onsite"]}
+        )
+        assert updated.summary_embedding is None
+    finally:
+        db.close()
+
+
+def test_upsert_changing_full_name_clears_summary_embedding():
+    """Test 15: Changing full_name clears existing summary_embedding."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        prof = StudentProfileRepository.upsert_by_user_id(db, user_id=user_id, full_name="Old Name")
+        StudentProfileRepository.set_summary_embedding(db, prof, [0.1] * 1536)
+        db.commit()
+
+        updated = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="New Name"
+        )
+        assert updated.summary_embedding is None
+    finally:
+        db.close()
+
+
+def test_upsert_changing_cv_storage_path_clears_summary_embedding():
+    """Test 16: Changing cv_storage_path clears existing summary_embedding."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        prof = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Student", cv_storage_path="cv1.pdf"
+        )
+        StudentProfileRepository.set_summary_embedding(db, prof, [0.1] * 1536)
+        db.commit()
+
+        updated = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Student", cv_storage_path="cv2.pdf"
+        )
+        assert updated.summary_embedding is None
+    finally:
+        db.close()
+
+
+def test_upsert_identical_values_preserves_summary_embedding():
+    """Test 17: Upsert with identical effective values preserves existing summary_embedding."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        prof = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Same Student", headline="Same Headline"
+        )
+        vec = [0.2] * 1536
+        StudentProfileRepository.set_summary_embedding(db, prof, vec)
+        db.commit()
+
+        # Re-upsert with identical fields
+        same = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Same Student", headline="Same Headline"
+        )
+        assert same.summary_embedding == vec
+    finally:
+        db.close()
+
+
+def test_updating_user_a_never_clears_user_b_embedding():
+    """Test 18: Updating user A never clears user B embedding."""
+    user_a = uuid4()
+    user_b = uuid4()
+    db = TestingSessionLocal()
+    try:
+        StudentProfileRepository.upsert_by_user_id(db, user_id=user_a, full_name="A")
+        prof_b = StudentProfileRepository.upsert_by_user_id(db, user_id=user_b, full_name="B")
+        vec_b = [0.3] * 1536
+        StudentProfileRepository.set_summary_embedding(db, prof_b, vec_b)
+        db.commit()
+
+        # Update user A
+        StudentProfileRepository.upsert_by_user_id(db, user_id=user_a, full_name="A Modified")
+
+        check_b = StudentProfileRepository.get_by_user_id(db, user_id=user_b)
+        assert check_b is not None
+        assert check_b.summary_embedding == vec_b
+    finally:
+        db.close()
+
+
+def test_endpoint_put_commits_invalidated_state_visible_in_fresh_session(client: TestClient):
+    """Test 19: Endpoint PUT commits invalidated summary_embedding, visible in fresh DB session."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        prof = StudentProfileRepository.upsert_by_user_id(
+            db, user_id=user_id, full_name="Initial Name", headline="Old"
+        )
+        StudentProfileRepository.set_summary_embedding(db, prof, [0.5] * 1536)
+        db.commit()
+    finally:
+        db.close()
+
+    token = generate_mock_jwt(user_id=user_id)
+    payload = {"full_name": "Updated Name", "headline": "New"}
+
+    resp = client.put("/api/v1/profile", json=payload, headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = StudentProfileRepository.get_by_user_id(fresh_db, user_id=user_id)
+        assert persisted is not None
+        assert persisted.summary_embedding is None
+    finally:
+        fresh_db.close()

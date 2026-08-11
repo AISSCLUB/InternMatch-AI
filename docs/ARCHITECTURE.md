@@ -212,6 +212,34 @@ The persistence and synchronization rules for candidate match recalculation are 
    - The calling worker or API workflow owns the database transaction lifecycle (`commit`/`rollback`).
 
 
+### 5.1.3 Candidate Embedding Context Policy — MVP v1 (Authoritative)
+
+The persisted `StudentProfile.summary_embedding` is derived from deterministic structured candidate data.
+
+1. **Canonical Semantic Sections:**
+   - Headline
+   - Skills
+   - Education
+   - Experience
+   - Projects
+   - Preferences (`work_types`, `desired_locations`, `target_roles`)
+
+2. **Explicit Exclusions:**
+   - `user_id`, profile `id`, `full_name`, `cv_storage_path`, timestamps, match scores, generated explanations, raw CV text, and unknown preference keys are strictly excluded from embedding input text.
+
+3. **Deterministic Summary Generation:**
+   - The summary text is constructed using local deterministic formatting. No LLM is used for summary composition.
+   - Embedding generation is delegated to `app.services.embeddings.generate_embedding`.
+
+4. **Transaction Ownership:**
+   - Embedding generation and persistence functions may mutate ORM state and call `db.flush()`, but MUST NOT call `db.commit()` or `db.rollback()`. The calling worker/orchestrator owns transaction lifecycle.
+
+5. **Invalidation Policy:**
+   - Cached `summary_embedding` must be invalidated (`summary_embedding = None`) whenever source profile inputs (`full_name`, `headline`, `cv_storage_path`, or `preferences`) actually change during profile upsert.
+   - Mutation workflows for student skills, education, experience, or projects MUST invalidate `summary_embedding` prior to regeneration.
+
+
+
 
 ```mermaid
 flowchart LR

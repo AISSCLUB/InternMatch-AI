@@ -8,7 +8,9 @@ from uuid import UUID
 
 from app.db.models import (
     EducationEntry,
+    ExperienceEntry,
     InternshipListing,
+    ProjectEntry,
     Skill,
     StudentProfile,
     StudentSkill,
@@ -21,11 +23,8 @@ class MatchingDataRepository:
     """Repository providing read operations for candidate profile and internship
     matching context."""
 
-
     @staticmethod
-    def get_profile_by_user_id(
-        db: Session, user_id: UUID
-    ) -> Optional[StudentProfile]:
+    def get_profile_by_user_id(db: Session, user_id: UUID) -> Optional[StudentProfile]:
         """
         Retrieve StudentProfile record by authenticated user_id.
         Returns None if no profile exists for the specified user_id.
@@ -34,9 +33,7 @@ class MatchingDataRepository:
         return db.scalar(stmt)
 
     @staticmethod
-    def get_skill_names_for_student(
-        db: Session, student_id: UUID
-    ) -> List[str]:
+    def get_skill_names_for_student(db: Session, student_id: UUID) -> List[str]:
         """
         Retrieve deterministic list of skill names for a given student_id.
         Joins StudentSkill -> Skill. Results ordered alphabetically by Skill.name.
@@ -50,9 +47,7 @@ class MatchingDataRepository:
         return list(db.scalars(stmt).all())
 
     @staticmethod
-    def get_education_for_student(
-        db: Session, student_id: UUID
-    ) -> List[EducationEntry]:
+    def get_education_for_student(db: Session, student_id: UUID) -> List[EducationEntry]:
         """
         Retrieve EducationEntry records for a given student_id.
         Ordered deterministically by start_year ASC, id ASC.
@@ -65,9 +60,33 @@ class MatchingDataRepository:
         return list(db.scalars(stmt).all())
 
     @staticmethod
-    def get_internship_by_id(
-        db: Session, internship_id: UUID
-    ) -> Optional[InternshipListing]:
+    def get_experience_for_student(db: Session, student_id: UUID) -> List[ExperienceEntry]:
+        """
+        Retrieve ExperienceEntry records for a given student_id.
+        Ordered deterministically by start_date ASC, id ASC.
+        """
+        stmt = (
+            select(ExperienceEntry)
+            .where(ExperienceEntry.student_id == student_id)
+            .order_by(ExperienceEntry.start_date.asc(), ExperienceEntry.id.asc())
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
+    def get_projects_for_student(db: Session, student_id: UUID) -> List[ProjectEntry]:
+        """
+        Retrieve ProjectEntry records for a given student_id.
+        Ordered deterministically by title ASC, id ASC.
+        """
+        stmt = (
+            select(ProjectEntry)
+            .where(ProjectEntry.student_id == student_id)
+            .order_by(ProjectEntry.title.asc(), ProjectEntry.id.asc())
+        )
+        return list(db.scalars(stmt).all())
+
+    @staticmethod
+    def get_internship_by_id(db: Session, internship_id: UUID) -> Optional[InternshipListing]:
         """
         Retrieve InternshipListing by primary key UUID, including description_embedding.
         Returns None if internship does not exist.

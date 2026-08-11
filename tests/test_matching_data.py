@@ -1,9 +1,10 @@
 """
 Unit & Integration Tests for Matching Data ORM Models & Repository.
 Validates table registration, vector storage compatibility under SQLite,
-skill/education retrieval, tenant isolation, and tech stack JSON variant.
+skill/education/experience/project retrieval, tenant isolation, and tech stack JSON variant.
 """
 
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -106,9 +107,7 @@ def test_internship_listing_description_embedding_sqlite_variant():
         db.add(internship)
         db.commit()
 
-        fetched = MatchingDataRepository.get_internship_by_id(
-            db=db, internship_id=internship.id
-        )
+        fetched = MatchingDataRepository.get_internship_by_id(db=db, internship_id=internship.id)
         assert fetched is not None
         assert fetched.description_embedding is not None
         assert len(fetched.description_embedding) == settings.EMBEDDING_DIMENSION
@@ -139,9 +138,7 @@ def test_skill_and_student_skill_persistence():
         db.commit()
 
         fetched_ss = (
-            db.query(StudentSkill)
-            .filter_by(student_id=student.id, skill_id=skill.id)
-            .first()
+            db.query(StudentSkill).filter_by(student_id=student.id, skill_id=skill.id).first()
         )
         assert fetched_ss is not None
         assert fetched_ss.proficiency_level == "advanced"
@@ -206,9 +203,7 @@ def test_get_profile_by_user_id_user_scoped():
         assert found is not None
         assert found.full_name == "Scoped Profile"
 
-        not_found = MatchingDataRepository.get_profile_by_user_id(
-            db=db, user_id=other_user_id
-        )
+        not_found = MatchingDataRepository.get_profile_by_user_id(db=db, user_id=other_user_id)
         assert not_found is None
     finally:
         db.close()
@@ -243,11 +238,89 @@ def test_education_entry_persistence_and_student_scoping():
         db.add_all([edu1, edu2])
         db.commit()
 
-        edu_a = MatchingDataRepository.get_education_for_student(
-            db=db, student_id=student_a.id
-        )
+        edu_a = MatchingDataRepository.get_education_for_student(db=db, student_id=student_a.id)
         assert len(edu_a) == 1
         assert edu_a[0].institution == "Tech University"
+    finally:
+        db.close()
+
+
+def test_get_experience_for_student_scoping_and_ordering():
+    """Test 12: Experience retrieval is student-scoped and deterministically ordered."""
+    user_a = uuid4()
+    user_b = uuid4()
+
+    db = TestingSessionLocal()
+    try:
+        student_a = StudentProfile(user_id=user_a, full_name="Exp Student A")
+        student_b = StudentProfile(user_id=user_b, full_name="Exp Student B")
+        db.add_all([student_a, student_b])
+        db.flush()
+
+        exp1 = ExperienceEntry(
+            student_id=student_a.id,
+            company="Company Later",
+            role="Senior Developer",
+            start_date=date(2023, 1, 1),
+        )
+        exp2 = ExperienceEntry(
+            student_id=student_a.id,
+            company="Company Earlier",
+            role="Junior Developer",
+            start_date=date(2021, 6, 1),
+        )
+        exp_other = ExperienceEntry(
+            student_id=student_b.id,
+            company="Other Corp",
+            role="Intern",
+            start_date=date(2020, 1, 1),
+        )
+        db.add_all([exp1, exp2, exp_other])
+        db.commit()
+
+        exp_a = MatchingDataRepository.get_experience_for_student(db=db, student_id=student_a.id)
+        assert len(exp_a) == 2
+        # Deterministic start_date ASC: Junior (2021) then Senior (2023)
+        assert exp_a[0].company == "Company Earlier"
+        assert exp_a[1].company == "Company Later"
+    finally:
+        db.close()
+
+
+def test_get_projects_for_student_scoping_and_ordering():
+    """Test 13: Project retrieval is student-scoped and deterministically ordered."""
+    user_a = uuid4()
+    user_b = uuid4()
+
+    db = TestingSessionLocal()
+    try:
+        student_a = StudentProfile(user_id=user_a, full_name="Proj Student A")
+        student_b = StudentProfile(user_id=user_b, full_name="Proj Student B")
+        db.add_all([student_a, student_b])
+        db.flush()
+
+        p1 = ProjectEntry(
+            student_id=student_a.id,
+            title="Zeta Engine",
+            tech_stack=["C++"],
+        )
+        p2 = ProjectEntry(
+            student_id=student_a.id,
+            title="Alpha Platform",
+            tech_stack=["Python"],
+        )
+        p_other = ProjectEntry(
+            student_id=student_b.id,
+            title="Beta Tool",
+        )
+        db.add_all([p1, p2, p_other])
+        db.commit()
+
+        proj_a = MatchingDataRepository.get_projects_for_student(db=db, student_id=student_a.id)
+        assert len(proj_a) == 2
+        # Deterministic title ASC: Alpha then Zeta
+        assert proj_a[0].title == "Alpha Platform"
+        assert proj_a[1].title == "Zeta Engine"
     finally:
         db.close()
 
@@ -293,9 +366,7 @@ def test_existing_internship_listing_reads_remain_compatible():
         db.add(internship)
         db.commit()
 
-        fetched = MatchingDataRepository.get_internship_by_id(
-            db=db, internship_id=internship.id
-        )
+        fetched = MatchingDataRepository.get_internship_by_id(db=db, internship_id=internship.id)
         assert fetched is not None
         assert fetched.title == "Legacy Intern"
         assert fetched.description_embedding is None

@@ -4,7 +4,7 @@ Provides authenticated user-scoped database access for student profile records.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from app.db.models import StudentProfile
@@ -36,12 +36,23 @@ class StudentProfileRepository:
         """
         Create or update a student profile for the authenticated user_id.
         Ownership is strictly governed by the passed user_id.
+        Invalidates cached summary_embedding if stored profile inputs actually change.
         Flushes session state; does not commit transaction (owned by endpoint layer).
         """
         profile = StudentProfileRepository.get_by_user_id(db, user_id=user_id)
         now = datetime.now(timezone.utc)
 
         if profile:
+            changed = (
+                profile.full_name != full_name
+                or profile.headline != headline
+                or profile.cv_storage_path != cv_storage_path
+                or (preferences is not None and profile.preferences != preferences)
+            )
+
+            if changed:
+                profile.summary_embedding = None
+
             profile.full_name = full_name
             profile.headline = headline
             profile.cv_storage_path = cv_storage_path
@@ -61,4 +72,34 @@ class StudentProfileRepository:
             db.add(profile)
 
         db.flush()
+        return profile
+
+    @staticmethod
+    def set_summary_embedding(
+        db: Session,
+        profile: StudentProfile,
+        embedding: List[float],
+    ) -> StudentProfile:
+        """
+        Persist vector summary embedding on StudentProfile and update updated_at.
+        Flushes session state; does not commit transaction.
+        """
+        profile.summary_embedding = embedding
+        profile.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        return profile
+
+    @staticmethod
+    def invalidate_summary_embedding(
+        db: Session,
+        profile: StudentProfile,
+    ) -> StudentProfile:
+        """
+        Invalidate cached summary_embedding on StudentProfile (set to None) if not already None.
+        Flushes session state; does not commit transaction.
+        """
+        if profile.summary_embedding is not None:
+            profile.summary_embedding = None
+            profile.updated_at = datetime.now(timezone.utc)
+            db.flush()
         return profile
