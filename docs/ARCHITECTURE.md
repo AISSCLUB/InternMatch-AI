@@ -138,13 +138,54 @@ $$\text{Final Score} = \left( w_{\text{skill}} \cdot S_{\text{skill}} \right) + 
 2. **Semantic Vector Similarity ($S_{\text{vector}}$):**
    - Cosine similarity calculated in PostgreSQL using `pgvector` between `student_profile` summary embedding and `internship_listing` description embedding (`1536` dimensions).
 3. **Attribute Match ($S_{\text{attr}}$):**
-   - Deterministic matching on structured fields: location preferences (remote, hybrid, on-site), language proficiency, work authorization, education level.
+   - Deterministic preference matching on structured candidate fields (in MVP v1: `work_types` location preference and `desired_locations`).
+   - *Target Architecture Scope:* True eligibility filtering (language proficiency, work authorization, education-level eligibility) represents future targeted architecture capabilities when authoritative candidate data and policy exist. In MVP v1, candidate preferences serve as soft scoring signals and are NOT destructive hard eligibility filters. No candidate is discarded merely because work type or location does not match.
 4. **LLM Role (Strictly Constrained):**
    - Executed using pinned `gpt-4o-mini` **ONLY** for qualitative outputs:
      - "Why You Match" natural language summary.
      - Skill Gap explanation and actionable learning recommendations.
      - Personalized application cover letter / note generation.
    - **Hallucination Prevention Policy:** The LLM prompt is strictly grounded with extracted candidate profile data and job description context. The LLM must NEVER invent experience, skills, projects, or education not present in the candidate profile.
+
+### 5.1.1 MVP Scoring Policy v1 (Authoritative)
+
+The numeric scoring policy for InternMatch AI MVP v1 is defined as follows:
+
+1. **Final Hybrid Formula & Component Weights:**
+   $$\text{overall\_score} = \left( 0.50 \cdot S_{\text{skill}} \right) + \left( 0.30 \cdot S_{\text{vector}} \right) + \left( 0.20 \cdot S_{\text{attr}} \right)$$
+   - **Skill Weight ($w_{\text{skill}}$):** `0.50` (50%)
+   - **Vector Weight ($w_{\text{vec}}$):** `0.30` (30%)
+   - **Attribute Weight ($w_{\text{attr}}$):** `0.20` (20%)
+
+2. **Structured Skill Sub-Weights ($S_{\text{skill}}$):**
+   - When both required and preferred skills exist:
+     $$\text{required\_component} = \frac{\text{matched\_required}}{\text{total\_required}} \times 100$$
+     $$\text{preferred\_component} = \frac{\text{matched\_preferred}}{\text{total\_preferred}} \times 100$$
+     $$S_{\text{skill}} = \left( 0.70 \cdot \text{required\_component} \right) + \left( 0.30 \cdot \text{preferred\_component} \right)$$
+   - **Edge Cases:**
+     - Required exists, preferred empty: $S_{\text{skill}} = \text{required\_component}$
+     - Preferred exists, required empty: $S_{\text{skill}} = \text{preferred\_component}$
+     - Both required and preferred empty: $S_{\text{skill}} = 100.0$
+
+3. **Semantic Vector Score ($S_{\text{vector}}$):**
+   - Derived directly from raw PostgreSQL pgvector `cosine_distance`:
+     $$\text{similarity} = \text{clamp}(1.0 - \text{cosine\_distance}, 0.0, 1.0)$$
+     $$S_{\text{vector}} = \text{similarity} \times 100.0$$
+   - No arbitrary vector distance cutoff is applied; candidates are not discarded by the scoring service.
+
+4. **Attribute Match Score ($S_{\text{attr}}$):**
+   - Evaluates structured candidate preferences (`work_types`, `desired_locations`) against internship criteria (`work_type`, `location`).
+   - Normalization: `strip()`, collapse repeated internal whitespace, and `casefold()`. No aliases, fuzzy matching, or geographic inference.
+   - Component scoring:
+     - `work_type_component`: `100.0` if internship `work_type` matches any normalized candidate `work_types`; `0.0` otherwise. Excluded if `work_types` preference is unconstrained (empty/absent).
+     - `location_component`: `100.0` if internship `location` matches any normalized candidate `desired_locations`; `0.0` otherwise. Excluded if `desired_locations` preference is unconstrained (empty/absent).
+   - $S_{\text{attr}}$ equals the average of active components. If neither preference is active, $S_{\text{attr}} = 100.0$.
+   - Preferences are guidance, NOT destructive hard eligibility filters in MVP v1. `target_roles`, language proficiency, work authorization, and education level are excluded from MVP v1 attribute scoring.
+
+5. **Internal Precision & Persistence Boundary:**
+   - Pure scoring operations calculate and return full-precision `float` scores in range `[0.0, 100.0]`.
+   - No integer rounding (`round()`, `int()`) occurs in the scoring service layer; integer rounding occurs ONCE later at the database `Match` persistence boundary.
+
 
 ```mermaid
 flowchart LR
@@ -172,8 +213,10 @@ flowchart LR
 - **Retrieval Pipeline:**
   1. Generate vector embedding for candidate summary & preferences.
   2. Query `internship_listings` table via `pgvector` ($k$-Nearest Neighbors using cosine distance).
-  3. Filter results by hard constraints (work type, location, eligibility).
-  4. Pass top retrieved candidate matches to the LLM along with candidate profile for explanation generation.
+  3. Perform deterministic skill match classification ($S_{\text{skill}}$) and candidate preference scoring ($S_{\text{attr}}$).
+  4. Calculate hybrid match score ($\text{overall\_score} = 0.50 \cdot S_{\text{skill}} + 0.30 \cdot S_{\text{vector}} + 0.20 \cdot S_{\text{attr}}$) and rank candidates (future authoritative eligibility filtering may be applied when supported).
+  5. Pass top retrieved candidate matches to the LLM along with candidate profile for grounded explanation generation.
+
 
 ---
 
