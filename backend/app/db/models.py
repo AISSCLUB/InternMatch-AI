@@ -3,17 +3,21 @@ SQLAlchemy ORM Models for Database Tables
 Maps public schema tables defined by database/migrations/001_initial_schema.sql.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
+from app.core.config import settings
 from app.db.session import Base
+from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import (
     ARRAY,
     JSON,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -40,6 +44,10 @@ class StudentProfile(Base):
     preferences: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON, nullable=True, default=dict
     )
+    summary_embedding: Mapped[Optional[List[float]]] = mapped_column(
+        VECTOR(settings.EMBEDDING_DIMENSION).with_variant(JSON(), "sqlite"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -48,6 +56,99 @@ class StudentProfile(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+class Skill(Base):
+    """ORM Model mapping public.skills master taxonomy table."""
+
+    __tablename__ = "skills"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class StudentSkill(Base):
+    """ORM Model mapping public.student_skills junction table."""
+
+    __tablename__ = "student_skills"
+
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("skills.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    proficiency_level: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, default="intermediate"
+    )
+
+    skill: Mapped["Skill"] = relationship("Skill")
+
+
+class EducationEntry(Base):
+    """ORM Model mapping public.education_entries table."""
+
+    __tablename__ = "education_entries"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    institution: Mapped[str] = mapped_column(Text, nullable=False)
+    degree: Mapped[str] = mapped_column(Text, nullable=False)
+    start_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    end_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
+class ExperienceEntry(Base):
+    """ORM Model mapping public.experience_entries table."""
+
+    __tablename__ = "experience_entries"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    company: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+
+class ProjectEntry(Base):
+    """ORM Model mapping public.project_entries table."""
+
+    __tablename__ = "project_entries"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    tech_stack: Mapped[Optional[List[str]]] = mapped_column(
+        ARRAY(String).with_variant(JSON, "sqlite"), nullable=True, default=list
+    )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class InternshipListing(Base):
@@ -80,6 +181,10 @@ class InternshipListing(Base):
     )
     metadata_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         "metadata", JSON, nullable=True, default=dict
+    )
+    description_embedding: Mapped[Optional[List[float]]] = mapped_column(
+        VECTOR(settings.EMBEDDING_DIMENSION).with_variant(JSON(), "sqlite"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc), nullable=False

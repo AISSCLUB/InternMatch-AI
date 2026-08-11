@@ -16,10 +16,15 @@ if str(backend_dir) not in sys.path:
 
 from app.core.config import settings  # noqa: E402
 from app.db.models import (  # noqa: E402,F401
+    EducationEntry,
+    ExperienceEntry,
     InternshipListing,
     Match,
     ProcessingJob,
+    ProjectEntry,
+    Skill,
     StudentProfile,
+    StudentSkill,
 )
 from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
@@ -56,15 +61,23 @@ def configure_test_jwt_settings():
 @pytest.fixture(autouse=True)
 def setup_test_database():
     """Create all registered SQLAlchemy tables and configure the DB override."""
-    if (
-        "student_profiles" not in Base.metadata.tables
-        or "internship_listings" not in Base.metadata.tables
-        or "processing_jobs" not in Base.metadata.tables
-        or "matches" not in Base.metadata.tables
-    ):
-        raise RuntimeError(
-            "Required models are not registered in Base.metadata before test setup."
-        )
+    required_tables = [
+        "student_profiles",
+        "skills",
+        "student_skills",
+        "education_entries",
+        "experience_entries",
+        "project_entries",
+        "internship_listings",
+        "processing_jobs",
+        "matches",
+    ]
+    for table_name in required_tables:
+        if table_name not in Base.metadata.tables:
+            raise RuntimeError(
+                f"Required table {table_name} is not registered in Base.metadata before test setup."
+            )
+
 
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db
