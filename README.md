@@ -14,7 +14,7 @@
   - **Both:** Product Strategy, Architecture Review, Testing, Demo Video Creation, Submission.
 - **Affiliation:** **AISS Club — Üsküdar University**  
   *Mohammad serves as President of AISS Club; Selen serves as Vice President of AISS Club.*  
-  *(Note: AISS Club represents the team's student-club affiliation and does not imply university ownership, sponsorship, funding, or intellectual property holding. Vertex AI is NOT a parent company, project owner, or sponsor).*
+  *(Note: AISS Club represents the team's student-club affiliation and does not imply university ownership, sponsorship, funding, or intellectual property holding.*
 - **Code Repository:** `https://github.com/aissclub/internmatch-ai`
 
 ---
