@@ -7,10 +7,10 @@
 
 ## 1. Project Identity & Team
 
-- **Authors & Developers:** Mohammad & Selen (Two-Person Student Team)
+- **Authors & Developers:** Mohamad Barakat & Selenur Yurdakul (Two-Person Student Team)
 - **Team Responsibilities:**
-  - **Mohammad:** Backend Gateway, Database Schemas, Infrastructure, APIs, AI Pipeline, Vector Search, Security, Containerization, Deployment.
-  - **Selen:** Mobile Application (React Native / Expo), Next.js Landing Page, UI/UX, Interaction Design, RevenueCat Integration, Frontend API Integration.
+  - **Mohamad:** Backend Gateway, Database Schemas, Infrastructure, APIs, AI Pipeline, Vector Search, Security, Containerization, Deployment.
+  - **Selenur:** Mobile Application (React Native / Expo), Next.js Landing Page, UI/UX, Interaction Design, RevenueCat Integration, Frontend API Integration.
   - **Both:** Product Strategy, Architecture Review, Testing, Demo Video Creation, Submission.
 - **Affiliation:** **AISS Club — Üsküdar University**  
   *Mohammad serves as President of AISS Club; Selen serves as Vice President of AISS Club.*  
