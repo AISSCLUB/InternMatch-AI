@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     SUPABASE_PUBLISHABLE_KEY: str = ""
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = "placeholder_jwt_secret_for_local_development"
-    DATABASE_URL: str = "postgresql://postgres:placeholder_password@placeholder_project.supabase.co:5432/postgres"
+    DATABASE_URL: str = (
+        "postgresql://postgres:placeholder_password@placeholder_project.supabase.co:5432/postgres"
+    )
+    CV_STORAGE_BUCKET: str = "cvs"
 
     # Redis Async Task Queue
     REDIS_URL: str = "redis://redis:6379/0"
@@ -41,11 +44,7 @@ class Settings(BaseSettings):
     # Security & CORS Origins Configuration
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000,http://localhost:19006"
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property
     def cors_origins_list(self) -> List[str]:
