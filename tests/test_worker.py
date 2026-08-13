@@ -6,6 +6,7 @@ and run_match_calculation RQ task lifecycle.
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -15,11 +16,25 @@ worker_dir = Path(__file__).parent.parent / "worker"
 if str(worker_dir) not in sys.path:
     sys.path.insert(0, str(worker_dir))
 
-from app.db.models import Match  # noqa: E402
+from app.db.models import (  # noqa: E402
+    EducationEntry,
+    Match,
+    StudentProfile,
+    StudentSkill,
+)
 from app.repositories.processing_job import ProcessingJobRepository  # noqa: E402
+from app.services.cv_profile_extraction import (  # noqa: E402
+    ExtractedCandidateProfile,
+    ExtractedEducation,
+    ExtractedExperience,
+    ExtractedPreferences,
+    ExtractedProject,
+    ExtractedSkill,
+)
 from app.services.match_calculation import (  # noqa: E402
     MatchCalculationPreconditionError,
 )
+from tasks.cv_extraction import run_cv_extraction  # noqa: E402
 from tasks.example_task import ping_task  # noqa: E402
 from tasks.job_state import update_job_state  # noqa: E402
 from tasks.match_calculation import run_match_calculation  # noqa: E402
@@ -32,6 +47,7 @@ def override_worker_sessionlocal(monkeypatch):
     """Monkeypatch worker SessionLocal to use TestingSessionLocal SQLite memory DB."""
     monkeypatch.setattr("tasks.job_state.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr("tasks.match_calculation.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("tasks.cv_extraction.SessionLocal", TestingSessionLocal)
 
 
 def test_worker_ping_task():
@@ -491,3 +507,432 @@ def test_run_match_calculation_truncates_long_error_message_to_1000_chars(monkey
         assert persisted.error == "X" * 1000
     finally:
         db.close()
+
+
+# RUN_CV_EXTRACTION WORKER PIPELINE TESTS (16 - 28)
+
+
+def _make_dummy_extracted_profile(name="Test Candidate"):
+    return ExtractedCandidateProfile(
+        full_name=name,
+        headline="AI Software Intern",
+        skills=[
+            ExtractedSkill(name="Python", proficiency_level="advanced"),
+            ExtractedSkill(name="FastAPI", proficiency_level="intermediate"),
+        ],
+        education=[
+            ExtractedEducation(
+                institution="State University",
+                degree="B.S. Computer Science",
+                start_year=2022,
+                end_year=2026,
+            )
+        ],
+        experience=[
+            ExtractedExperience(
+                company="Tech Corp",
+                role="Software Intern",
+                description="Built APIs.",
+            )
+        ],
+        projects=[
+            ExtractedProject(
+                title="Job Portal",
+                tech_stack=["Python", "FastAPI"],
+                description="Intern matching app.",
+            )
+        ],
+        preferences=ExtractedPreferences(
+            work_types=["remote"],
+            desired_locations=["Remote"],
+            target_roles=["Backend Intern"],
+        ),
+    )
+
+
+def test_run_cv_extraction_success_lifecycle(monkeypatch):
+    """Test 16: Successful run_cv_extraction completes pipeline, commits, and returns summary."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    storage_path = f"{user_id}/resume.pdf"
+    fake_profile = _make_dummy_extracted_profile("Alice Smith")
+
+    monkeypatch.setattr(
+        "tasks.cv_extraction.download_candidate_cv",
+        lambda *, user_id, storage_path: b"%PDF fake content",
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_cv_text",
+        lambda *, storage_path, content: "Alice Smith - AI Software Intern\nPython, FastAPI",
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_structured_candidate_profile",
+        lambda *, text, content_locale: fake_profile,
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.generate_and_persist_candidate_embedding",
+        lambda db, user_id: [0.1] * 1536,
+    )
+
+    res = run_cv_extraction(
+        job_id=job_id,
+        user_id=user_id,
+        storage_path=storage_path,
+        content_locale="en",
+    )
+
+    assert res["status"] == "completed"
+    assert res["job_id"] == str(job_id)
+    assert "profile_id" in res
+
+    # Verify persisted state in fresh session
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted_job = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted_job is not None
+        assert persisted_job.status == "completed"
+        assert persisted_job.progress_percent == 100
+        assert persisted_job.result == {"profile_id": res["profile_id"]}
+        assert persisted_job.error is None
+
+        # Verify profile and related records exist
+        profile = fresh_db.query(StudentProfile).filter_by(user_id=user_id).first()
+        assert profile is not None
+        assert profile.full_name == "Alice Smith"
+        assert profile.headline == "AI Software Intern"
+
+        skills = fresh_db.query(StudentSkill).filter_by(student_id=profile.id).all()
+        assert len(skills) == 2
+
+        edu = fresh_db.query(EducationEntry).filter_by(student_id=profile.id).all()
+        assert len(edu) == 1
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_accepts_uuid_strings(monkeypatch):
+    """Test 17: run_cv_extraction accepts valid UUID strings for job_id and user_id."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"bytes")
+    monkeypatch.setattr("tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text")
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_structured_candidate_profile",
+        lambda **kwargs: _make_dummy_extracted_profile("Bob"),
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.generate_and_persist_candidate_embedding",
+        lambda db, user_id: [0.2] * 1536,
+    )
+
+    res = run_cv_extraction(
+        job_id=str(job_id),
+        user_id=str(user_id),
+        storage_path=f"{user_id}/resume.pdf",
+    )
+    assert res["status"] == "completed"
+
+
+def test_run_cv_extraction_empty_storage_path_raises_value_error():
+    """Test 18: Empty storage_path raises ValueError before DB operations."""
+    with pytest.raises(ValueError, match="storage_path cannot be empty"):
+        run_cv_extraction(job_id=uuid4(), user_id=uuid4(), storage_path="")
+
+
+def test_run_cv_extraction_missing_job_raises_without_mutation():
+    """Test 19: Non-existent ProcessingJob raises ValueError without mutating state."""
+    unknown_id = uuid4()
+    with pytest.raises(ValueError, match="not found"):
+        run_cv_extraction(
+            job_id=unknown_id,
+            user_id=uuid4(),
+            storage_path=f"{unknown_id}/resume.pdf",
+        )
+
+
+def test_run_cv_extraction_ownership_mismatch_leaves_job_untouched():
+    """Test 20: Job ownership mismatch raises ValueError and leaves job in queued state."""
+    owner_id = uuid4()
+    attacker_id = uuid4()
+
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=owner_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    with pytest.raises(ValueError, match="Job ownership mismatch"):
+        run_cv_extraction(
+            job_id=job_id,
+            user_id=attacker_id,
+            storage_path=f"{attacker_id}/resume.pdf",
+        )
+
+    # Verify job remained queued and untouched
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "queued"
+        assert persisted.progress_percent == 0
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_wrong_job_type_leaves_job_untouched():
+    """Test 21: Wrong job_type raises ValueError and leaves job in queued state."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="match_calculation")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    with pytest.raises(ValueError, match="ProcessingJob type mismatch"):
+        run_cv_extraction(
+            job_id=job_id,
+            user_id=user_id,
+            storage_path=f"{user_id}/resume.pdf",
+        )
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "queued"
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_storage_failure_rolls_back_and_marks_failed(monkeypatch):
+    """Test 22: Storage download failure rolls back transaction and marks job failed."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        "tasks.cv_extraction.download_candidate_cv",
+        MagicMock(side_effect=RuntimeError("Storage service unavailable 503")),
+    )
+
+    with pytest.raises(RuntimeError, match="Storage service unavailable"):
+        run_cv_extraction(
+            job_id=job_id,
+            user_id=user_id,
+            storage_path=f"{user_id}/resume.pdf",
+        )
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "failed"
+        assert persisted.progress_percent == 100
+        assert "Storage service unavailable" in persisted.error
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_parser_failure_rolls_back_and_marks_failed(monkeypatch):
+    """Test 23: Document parsing failure rolls back transaction and marks job failed."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"corrupted")
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_cv_text",
+        MagicMock(side_effect=ValueError("Corrupt PDF EOF marker missing")),
+    )
+
+    with pytest.raises(ValueError, match="Corrupt PDF"):
+        run_cv_extraction(
+            job_id=job_id,
+            user_id=user_id,
+            storage_path=f"{user_id}/resume.pdf",
+        )
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "failed"
+        assert "Corrupt PDF" in persisted.error
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_llm_failure_rolls_back_and_marks_failed(monkeypatch):
+    """Test 24: LLM extraction failure rolls back transaction and marks job failed."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"pdf")
+    monkeypatch.setattr("tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text")
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_structured_candidate_profile",
+        MagicMock(side_effect=RuntimeError("OpenAI API rate limit exceeded")),
+    )
+
+    with pytest.raises(RuntimeError, match="OpenAI API rate limit"):
+        run_cv_extraction(
+            job_id=job_id,
+            user_id=user_id,
+            storage_path=f"{user_id}/resume.pdf",
+        )
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "failed"
+        assert "OpenAI API rate limit" in persisted.error
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_embedding_failure_rolls_back_and_marks_failed(monkeypatch):
+    """Test 25: Embedding generation failure rolls back all candidate profile writes."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"pdf")
+    monkeypatch.setattr("tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text")
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_structured_candidate_profile",
+        lambda **kwargs: _make_dummy_extracted_profile("Rollback Target"),
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.generate_and_persist_candidate_embedding",
+        MagicMock(side_effect=RuntimeError("Embedding model service crash")),
+    )
+
+    with pytest.raises(RuntimeError, match="Embedding model service crash"):
+        run_cv_extraction(
+            job_id=job_id,
+            user_id=user_id,
+            storage_path=f"{user_id}/resume.pdf",
+        )
+
+    fresh_db = TestingSessionLocal()
+    try:
+        # Verify student profile with "Rollback Target" was NOT committed
+        profile = fresh_db.query(StudentProfile).filter_by(user_id=user_id).first()
+        assert profile is None
+
+        # Verify job is failed
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "failed"
+        assert "Embedding model service crash" in persisted.error
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_result_contains_profile_id_only(monkeypatch):
+    """Test 26: Worker result contains profile_id only; excludes raw text and vector."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"pdf")
+    monkeypatch.setattr("tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text")
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_structured_candidate_profile",
+        lambda **kwargs: _make_dummy_extracted_profile("Charlie"),
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.generate_and_persist_candidate_embedding",
+        lambda db, user_id: [0.3] * 1536,
+    )
+
+    run_cv_extraction(job_id=job_id, user_id=user_id, storage_path=f"{user_id}/resume.pdf")
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert "profile_id" in persisted.result
+        assert "raw_cv_text" not in persisted.result
+        assert "embedding" not in persisted.result
+        assert "vector" not in persisted.result
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_truncates_long_error_to_1000_chars(monkeypatch):
+    """
+    Test 27: Worker errors longer than 1000 chars are persisted truncated.
+    """
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    long_error = "Y" * 2000
+    monkeypatch.setattr(
+        "tasks.cv_extraction.download_candidate_cv",
+        MagicMock(side_effect=RuntimeError(long_error)),
+    )
+
+    with pytest.raises(RuntimeError):
+        run_cv_extraction(job_id=job_id, user_id=user_id, storage_path=f"{user_id}/resume.pdf")
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted is not None
+        assert persisted.status == "failed"
+        assert len(persisted.error) == 1000
+        assert persisted.error == "Y" * 1000
+    finally:
+        fresh_db.close()

@@ -123,3 +123,104 @@ def store_candidate_cv(
         content_type=clean_mime,
         size_bytes=size_bytes,
     )
+
+
+def download_candidate_cv(
+    *,
+    user_id: UUID,
+    storage_path: str,
+) -> bytes:
+    """
+    Download candidate CV document bytes from private Supabase Storage bucket.
+    Validates that storage_path belongs strictly to the target user ({user_id}/...)
+    and has a valid extension (.pdf or .docx).
+    Constructs Supabase client dynamically at call time using service-role credentials.
+    Rejects empty downloaded object.
+    Propagates provider exceptions unchanged.
+    """
+    if not isinstance(user_id, UUID):
+        raise CVStorageValidationError("user_id must be a valid UUID")
+
+    if not isinstance(storage_path, str) or not storage_path.strip():
+        raise CVStorageValidationError("storage_path cannot be empty")
+
+    clean_path = storage_path.strip()
+
+    expected_prefix = f"{user_id}/"
+    if not clean_path.startswith(expected_prefix):
+        raise CVStorageValidationError(
+            f"Unauthorized storage path access: storage path '{clean_path}' "
+            f"does not belong to user '{user_id}'"
+        )
+
+    if "." not in clean_path:
+        raise CVStorageValidationError(f"Storage path '{clean_path}' missing file extension")
+
+    ext = clean_path.rsplit(".", 1)[-1].lower()
+    if ext not in ("pdf", "docx"):
+        raise CVStorageValidationError(
+            f"Unsupported file extension '.{ext}'. Supported extensions are .pdf and .docx"
+        )
+
+    url = settings.SUPABASE_URL.strip() if settings.SUPABASE_URL else ""
+    key = settings.SUPABASE_SERVICE_ROLE_KEY.strip() if settings.SUPABASE_SERVICE_ROLE_KEY else ""
+    bucket = settings.CV_STORAGE_BUCKET.strip() if settings.CV_STORAGE_BUCKET else ""
+
+    if not url or "placeholder" in url.lower():
+        raise CVStorageValidationError("SUPABASE_URL configuration is missing or placeholder value")
+
+    if not key or "placeholder" in key.lower():
+        raise CVStorageValidationError(
+            "SUPABASE_SERVICE_ROLE_KEY configuration is missing or placeholder value"
+        )
+
+    if not bucket:
+        raise CVStorageValidationError("CV_STORAGE_BUCKET configuration is missing or empty")
+
+    supabase = create_client(url, key)
+    res = supabase.storage.from_(bucket).download(clean_path)
+
+    if not res or len(res) == 0:
+        raise CVStorageValidationError("Downloaded CV object is empty")
+
+    return res
+
+
+def delete_candidate_cv(
+    *,
+    user_id: UUID,
+    storage_path: str,
+) -> None:
+    """
+    Best-effort deletion of candidate CV document from Supabase Storage.
+    Validates storage_path ownership before attempting deletion.
+    """
+    if not isinstance(user_id, UUID):
+        raise CVStorageValidationError("user_id must be a valid UUID")
+
+    if not isinstance(storage_path, str) or not storage_path.strip():
+        raise CVStorageValidationError("storage_path cannot be empty")
+
+    clean_path = storage_path.strip()
+    expected_prefix = f"{user_id}/"
+    if not clean_path.startswith(expected_prefix):
+        raise CVStorageValidationError(
+            f"Unauthorized storage path access: storage path '{clean_path}' "
+            f"does not belong to user '{user_id}'"
+        )
+
+    url = settings.SUPABASE_URL.strip() if settings.SUPABASE_URL else ""
+    key = settings.SUPABASE_SERVICE_ROLE_KEY.strip() if settings.SUPABASE_SERVICE_ROLE_KEY else ""
+    bucket = settings.CV_STORAGE_BUCKET.strip() if settings.CV_STORAGE_BUCKET else ""
+
+    if (
+        not url
+        or "placeholder" in url.lower()
+        or not key
+        or "placeholder" in key.lower()
+        or not bucket
+    ):
+        return
+
+    supabase = create_client(url, key)
+    supabase.storage.from_(bucket).remove([clean_path])
