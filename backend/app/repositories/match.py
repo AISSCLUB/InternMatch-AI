@@ -7,7 +7,7 @@ from typing import List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from app.db.models import InternshipListing, Match, StudentProfile
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.orm import Session
 
 
@@ -31,7 +31,25 @@ class MatchRepository:
             .where(StudentProfile.user_id == user_id)
             .order_by(Match.overall_score.desc(), Match.created_at.desc())
         )
-        return list(db.execute(stmt).all())
+        return list(db.execute(stmt).tuples().all())
+
+    @staticmethod
+    def get_match_with_details_for_user(
+        db: Session, match_id: UUID, user_id: UUID
+    ) -> Optional[Tuple[Match, StudentProfile, InternshipListing]]:
+        """
+        Fetch a specific Match by match_id and enforce ownership via
+        StudentProfile.user_id == user_id. Joins StudentProfile and InternshipListing.
+        Returns (Match, StudentProfile, InternshipListing) or None if not found
+        or not owned by the specified user.
+        """
+        stmt = (
+            select(Match, StudentProfile, InternshipListing)
+            .join(StudentProfile, Match.student_id == StudentProfile.id)
+            .join(InternshipListing, Match.internship_id == InternshipListing.id)
+            .where(Match.id == match_id, StudentProfile.user_id == user_id)
+        )
+        return db.execute(stmt).tuples().first()
 
     @staticmethod
     def get_matches_by_student_id(db: Session, student_id: UUID) -> List[Match]:
@@ -97,4 +115,4 @@ class MatchRepository:
             stmt = delete(Match).where(Match.student_id == student_id)
 
         result = db.execute(stmt)
-        return result.rowcount
+        return int(result.rowcount) if isinstance(result, CursorResult) else 0

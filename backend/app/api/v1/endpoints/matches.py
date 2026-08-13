@@ -1,8 +1,10 @@
-﻿"""
+"""
 Candidate Matches Endpoints
 Provides authenticated read access for pre-calculated internship matches
 and POST trigger to enqueue match calculation.
 """
+
+from uuid import UUID
 
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
@@ -10,10 +12,12 @@ from app.repositories.match import MatchRepository
 from app.repositories.processing_job import ProcessingJobRepository
 from app.schemas.match import (
     MatchCalculationAcceptedResponse,
+    MatchExplanationResponse,
     MatchItemResponse,
     MatchListResponse,
 )
 from app.services.match_enqueue import enqueue_match_calculation
+from app.services.match_explanation import get_or_create_match_explanation
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -97,3 +101,45 @@ def calculate_matches(
         status="queued",
         message="Matching calculation enqueued.",
     )
+
+
+@router.get(
+    "/{id}/explanation",
+    response_model=MatchExplanationResponse,
+)
+def get_match_explanation(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve grounded LLM explanation ('Why You Match') and skill gap
+    analysis for a match.
+    Requires valid Supabase Bearer JWT authentication token.
+    Identity is strictly derived from the validated JWT subject UUID.
+    Returns 404 if match is not found or owned by another user.
+    """
+    try:
+        explanation = get_or_create_match_explanation(
+            db=db,
+            match_id=id,
+            user_id=current_user.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Match explanation service is temporarily unavailable.",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve match explanation.",
+        ) from exc
+
+    if explanation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Match not found.",
+        )
+
+    return explanation
