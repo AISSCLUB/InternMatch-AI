@@ -120,6 +120,56 @@ jobs:
             echo "Skipping Next.js build until the frontend application is present."
           fi
 
+  postgres-matching-runtime:
+    name: Postgres Matching Runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-bookworm
+        env:
+          POSTGRES_DB: internmatch
+          POSTGRES_USER: internmatch
+          POSTGRES_PASSWORD: internmatch_dev_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U internmatch -d internmatch"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            requirements-dev.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install backend runtime & dev requirements
+        run: pip install -r requirements-dev.txt
+
+      - name: Initialize PostgreSQL database schema
+        env:
+          PGPASSWORD: internmatch_dev_password
+        run: |
+          psql -h localhost -U internmatch -d internmatch -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE IF NOT EXISTS auth.users (id UUID PRIMARY KEY);"
+          psql -h localhost -U internmatch -d internmatch -f database/migrations/001_initial_schema.sql
+
+      - name: Run PostgreSQL matching runtime integration test suite
+        env:
+          TEST_POSTGRES_DATABASE_URL: postgresql://internmatch:internmatch_dev_password@localhost:5432/internmatch
+        run: |
+          python -m pytest tests/test_postgres_matching_runtime.py -q
+
   ci-gate:
     name: CI Gate
     runs-on: ubuntu-latest
@@ -129,6 +179,7 @@ jobs:
       - backend-container
       - mobile-contract
       - landing-build
+      - postgres-matching-runtime
     if: always()
     steps:
       - name: Evaluate CI Gate Status
@@ -136,12 +187,14 @@ jobs:
           if [ "${{ needs.backend-quality.result }}" != "success" ] || \
              [ "${{ needs.backend-container.result }}" != "success" ] || \
              [ "${{ needs.mobile-contract.result }}" != "success" ] || \
-             [ "${{ needs.landing-build.result }}" != "success" ]; then
+             [ "${{ needs.landing-build.result }}" != "success" ] || \
+             [ "${{ needs.postgres-matching-runtime.result }}" != "success" ]; then
             echo "One or more required CI checks failed or did not run successfully."
             echo "backend-quality: ${{ needs.backend-quality.result }}"
             echo "backend-container: ${{ needs.backend-container.result }}"
             echo "mobile-contract: ${{ needs.mobile-contract.result }}"
             echo "landing-build: ${{ needs.landing-build.result }}"
+            echo "postgres-matching-runtime: ${{ needs.postgres-matching-runtime.result }}"
             exit 1
           fi
           echo "All required CI jobs succeeded."

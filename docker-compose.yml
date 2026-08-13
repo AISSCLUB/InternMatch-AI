@@ -37,3 +37,24 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm
+    container_name: internmatch_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-internmatch}
+      POSTGRES_USER: ${POSTGRES_USER:-internmatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-internmatch_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-internmatch} -d ${POSTGRES_DB:-internmatch}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
