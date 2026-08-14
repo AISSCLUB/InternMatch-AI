@@ -130,8 +130,15 @@ def extract_demo_internship_ids_from_sql(sql_content: str) -> List[UUID]:
 def apply_authoritative_sql(session: Session, sql_content: str) -> None:
     """
     Execute authoritative SQL seed as raw driver SQL without manual statement splitting.
+    Uses raw DBAPI cursor with no parameters argument to safely support literal '%' characters.
     """
-    session.connection().exec_driver_sql(sql_content)
+    sqlalchemy_connection = session.connection()
+    dbapi_connection = sqlalchemy_connection.connection
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute(sql_content)
+    finally:
+        cursor.close()
 
 
 def seed_demo_internships(

@@ -21,6 +21,7 @@ from scripts.seed_internships import (
     DemoSeedError,
     DemoSeedSummary,
     DemoSeedValidationError,
+    apply_authoritative_sql,
     extract_demo_internship_ids_from_sql,
     seed_demo_internships,
 )
@@ -452,3 +453,43 @@ def test_non_demo_listings_are_never_queried_or_modified(tmp_path: Path):
 
     # Non demo listing was never retrieved or modified
     assert non_demo_listing.description_embedding == _make_fake_vector()
+
+
+def test_apply_authoritative_sql_executes_raw_cursor_without_params():
+    """
+    Regression Test: apply_authoritative_sql obtains raw DBAPI cursor from session,
+    executes the exact SQL string with a single argument (no params argument),
+    supports literal '%' characters without driver formatting error, closes cursor,
+    and does not commit or rollback the transaction.
+    """
+    mock_session = MagicMock()
+    mock_sqlalchemy_conn = MagicMock()
+    mock_dbapi_conn = MagicMock()
+    mock_cursor = MagicMock()
+
+    mock_session.connection.return_value = mock_sqlalchemy_conn
+    mock_sqlalchemy_conn.connection = mock_dbapi_conn
+    mock_dbapi_conn.cursor.return_value = mock_cursor
+
+    raw_sql_with_percent = (
+        "-- Provenance: 100% Synthetic Original Demo Data\n"
+        "INSERT INTO public.skills (id, name) VALUES "
+        "('10000000-0000-0000-0000-000000000001', 'Python%Special');"
+    )
+
+    apply_authoritative_sql(mock_session, raw_sql_with_percent)
+
+    # 1. Obtains cursor from DBAPI connection
+    mock_dbapi_conn.cursor.assert_called_once_with()
+
+    # 2 & 3 & 4. Exactly one argument passed to cursor.execute; no params tuple/dict
+    mock_cursor.execute.assert_called_once_with(raw_sql_with_percent)
+    assert len(mock_cursor.execute.call_args[0]) == 1
+    assert mock_cursor.execute.call_args[1] == {}
+
+    # 5. Cursor is closed
+    mock_cursor.close.assert_called_once_with()
+
+    # 6. Does not commit or rollback
+    mock_session.commit.assert_not_called()
+    mock_session.rollback.assert_not_called()
