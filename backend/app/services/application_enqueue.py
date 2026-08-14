@@ -36,5 +36,6 @@ def enqueue_application_generation(
         str(tone),
         str(content_locale),
         job_id=str(job_id),
+        job_timeout=180,
     )
     return rq_job

@@ -65,6 +65,13 @@ jobs:
       - name: Build backend and worker containers
         run: docker compose build backend worker
 
+      - name: Verify non-root container runtime
+        run: |
+          docker compose run --rm --no-deps backend \
+            python -c "import os; assert os.geteuid() != 0, 'backend container must run non-root'"
+          docker compose run --rm --no-deps worker \
+            python -c "import os; assert os.geteuid() != 0, 'worker container must run non-root'"
+
   mobile-contract:
     name: Mobile Contract
     runs-on: ubuntu-latest
@@ -157,18 +164,123 @@ jobs:
       - name: Install backend runtime & dev requirements
         run: pip install -r requirements-dev.txt
 
-      - name: Initialize PostgreSQL database schema
+      - name: Bootstrap CI Supabase auth compatibility constructs
         env:
           PGPASSWORD: internmatch_dev_password
         run: |
-          psql -h localhost -U internmatch -d internmatch -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE TABLE IF NOT EXISTS auth.users (id UUID PRIMARY KEY);"
-          psql -h localhost -U internmatch -d internmatch -f database/migrations/001_initial_schema.sql
+          psql -h localhost -U internmatch -d internmatch -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE TABLE IF NOT EXISTS auth.users (id UUID PRIMARY KEY);
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN
+              CREATE ROLE service_role NOLOGIN;
+            END IF;
+          END
+          $$;
+          CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
+            SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid;
+          $$;
+          SQL
+
+      - name: Apply ordered database migration chain
+        env:
+          PGPASSWORD: internmatch_dev_password
+        run: |
+          set -euo pipefail
+          for migration in $(ls database/migrations/[0-9][0-9][0-9]_*.sql | sort); do
+            echo "Applying migration: $migration"
+            psql -h localhost -U internmatch -d internmatch -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Verify migration effect assertions
+        env:
+          PGPASSWORD: internmatch_dev_password
+        run: |
+          psql -h localhost -U internmatch -d internmatch -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE
+            v_col_count INT;
+            v_rls_count INT;
+          BEGIN
+            -- Migration 003 proof: processing_jobs.progress_percent exists
+            SELECT count(*) INTO v_col_count
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'processing_jobs'
+              AND column_name = 'progress_percent';
+            IF v_col_count != 1 THEN
+              RAISE EXCEPTION 'Assertion failed: processing_jobs.progress_percent column is missing';
+            END IF;
+
+            -- Migration 004 proof: applications.applied_date exists
+            SELECT count(*) INTO v_col_count
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'applications'
+              AND column_name = 'applied_date';
+            IF v_col_count != 1 THEN
+              RAISE EXCEPTION 'Assertion failed: applications.applied_date column is missing';
+            END IF;
+
+            -- Migration 002 proof: RLS is enabled on user-owned tables
+            SELECT count(*) INTO v_rls_count
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname IN ('student_profiles', 'applications', 'processing_jobs')
+              AND c.relrowsecurity = true;
+            IF v_rls_count != 3 THEN
+              RAISE EXCEPTION 'Assertion failed: RLS is not enabled on all required tables (found % of 3)', v_rls_count;
+            END IF;
+
+            RAISE NOTICE 'Migration effect assertions verified successfully.';
+          END
+          $$;
+          SQL
 
       - name: Run PostgreSQL matching runtime integration test suite
         env:
           TEST_POSTGRES_DATABASE_URL: postgresql://internmatch:internmatch_dev_password@localhost:5432/internmatch
         run: |
           python -m pytest tests/test_postgres_matching_runtime.py -q
+
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install pip-audit tool
+        run: pip install pip-audit==2.10.1
+
+      - name: Audit backend Python dependencies
+        run: |
+          python -m pip_audit \
+            -r backend/requirements.txt \
+            --progress-spinner off
+
+      - name: Audit worker Python dependencies
+        run: |
+          python -m pip_audit \
+            -r worker/requirements.txt \
+            --progress-spinner off
 
   ci-gate:
     name: CI Gate
@@ -180,6 +292,7 @@ jobs:
       - mobile-contract
       - landing-build
       - postgres-matching-runtime
+      - dependency-audit
     if: always()
     steps:
       - name: Evaluate CI Gate Status
@@ -188,13 +301,15 @@ jobs:
              [ "${{ needs.backend-container.result }}" != "success" ] || \
              [ "${{ needs.mobile-contract.result }}" != "success" ] || \
              [ "${{ needs.landing-build.result }}" != "success" ] || \
-             [ "${{ needs.postgres-matching-runtime.result }}" != "success" ]; then
+             [ "${{ needs.postgres-matching-runtime.result }}" != "success" ] || \
+             [ "${{ needs.dependency-audit.result }}" != "success" ]; then
             echo "One or more required CI checks failed or did not run successfully."
             echo "backend-quality: ${{ needs.backend-quality.result }}"
             echo "backend-container: ${{ needs.backend-container.result }}"
             echo "mobile-contract: ${{ needs.mobile-contract.result }}"
             echo "landing-build: ${{ needs.landing-build.result }}"
             echo "postgres-matching-runtime: ${{ needs.postgres-matching-runtime.result }}"
+            echo "dependency-audit: ${{ needs.dependency-audit.result }}"
             exit 1
           fi
           echo "All required CI jobs succeeded."

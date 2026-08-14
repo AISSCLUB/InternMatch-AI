@@ -511,7 +511,7 @@ def test_enqueue_helper_rq_call_shape_and_keyword_protection(monkeypatch):
 
     assert task_path == "tasks.match_calculation.run_match_calculation"
     assert args == (str(job_id), str(user_id), 50)
-    assert kwargs == {"job_id": str(job_id)}
+    assert kwargs == {"job_id": str(job_id), "job_timeout": 180}
 
 
 def test_enqueue_helper_candidate_limit_zero_or_negative_raises_value_error(monkeypatch):

@@ -35,5 +35,6 @@ def enqueue_match_calculation(
         str(user_id),
         candidate_limit,
         job_id=str(job_id),
+        job_timeout=180,
     )
     return rq_job

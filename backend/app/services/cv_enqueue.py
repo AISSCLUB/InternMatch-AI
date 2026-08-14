@@ -48,5 +48,6 @@ def enqueue_cv_extraction(
         clean_path,
         clean_locale,
         job_id=str(job_id),
+        job_timeout=180,
     )
     return rq_job

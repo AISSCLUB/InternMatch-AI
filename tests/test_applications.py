@@ -418,6 +418,7 @@ def test_enqueue_application_generation_service(monkeypatch):
         "confident",
         "tr",
         job_id=str(job_id),
+        job_timeout=180,
     )
 
 

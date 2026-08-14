@@ -16,11 +16,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code
-COPY . .
+# Create dedicated unprivileged application group and user
+RUN groupadd -r appgroup && useradd -r -g appgroup -s /sbin/nologin appuser
+
+# Copy application source code with non-root ownership
+COPY --chown=appuser:appgroup . .
 
 # Expose FastAPI HTTP port
 EXPOSE 8000
+
+# Switch to non-root runtime user
+USER appuser
 
 # Liveness healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
