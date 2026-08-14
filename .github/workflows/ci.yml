@@ -249,7 +249,7 @@ jobs:
         env:
           TEST_POSTGRES_DATABASE_URL: postgresql://internmatch:internmatch_dev_password@localhost:5432/internmatch
         run: |
-          python -m pytest tests/test_postgres_matching_runtime.py -q
+          python -m pytest tests/test_postgres_matching_runtime.py tests/test_postgres_demo_seed_runtime.py -q
 
   dependency-audit:
     name: Dependency Audit
