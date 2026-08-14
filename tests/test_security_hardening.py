@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 
 # Ensure worker is on sys.path for worker-level testing
 worker_dir = Path(__file__).parent.parent / "worker"
@@ -31,7 +32,6 @@ from app.db.models import (  # noqa: E402
 from app.repositories.processing_job import (  # noqa: E402
     ProcessingJobRepository,
 )
-from fastapi.testclient import TestClient  # noqa: E402
 from tasks.application_generation import (  # noqa: E402
     run_application_generation,
 )
@@ -43,7 +43,6 @@ from tasks.match_calculation import (  # noqa: E402
 )
 
 from tests.db import TestingSessionLocal  # noqa: E402
-from tests.test_auth import generate_mock_jwt  # noqa: E402
 from worker import run_worker  # noqa: E402
 
 
@@ -74,15 +73,9 @@ def clean_database():
 @pytest.fixture(autouse=True)
 def override_worker_sessionlocal(monkeypatch):
     """Ensure worker tasks use test SQLite engine instead of production SessionLocal."""
-    monkeypatch.setattr(
-        "tasks.match_calculation.SessionLocal", TestingSessionLocal
-    )
-    monkeypatch.setattr(
-        "tasks.cv_extraction.SessionLocal", TestingSessionLocal
-    )
-    monkeypatch.setattr(
-        "tasks.application_generation.SessionLocal", TestingSessionLocal
-    )
+    monkeypatch.setattr("tasks.match_calculation.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("tasks.cv_extraction.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr("tasks.application_generation.SessionLocal", TestingSessionLocal)
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +105,8 @@ def test_production_config_with_placeholder_supabase_url_fails():
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://placeholder-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
@@ -129,8 +122,8 @@ def test_production_config_with_missing_service_role_fails():
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="sb_serv_placeholder_key_server_only",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
@@ -141,34 +134,34 @@ def test_production_config_with_missing_service_role_fails():
         validate_production_config(cfg)
 
 
-def test_production_config_with_short_or_placeholder_jwt_secret_fails():
-    """Test 4: Production config with placeholder/short JWT secret fails."""
-    cfg_short = Settings(
+def test_production_config_with_missing_publishable_key_fails():
+    """Test 4: Production config with missing/placeholder SUPABASE_PUBLISHABLE_KEY fails."""
+    cfg_empty = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="short_secret",
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
-    with pytest.raises(RuntimeError, match="SUPABASE_JWT_SECRET"):
-        validate_production_config(cfg_short)
+    with pytest.raises(RuntimeError, match="SUPABASE_PUBLISHABLE_KEY"):
+        validate_production_config(cfg_empty)
 
     cfg_placeholder = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="sb_pub_placeholder_key_for_client_side",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="placeholder_jwt_secret_for_local_development",
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
-    with pytest.raises(RuntimeError, match="SUPABASE_JWT_SECRET"):
+    with pytest.raises(RuntimeError, match="SUPABASE_PUBLISHABLE_KEY"):
         validate_production_config(cfg_placeholder)
 
 
@@ -177,8 +170,8 @@ def test_production_config_with_placeholder_database_url_fails():
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL=(
             "postgresql://postgres:placeholder_password@"
             "placeholder_project.supabase.co:5432/postgres"
@@ -197,8 +190,8 @@ def test_production_config_with_placeholder_redis_url_fails():
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://placeholder-redis:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
@@ -214,8 +207,8 @@ def test_production_config_with_missing_gemini_key_fails():
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-placeholder-key-server-only",
@@ -231,8 +224,8 @@ def test_production_config_with_empty_cv_bucket_fails():
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
@@ -257,8 +250,8 @@ def test_production_config_with_insecure_origins_fails(invalid_origin):
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="valid_pub_key_for_prod",
         SUPABASE_SERVICE_ROLE_KEY="valid_serv_role_secret_for_prod",
-        SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
         GEMINI_API_KEY="gemini-real-secret-key-for-prod",
@@ -274,11 +267,10 @@ def test_valid_production_config_passes():
     valid_cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://myprodapp.supabase.co",
+        SUPABASE_PUBLISHABLE_KEY="super_secure_publishable_key_value",
         SUPABASE_SERVICE_ROLE_KEY="super_secure_service_role_key_value",
-        SUPABASE_JWT_SECRET="super_secure_jwt_secret_that_is_long_enough",
         DATABASE_URL=(
-            "postgresql://postgres:prodpass123@"
-            "aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
+            "postgresql://postgres:prodpass123@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
         ),
         REDIS_URL="rediss://default:prodredispass@eu-redis.upstash.io:6379",
         GEMINI_API_KEY="gemini-prod-key-1234567890abcdef",
@@ -310,11 +302,11 @@ def test_production_validation_error_never_contains_secrets():
 
 
 def test_match_enqueue_failure_persists_exact_generic_error(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, mock_supabase_auth
 ):
     """Test 12: Match enqueue failure persists safe generic error and not raw exception."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     sensitive_error = "Connection lost to redis://default:REDIS_SECRET_123@redis:6379/0"
 
@@ -335,9 +327,7 @@ def test_match_enqueue_failure_persists_exact_generic_error(
     db = TestingSessionLocal()
     try:
         job = (
-            db.query(ProcessingJob)
-            .filter_by(user_id=user_id, job_type="match_calculation")
-            .first()
+            db.query(ProcessingJob).filter_by(user_id=user_id, job_type="match_calculation").first()
         )
         assert job is not None
         assert job.status == "failed"
@@ -350,11 +340,11 @@ def test_match_enqueue_failure_persists_exact_generic_error(
 
 
 def test_cv_enqueue_failure_persists_exact_generic_error(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, mock_supabase_auth
 ):
     """Test 13: CV enqueue failure persists safe generic error and not raw exception."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     sensitive_error = "S3 / GCS secret key invalid: AWS_SECRET_KEY_XYZ987"
 
@@ -379,11 +369,7 @@ def test_cv_enqueue_failure_persists_exact_generic_error(
 
     db = TestingSessionLocal()
     try:
-        job = (
-            db.query(ProcessingJob)
-            .filter_by(user_id=user_id, job_type="cv_extraction")
-            .first()
-        )
+        job = db.query(ProcessingJob).filter_by(user_id=user_id, job_type="cv_extraction").first()
         assert job is not None
         assert job.status == "failed"
         assert job.progress_percent == 100
@@ -395,20 +381,18 @@ def test_cv_enqueue_failure_persists_exact_generic_error(
 
 
 def test_application_enqueue_failure_persists_exact_generic_error(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, mock_supabase_auth
 ):
     """
     Test 14: Application enqueue failure persists safe generic error
     and not raw exception.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -543,21 +527,15 @@ def test_cv_worker_failure_persists_safe_error(monkeypatch):
 
     sensitive_error = "OpenAI parse failure with api_key sk-SECRET_AI_KEY_99"
 
-    monkeypatch.setattr(
-        "tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"pdf"
-    )
-    monkeypatch.setattr(
-        "tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text"
-    )
+    monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"pdf")
+    monkeypatch.setattr("tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text")
     monkeypatch.setattr(
         "tasks.cv_extraction.extract_structured_candidate_profile",
         MagicMock(side_effect=RuntimeError(sensitive_error)),
     )
 
     with pytest.raises(RuntimeError):
-        run_cv_extraction(
-            job_id=job_id, user_id=user_id, storage_path="user/cv.pdf"
-        )
+        run_cv_extraction(job_id=job_id, user_id=user_id, storage_path="user/cv.pdf")
 
     db = TestingSessionLocal()
     try:
@@ -585,9 +563,7 @@ def test_application_worker_failure_persists_safe_error(monkeypatch):
         )
         db.add(job)
 
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -648,10 +624,10 @@ def test_application_worker_failure_persists_safe_error(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_get_job_status_returns_error_field(client: TestClient):
+def test_get_job_status_returns_error_field(client: TestClient, mock_supabase_auth):
     """Test 18: GET /jobs/{id} returns the error field in public contract."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
@@ -681,10 +657,10 @@ def test_get_job_status_returns_error_field(client: TestClient):
     assert data["status"] == "completed"
 
 
-def test_failed_job_returns_safe_persisted_generic_error(client: TestClient):
+def test_failed_job_returns_safe_persisted_generic_error(client: TestClient, mock_supabase_auth):
     """Test 19: A failed job returns the safe persisted generic error."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
@@ -713,11 +689,11 @@ def test_failed_job_returns_safe_persisted_generic_error(client: TestClient):
     assert data["error"] == "Match calculation failed."
 
 
-def test_cross_tenant_job_access_remains_404(client: TestClient):
+def test_cross_tenant_job_access_remains_404(client: TestClient, mock_supabase_auth):
     """Test 20: Cross-tenant job access returns 404 Not Found."""
     user_a = uuid4()
     user_b = uuid4()
-    token_b = generate_mock_jwt(user_id=user_b)
+    token_b = f"valid-user-{user_b}"
 
     db = TestingSessionLocal()
     try:
@@ -745,9 +721,7 @@ def test_cross_tenant_job_access_remains_404(client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-def test_worker_redis_connection_failure_exits_and_protects_credentials(
-    monkeypatch, caplog
-):
+def test_worker_redis_connection_failure_exits_and_protects_credentials(monkeypatch, caplog):
     """
     Tests 21, 22, 23: Worker logs generic Redis failure message,
     exits with status 1, and never prints credentials or raw exception.

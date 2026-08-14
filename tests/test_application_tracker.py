@@ -26,7 +26,8 @@ from app.repositories.application import ApplicationRepository
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
-from tests.test_auth import generate_mock_jwt
+
+pytestmark = pytest.mark.usefixtures("mock_supabase_auth")
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +81,7 @@ def test_unauthenticated_get_applications_rejected(client: TestClient):
 def test_empty_tracker_returns_empty_list(client: TestClient):
     """Test 2: Authenticated user with no applications gets empty list."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.get(
         "/api/v1/applications",
@@ -95,13 +96,11 @@ def test_owner_sees_own_applications_with_joined_internship(
 ):
     """Test 3: Owner retrieves applications with company_name and job_title."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Jane Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Jane Candidate")
         db.add(profile)
         db.flush()
 
@@ -155,13 +154,11 @@ def test_tenant_isolation_never_exposes_other_user_applications(
     """Test 4: User B cannot see User A's application tracker records."""
     user_a = uuid4()
     user_b = uuid4()
-    token_b = generate_mock_jwt(user_id=user_b)
+    token_b = f"valid-user-{user_b}"
 
     db = TestingSessionLocal()
     try:
-        prof_a = StudentProfile(
-            id=uuid4(), user_id=user_a, full_name="Candidate A"
-        )
+        prof_a = StudentProfile(id=uuid4(), user_id=user_a, full_name="Candidate A")
         db.add(prof_a)
         db.flush()
 
@@ -203,13 +200,11 @@ def test_historical_record_with_deleted_internship_preserved(
     remains visible with internship_id=null, company_name=null, job_title=null.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Jane Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Jane Candidate")
         db.add(profile)
         db.flush()
 
@@ -252,13 +247,11 @@ def test_application_serialization_excludes_internal_fields(
 ):
     """Test 7: Response does not leak student_id or internal timestamps."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -302,7 +295,7 @@ def test_unauthenticated_patch_status_rejected(client: TestClient):
 def test_nonexistent_application_returns_404(client: TestClient):
     """Test 9: Requesting PATCH on nonexistent application returns 404."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.patch(
         f"/api/v1/applications/{uuid4()}/status",
@@ -319,13 +312,11 @@ def test_other_user_application_returns_404_tenant_isolation(
     """Test 10: Attempting to PATCH another user's application returns 404."""
     user_a = uuid4()
     user_b = uuid4()
-    token_b = generate_mock_jwt(user_id=user_b)
+    token_b = f"valid-user-{user_b}"
 
     db = TestingSessionLocal()
     try:
-        prof_a = StudentProfile(
-            id=uuid4(), user_id=user_a, full_name="Candidate A"
-        )
+        prof_a = StudentProfile(id=uuid4(), user_id=user_a, full_name="Candidate A")
         db.add(prof_a)
         db.flush()
 
@@ -353,7 +344,7 @@ def test_other_user_application_returns_404_tenant_isolation(
 def test_invalid_status_rejected_with_422(client: TestClient):
     """Test 11: Invalid status string returns 422 validation error."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.patch(
         f"/api/v1/applications/{uuid4()}/status",
@@ -369,13 +360,11 @@ def test_invalid_status_rejected_with_422(client: TestClient):
 def test_owner_can_update_each_valid_status(client: TestClient, valid_status):
     """Test 12: Owner can update to any valid status in the contract."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -403,13 +392,11 @@ def test_owner_can_update_each_valid_status(client: TestClient, valid_status):
 def test_notes_omitted_preserves_existing_notes(client: TestClient):
     """Test 13: Omitting 'notes' field in PATCH payload preserves existing notes."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -438,13 +425,11 @@ def test_notes_omitted_preserves_existing_notes(client: TestClient):
 def test_notes_string_updates_notes(client: TestClient):
     """Test 14: Supplying string 'notes' updates the notes in database."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -473,13 +458,11 @@ def test_notes_string_updates_notes(client: TestClient):
 def test_notes_explicit_null_clears_notes(client: TestClient):
     """Test 15: Explicitly passing 'notes': null clears existing notes."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -508,13 +491,11 @@ def test_notes_explicit_null_clears_notes(client: TestClient):
 def test_first_transition_to_applied_sets_applied_date(client: TestClient):
     """Test 16: First transition to 'applied' sets applied_date to UTC today."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -545,15 +526,13 @@ def test_first_transition_to_applied_sets_applied_date(client: TestClient):
 def test_repeat_applied_preserves_original_applied_date(client: TestClient):
     """Test 17: Repeat PATCH to 'applied' preserves existing applied_date."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     original_date = date(2026, 7, 15)
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -582,15 +561,13 @@ def test_repeat_applied_preserves_original_applied_date(client: TestClient):
 def test_later_status_transitions_preserve_applied_date(client: TestClient):
     """Test 18: Transitions to interviewing/rejected/accepted preserve applied_date."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     original_date = date(2026, 7, 20)
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -631,13 +608,11 @@ def test_direct_saved_to_interviewing_leaves_applied_date_null(
 ):
     """Test 19: Direct transition saved -> interviewing leaves applied_date None."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -668,13 +643,11 @@ def test_successful_patch_returns_full_updated_contract_schema(
 ):
     """Test 20: Successful PATCH returns all contract-specified fields."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -735,9 +708,7 @@ def test_gate_2_28_regeneration_preserves_status_notes_applied_date():
         student_id = uuid4()
         internship_id = uuid4()
 
-        profile = StudentProfile(
-            id=student_id, user_id=uuid4(), full_name="Candidate"
-        )
+        profile = StudentProfile(id=student_id, user_id=uuid4(), full_name="Candidate")
         db.add(profile)
         listing = InternshipListing(
             id=internship_id,
@@ -779,9 +750,6 @@ def test_gate_2_28_regeneration_preserves_status_notes_applied_date():
         assert updated_app.status == "interviewing"  # PRESERVED
         assert updated_app.applied_date == original_applied_date  # PRESERVED
         assert updated_app.notes == "Second round next Tuesday"  # PRESERVED
-        assert (
-            updated_app.generated_cover_letter
-            == "Version 2 regenerated cover letter"
-        )
+        assert updated_app.generated_cover_letter == "Version 2 regenerated cover letter"
     finally:
         db.close()

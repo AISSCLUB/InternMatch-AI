@@ -1,13 +1,14 @@
 """
 Unit Tests for Supabase Bearer JWT Authentication Foundation & Auth Sync Endpoint.
-Verifies token parsing, algorithm safety, claim validation, user_id extraction, and POST /auth/sync.
+Verifies token parsing, Supabase Auth verified claims integration,
+claim validation, user_id extraction, and POST /api/v1/auth/sync.
+All tests use opaque bearer tokens and mock Supabase client verified
+claims with zero network calls.
 """
 
-import time
 from typing import Optional
 from uuid import UUID, uuid4
 
-import jwt
 import pytest
 from app.core.config import settings
 from app.core.security import (
@@ -22,14 +23,14 @@ from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
 
-TEST_JWT_SECRET = "test_supabase_jwt_secret_32_bytes_long_minimum!!"
-
 # FastAPI test router for temporary protected endpoints.
 auth_test_router = APIRouter(prefix="/test-auth", tags=["Test Auth"])
 
 
 @auth_test_router.get("/me")
-def protected_me_endpoint(current_user: AuthenticatedUser = Depends(get_current_user)):
+def protected_me_endpoint(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
     """Sample protected endpoint consuming get_current_user dependency."""
     return {
         "authenticated": True,
@@ -54,20 +55,6 @@ def protected_user_id_endpoint(
     }
 
 
-@pytest.fixture(autouse=True)
-def configure_test_jwt_settings():
-    original_secret = settings.SUPABASE_JWT_SECRET
-    original_url = settings.SUPABASE_URL
-
-    settings.SUPABASE_JWT_SECRET = TEST_JWT_SECRET
-    settings.SUPABASE_URL = "https://legitimate-project.supabase.co"
-
-    yield
-
-    settings.SUPABASE_JWT_SECRET = original_secret
-    settings.SUPABASE_URL = original_url
-
-
 @pytest.fixture
 def auth_test_client() -> TestClient:
     """Fixture providing TestClient with test auth routes mounted."""
@@ -76,142 +63,47 @@ def auth_test_client() -> TestClient:
     return TestClient(test_app)
 
 
-def generate_mock_jwt(
-    user_id: Optional[UUID] = None,
-    exp_offset: int = 3600,
-    secret: str = TEST_JWT_SECRET,
-    aud: str = "authenticated",
-    iss: Optional[str] = "https://legitimate-project.supabase.co/auth/v1",
-    alg: str = "HS256",
-    include_sub: bool = True,
-) -> str:
-    """Helper utility to generate mock synthetic JWTs for testing."""
-    payload = {
-        "aud": aud,
-        "email": "student@example.com",
-        "role": "authenticated",
-        "exp": int(time.time()) + exp_offset,
-    }
-    if include_sub and user_id:
-        payload["sub"] = str(user_id)
-    if iss:
-        payload["iss"] = iss
-
-    headers = {"alg": alg, "typ": "JWT"}
-    return jwt.encode(payload, secret, algorithm=alg, headers=headers)
-
-
-def test_valid_jwt_accepted_and_extracts_identity(auth_test_client: TestClient):
-    """Test Case 1: Valid JWT token is accepted and identity is extracted."""
+def test_valid_verified_claims_returns_authenticated_user(
+    auth_test_client: TestClient, mock_supabase_auth
+):
+    """
+    Test 1: Valid Supabase token with verified claims is accepted
+    and extracts identity.
+    """
     test_uuid = uuid4()
-    valid_token = generate_mock_jwt(user_id=test_uuid, exp_offset=3600)
-
-    response = auth_test_client.get(
-        "/test-auth/me", headers={"Authorization": f"Bearer {valid_token}"}
+    token = "valid-token-alex"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            "aud": "authenticated",
+            "sub": str(test_uuid),
+            "email": "alex.student@example.com",
+            "role": "authenticated",
+        },
     )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["authenticated"] is True
     assert data["user_id"] == str(test_uuid)
-    assert data["email"] == "student@example.com"
+    assert data["email"] == "alex.student@example.com"
+    assert data["role"] == "authenticated"
 
 
-def test_wrong_issuer_returns_401(auth_test_client: TestClient):
-    """Test Case 2: Token with wrong issuer returns 401 UNAUTHORIZED."""
-    test_uuid = uuid4()
-    bad_iss_token = generate_mock_jwt(
-        user_id=test_uuid, iss="https://malicious-auth-issuer.com/auth/v1"
-    )
-
-    original_url = settings.SUPABASE_URL
-    try:
-        settings.SUPABASE_URL = "https://legitimate-project.supabase.co"
-        with pytest.raises(HTTPException) as exc_info:
-            verify_jwt_token(bad_iss_token)
-        assert exc_info.value.status_code == 401
-    finally:
-        settings.SUPABASE_URL = original_url
-
-
-def test_wrong_audience_returns_401(auth_test_client: TestClient):
-    """Test Case 3: Token with wrong audience returns 401 UNAUTHORIZED."""
-    test_uuid = uuid4()
-    wrong_aud_token = generate_mock_jwt(user_id=test_uuid, aud="anon")
-
-    response = auth_test_client.get(
-        "/test-auth/me", headers={"Authorization": f"Bearer {wrong_aud_token}"}
-    )
-    assert response.status_code == 401
-    data = response.json()
-    assert "audience" in data["detail"]["error"]["message"].lower()
-
-
-def test_expired_token_returns_401(auth_test_client: TestClient):
-    """Test Case 4: Expired token returns 401 UNAUTHORIZED."""
-    test_uuid = uuid4()
-    expired_token = generate_mock_jwt(user_id=test_uuid, exp_offset=-3600)
-
-    response = auth_test_client.get(
-        "/test-auth/me", headers={"Authorization": f"Bearer {expired_token}"}
-    )
-    assert response.status_code == 401
-    data = response.json()
-    assert "expired" in data["detail"]["error"]["message"].lower()
-
-
-def test_missing_sub_returns_401(auth_test_client: TestClient):
-    """Test Case 5: Token missing required 'sub' claim returns 401 UNAUTHORIZED."""
-    missing_sub_token = generate_mock_jwt(include_sub=False)
-
-    response = auth_test_client.get(
-        "/test-auth/me", headers={"Authorization": f"Bearer {missing_sub_token}"}
-    )
-    assert response.status_code == 401
-    data = response.json()
-    assert "sub" in data["detail"]["error"]["message"].lower()
-
-
-def test_invalid_signature_returns_401(auth_test_client: TestClient):
-    """Test Case 6: Invalid token signature returns 401 UNAUTHORIZED."""
-    original_secret = settings.SUPABASE_JWT_SECRET
-    try:
-        settings.SUPABASE_JWT_SECRET = "real_secret_key_for_testing_32_bytes_long!!"
-        tampered_token = generate_mock_jwt(
-            user_id=uuid4(), secret="wrong_secret_key_for_testing_32_bytes_long!!"
-        )
-
-        response = auth_test_client.get(
-            "/test-auth/me", headers={"Authorization": f"Bearer {tampered_token}"}
-        )
-        assert response.status_code == 401
-    finally:
-        settings.SUPABASE_JWT_SECRET = original_secret
-
-
-def test_unsupported_algorithm_returns_401(auth_test_client: TestClient):
-    """Test Case 7: Token using unsupported algorithm (none/RS256) returns 401 UNAUTHORIZED."""
-    token_none = jwt.encode(
-        {"sub": str(uuid4()), "aud": "authenticated", "exp": 9999999999},
-        "",
-        algorithm="none",
-    )
-    response = auth_test_client.get(
-        "/test-auth/me", headers={"Authorization": f"Bearer {token_none}"}
-    )
-    assert response.status_code == 401
-    data = response.json()
-    assert "unsupported" in data["detail"]["error"]["message"].lower()
-
-
-def test_client_supplied_user_id_cannot_override_jwt_sub(auth_test_client: TestClient):
-    """Test Case 8: Client-supplied user_id parameter cannot override JWT sub identity."""
+def test_uuid_comes_from_verified_sub(auth_test_client: TestClient, mock_supabase_auth):
+    """
+    Test 2: Authenticated user_id UUID strictly derives from
+    verified JWT sub claim.
+    """
     authenticated_uuid = uuid4()
     attacker_supplied_uuid = str(uuid4())
-    valid_token = generate_mock_jwt(user_id=authenticated_uuid)
+    token = f"valid-user-{authenticated_uuid}"
 
     response = auth_test_client.get(
         f"/test-auth/user-id?client_supplied_user_id={attacker_supplied_uuid}",
-        headers={"Authorization": f"Bearer {valid_token}"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -219,17 +111,250 @@ def test_client_supplied_user_id_cannot_override_jwt_sub(auth_test_client: TestC
     assert data["authenticated_user_id"] != attacker_supplied_uuid
 
 
+def test_missing_authorization_header_returns_401(
+    auth_test_client: TestClient,
+):
+    """Test 3: Missing Authorization header returns 401 UNAUTHORIZED."""
+    response = auth_test_client.get("/test-auth/me")
+    assert response.status_code == 401
+    data = response.json()
+    assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
+    assert "Missing Authorization header" in data["detail"]["error"]["message"]
+
+
+@pytest.mark.parametrize(
+    "malformed_header",
+    [
+        "Basic dXNlcjpwYXNz",
+        "Bearer",
+        "Bearer   ",
+        "Bearer token1 token2",
+        "Token xyz123",
+        "JWT xyz123",
+    ],
+)
+def test_malformed_bearer_header_returns_401(auth_test_client: TestClient, malformed_header: str):
+    """Test 4: Malformed Authorization header returns 401 UNAUTHORIZED."""
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": malformed_header})
+    assert response.status_code == 401
+    data = response.json()
+    assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
+    assert "Invalid Authorization header format" in data["detail"]["error"]["message"]
+
+
+def test_supabase_verification_rejection_returns_401(
+    auth_test_client: TestClient, mock_supabase_auth
+):
+    """
+    Test 5: Supabase claims verification failure returns 401
+    without leaking secrets.
+    """
+    token = "rejected-secret-token"
+    mock_supabase_auth(
+        token,
+        exc=RuntimeError("Supabase Auth error: Invalid signature with secret super_secret_val_999"),
+    )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    data = response.json()
+    assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
+    assert "Invalid or expired authentication token." in data["detail"]["error"]["message"]
+    # Secret protection
+    assert "super_secret_val" not in response.text
+    assert "secret" not in data["detail"]["error"]["message"].lower()
+
+
+def test_empty_claims_response_returns_401(auth_test_client: TestClient, mock_supabase_auth):
+    """Test 6: None or empty claims response returns 401 UNAUTHORIZED."""
+    token = "empty-claims-token"
+    mock_supabase_auth(token, claims=None)
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    data = response.json()
+    assert "Invalid or expired authentication token." in data["detail"]["error"]["message"]
+
+
+def test_wrong_issuer_returns_401(mock_supabase_auth):
+    """Test 7: Token with wrong issuer returns 401 UNAUTHORIZED."""
+    test_uuid = uuid4()
+    token = "wrong-iss-token"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": "https://malicious-auth-issuer.com/auth/v1",
+            "aud": "authenticated",
+            "sub": str(test_uuid),
+        },
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        verify_jwt_token(token)
+    assert exc_info.value.status_code == 401
+    assert "Invalid JWT issuer." in exc_info.value.detail["error"]["message"]
+
+
+def test_wrong_audience_returns_401(auth_test_client: TestClient, mock_supabase_auth):
+    """
+    Test 8: Token with wrong audience (e.g. 'anon') returns 401 UNAUTHORIZED.
+    """
+    test_uuid = uuid4()
+    token = "wrong-aud-token"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            "aud": "anon",
+            "sub": str(test_uuid),
+        },
+    )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    data = response.json()
+    assert "audience" in data["detail"]["error"]["message"].lower()
+
+
+def test_list_audience_containing_authenticated_is_accepted(
+    auth_test_client: TestClient, mock_supabase_auth
+):
+    """Test 9: Token with list audience containing 'authenticated' is accepted."""
+    test_uuid = uuid4()
+    token = "list-aud-token"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            "aud": ["authenticated", "other_aud"],
+            "sub": str(test_uuid),
+            "email": "test@example.com",
+            "role": "authenticated",
+        },
+    )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == str(test_uuid)
+
+
+def test_missing_sub_returns_401(auth_test_client: TestClient, mock_supabase_auth):
+    """Test 10: Token missing required 'sub' claim returns 401 UNAUTHORIZED."""
+    token = "missing-sub-token"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            "aud": "authenticated",
+            "email": "nosub@example.com",
+        },
+    )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    data = response.json()
+    assert "sub" in data["detail"]["error"]["message"].lower()
+
+
+def test_malformed_uuid_sub_returns_401(auth_test_client: TestClient, mock_supabase_auth):
+    """Test 11: Token with non-UUID 'sub' claim returns 401 UNAUTHORIZED."""
+    token = "bad-uuid-token"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            "aud": "authenticated",
+            "sub": "not-a-valid-uuid-format",
+        },
+    )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    data = response.json()
+    assert "valid uuid" in data["detail"]["error"]["message"].lower()
+
+
+def test_optional_email_and_role_handling(auth_test_client: TestClient, mock_supabase_auth):
+    """Test 12: Claims without optional email and role are handled gracefully."""
+    test_uuid = uuid4()
+    token = "minimal-token"
+    mock_supabase_auth(
+        token,
+        claims={
+            "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+            "aud": "authenticated",
+            "sub": str(test_uuid),
+        },
+    )
+
+    response = auth_test_client.get("/test-auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user_id"] == str(test_uuid)
+    assert data["email"] is None
+    assert data["role"] is None
+
+
+def test_get_current_user_id_dependency_unit():
+    """Test 13: Direct unit test for get_current_user_id convenience dependency."""
+    user_id = uuid4()
+    auth_user = AuthenticatedUser(user_id=user_id, email="test@test.com", role="authenticated")
+    import asyncio
+
+    result = asyncio.run(get_current_user_id(current_user=auth_user))
+    assert result == user_id
+
+
+def test_missing_auth_configuration_returns_500(monkeypatch):
+    """Test 14: Missing or placeholder Supabase auth settings returns 500."""
+    monkeypatch.setattr(settings, "SUPABASE_URL", "")
+    with pytest.raises(HTTPException) as exc_info:
+        verify_jwt_token("some.token")
+    assert exc_info.value.status_code == 500
+    assert "Authentication service is not configured." in exc_info.value.detail["error"]["message"]
+
+    monkeypatch.setattr(
+        settings,
+        "SUPABASE_URL",
+        "https://placeholder-project.supabase.co",
+    )
+    monkeypatch.setattr(
+        settings,
+        "SUPABASE_PUBLISHABLE_KEY",
+        "sb_pub_placeholder_key_client",
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        verify_jwt_token("some.token")
+    assert exc_info.value.status_code == 500
+
+    monkeypatch.setattr(
+        settings,
+        "SUPABASE_URL",
+        "https://legitimate-project.supabase.co",
+    )
+    monkeypatch.setattr(
+        settings,
+        "SUPABASE_PUBLISHABLE_KEY",
+        "",
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        verify_jwt_token("some.token")
+    assert exc_info.value.status_code == 500
+
+
 # --- Gate 2.10.1: POST /api/v1/auth/sync Endpoint Tests ---
 
 
-def test_post_auth_sync_valid_jwt_without_profile(client: TestClient):
-    """Test 9: POST /api/v1/auth/sync returns 200 OK with has_profile=False when profile absent."""
+def test_post_auth_sync_valid_jwt_without_profile(client: TestClient, mock_supabase_auth):
+    """
+    Test 15: POST /api/v1/auth/sync returns 200 OK with has_profile=False
+    when profile absent.
+    """
     user_uuid = uuid4()
-    valid_token = generate_mock_jwt(user_id=user_uuid)
+    token = f"valid-user-{user_uuid}"
 
-    response = client.post(
-        "/api/v1/auth/sync", headers={"Authorization": f"Bearer {valid_token}"}
-    )
+    response = client.post("/api/v1/auth/sync", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["user_id"] == str(user_uuid)
@@ -237,20 +362,23 @@ def test_post_auth_sync_valid_jwt_without_profile(client: TestClient):
     assert data["has_profile"] is False
 
 
-def test_post_auth_sync_valid_jwt_with_profile(client: TestClient):
-    """Test 10: POST /api/v1/auth/sync returns 200 OK with has_profile=True when profile exists."""
+def test_post_auth_sync_valid_jwt_with_profile(client: TestClient, mock_supabase_auth):
+    """
+    Test 16: POST /api/v1/auth/sync returns 200 OK with has_profile=True
+    when profile exists.
+    """
     user_uuid = uuid4()
 
     db = TestingSessionLocal()
-    profile = StudentProfile(user_id=user_uuid, full_name="Synced Student")
-    db.add(profile)
-    db.commit()
-    db.close()
+    try:
+        profile = StudentProfile(user_id=user_uuid, full_name="Synced Student")
+        db.add(profile)
+        db.commit()
+    finally:
+        db.close()
 
-    valid_token = generate_mock_jwt(user_id=user_uuid)
-    response = client.post(
-        "/api/v1/auth/sync", headers={"Authorization": f"Bearer {valid_token}"}
-    )
+    token = f"valid-user-{user_uuid}"
+    response = client.post("/api/v1/auth/sync", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["user_id"] == str(user_uuid)
@@ -259,15 +387,16 @@ def test_post_auth_sync_valid_jwt_with_profile(client: TestClient):
 
 
 def test_post_auth_sync_missing_header_returns_401(client: TestClient):
-    """Test 11: POST /api/v1/auth/sync without Authorization header returns 401 UNAUTHORIZED."""
+    """Test 17: POST /api/v1/auth/sync without Authorization header returns 401 UNAUTHORIZED."""
     response = client.post("/api/v1/auth/sync")
     assert response.status_code == 401
     data = response.json()
     assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_post_auth_sync_invalid_token_returns_401(client: TestClient):
-    """Test 12: POST /api/v1/auth/sync with invalid JWT returns 401 UNAUTHORIZED."""
+def test_post_auth_sync_invalid_token_returns_401(client: TestClient, mock_supabase_auth):
+    """Test 18: POST /api/v1/auth/sync with invalid JWT returns 401 UNAUTHORIZED."""
+    mock_supabase_auth("invalid.token.value", exc=RuntimeError("Invalid token"))
     response = client.post(
         "/api/v1/auth/sync", headers={"Authorization": "Bearer invalid.token.value"}
     )
@@ -276,17 +405,22 @@ def test_post_auth_sync_invalid_token_returns_401(client: TestClient):
     assert data["detail"]["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_post_auth_sync_ignores_client_body_or_query_overrides(client: TestClient):
-    """Test 13: POST /api/v1/auth/sync ignores client payload identity override attempts."""
+def test_post_auth_sync_ignores_client_body_or_query_overrides(
+    client: TestClient, mock_supabase_auth
+):
+    """Test 19: POST /api/v1/auth/sync ignores client payload identity override attempts."""
     authenticated_uuid = uuid4()
     attacker_uuid = uuid4()
-    valid_token = generate_mock_jwt(user_id=authenticated_uuid)
+    token = f"valid-user-{authenticated_uuid}"
 
-    malicious_payload = {"user_id": str(attacker_uuid), "email": "attacker@evil.com"}
+    malicious_payload = {
+        "user_id": str(attacker_uuid),
+        "email": "attacker@evil.com",
+    }
     response = client.post(
         f"/api/v1/auth/sync?user_id={attacker_uuid}",
         json=malicious_payload,
-        headers={"Authorization": f"Bearer {valid_token}"},
+        headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
     data = response.json()

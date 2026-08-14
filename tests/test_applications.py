@@ -48,7 +48,8 @@ from tasks.application_generation import (  # noqa: E402
 )
 
 from tests.db import TestingSessionLocal  # noqa: E402
-from tests.test_auth import generate_mock_jwt  # noqa: E402
+
+pytestmark = pytest.mark.usefixtures("mock_supabase_auth")
 
 
 @pytest.fixture(autouse=True)
@@ -90,14 +91,10 @@ def clean_database():
 @pytest.fixture(autouse=True)
 def override_worker_sessionlocal(monkeypatch):
     """Ensure worker SessionLocal uses TestingSessionLocal."""
-    monkeypatch.setattr(
-        "tasks.application_generation.SessionLocal", TestingSessionLocal
-    )
+    monkeypatch.setattr("tasks.application_generation.SessionLocal", TestingSessionLocal)
 
 
-def _mock_gemini_cover_letter_generate(
-    monkeypatch, cover_letter_obj: LLMCoverLetter
-):
+def _mock_gemini_cover_letter_generate(monkeypatch, cover_letter_obj: LLMCoverLetter):
     """Helper to mock Gemini client structured generate_content method."""
     mock_response = MagicMock()
     mock_response.text = cover_letter_obj.model_dump_json()
@@ -131,18 +128,14 @@ def test_unauthenticated_generate_request_rejected(client: TestClient):
     assert response.json()["detail"]["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_owner_can_enqueue_application_generation(
-    client: TestClient, monkeypatch
-):
+def test_owner_can_enqueue_application_generation(client: TestClient, monkeypatch):
     """Test 2: Authenticated owner enqueues generation with 202 Accepted response."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Jane Student"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Jane Student")
         db.add(profile)
         db.flush()
 
@@ -218,7 +211,7 @@ def test_owner_can_enqueue_application_generation(
 def test_nonexistent_match_returns_404(client: TestClient):
     """Test 3: Requesting generation for nonexistent match returns 404."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.post(
         "/api/v1/applications/generate",
@@ -233,13 +226,11 @@ def test_another_user_match_returns_404_tenant_isolation(client: TestClient):
     """Test 4: Requesting generation for another candidate's match returns 404."""
     user_a = uuid4()
     user_b = uuid4()
-    token_b = generate_mock_jwt(user_id=user_b)
+    token_b = f"valid-user-{user_b}"
 
     db = TestingSessionLocal()
     try:
-        prof_a = StudentProfile(
-            id=uuid4(), user_id=user_a, full_name="Candidate A"
-        )
+        prof_a = StudentProfile(id=uuid4(), user_id=user_a, full_name="Candidate A")
         db.add(prof_a)
         db.flush()
 
@@ -281,7 +272,7 @@ def test_another_user_match_returns_404_tenant_isolation(client: TestClient):
 def test_invalid_content_locale_rejected_with_422(client: TestClient):
     """Test 5: Invalid content_locale returns 422 validation error."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.post(
         "/api/v1/applications/generate",
@@ -298,7 +289,7 @@ def test_invalid_content_locale_rejected_with_422(client: TestClient):
 def test_empty_or_whitespace_tone_rejected_with_422(client: TestClient):
     """Test 6: Empty or whitespace-only tone returns 422."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.post(
         "/api/v1/applications/generate",
@@ -308,18 +299,14 @@ def test_empty_or_whitespace_tone_rejected_with_422(client: TestClient):
     assert response.status_code == 422
 
 
-def test_enqueue_failure_updates_job_to_failed_and_returns_503(
-    client: TestClient, monkeypatch
-):
+def test_enqueue_failure_updates_job_to_failed_and_returns_503(client: TestClient, monkeypatch):
     """Test 7: Enqueue failure updates DB job to failed and returns 503."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -535,9 +522,7 @@ def test_first_generation_creates_application_with_status_saved():
     try:
         student_id = uuid4()
         internship_id = uuid4()
-        profile = StudentProfile(
-            id=student_id, user_id=uuid4(), full_name="Candidate"
-        )
+        profile = StudentProfile(id=student_id, user_id=uuid4(), full_name="Candidate")
         db.add(profile)
         listing = InternshipListing(
             id=internship_id,
@@ -575,9 +560,7 @@ def test_regeneration_updates_cover_letter_and_preserves_status_and_notes():
     try:
         student_id = uuid4()
         internship_id = uuid4()
-        profile = StudentProfile(
-            id=student_id, user_id=uuid4(), full_name="Candidate"
-        )
+        profile = StudentProfile(id=student_id, user_id=uuid4(), full_name="Candidate")
         db.add(profile)
         listing = InternshipListing(
             id=internship_id,
@@ -615,10 +598,7 @@ def test_regeneration_updates_cover_letter_and_preserves_status_and_notes():
         assert updated_app.id == orig_id
         assert updated_app.status == "interviewing"  # PRESERVED
         assert updated_app.notes == "First round interview on Friday"  # PRESERVED
-        assert (
-            updated_app.generated_cover_letter
-            == "New regenerated cover letter v2"
-        )
+        assert updated_app.generated_cover_letter == "New regenerated cover letter v2"
     finally:
         db.close()
 
@@ -643,9 +623,7 @@ def test_worker_run_application_generation_success(monkeypatch):
         )
         db.add(job)
 
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Jane Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Jane Candidate")
         db.add(profile)
         db.flush()
 
@@ -701,20 +679,11 @@ def test_worker_run_application_generation_success(monkeypatch):
         assert persisted_job is not None
         assert persisted_job.status == "completed"
         assert persisted_job.progress_percent == 100
-        assert persisted_job.result == {
-            "application_id": result["application_id"]
-        }
+        assert persisted_job.result == {"application_id": result["application_id"]}
 
-        persisted_app = (
-            db.query(Application)
-            .filter_by(id=UUID(result["application_id"]))
-            .first()
-        )
+        persisted_app = db.query(Application).filter_by(id=UUID(result["application_id"])).first()
         assert persisted_app is not None
-        assert (
-            persisted_app.generated_cover_letter
-            == mock_llm_output.generated_cover_letter
-        )
+        assert persisted_app.generated_cover_letter == mock_llm_output.generated_cover_letter
         assert persisted_app.status == "saved"
     finally:
         db.close()
@@ -791,9 +760,7 @@ def test_worker_unowned_match_fails_and_marks_job_failed():
         )
         db.add(job)
 
-        other_profile = StudentProfile(
-            id=uuid4(), user_id=other_user, full_name="Other"
-        )
+        other_profile = StudentProfile(id=uuid4(), user_id=other_user, full_name="Other")
         db.add(other_profile)
         db.flush()
 
@@ -861,9 +828,7 @@ def test_worker_provider_failure_rolls_back_application_mutation(monkeypatch):
         )
         db.add(job)
 
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -927,16 +892,14 @@ def test_worker_provider_failure_rolls_back_application_mutation(monkeypatch):
         db.close()
 
 
-def test_post_applications_generate_rate_limited_returns_429(
-    client: TestClient, monkeypatch
-):
+def test_post_applications_generate_rate_limited_returns_429(client: TestClient, monkeypatch):
     """
     Test 23: Rate limit on POST /applications/generate returns HTTP 429
     before job creation.
     """
     user_id = uuid4()
     match_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     def failing_rate_limit(*, user_id, scope):
         raise HTTPException(
@@ -952,9 +915,7 @@ def test_post_applications_generate_rate_limited_returns_429(
             headers={"Retry-After": "600"},
         )
 
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.applications.enforce_rate_limit", failing_rate_limit
-    )
+    monkeypatch.setattr("app.api.v1.endpoints.applications.enforce_rate_limit", failing_rate_limit)
 
     enqueue_called = []
     monkeypatch.setattr(

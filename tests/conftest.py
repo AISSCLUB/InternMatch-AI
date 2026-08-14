@@ -5,6 +5,8 @@ Provides shared test fixtures, app TestClient, and test database config.
 
 import sys
 from pathlib import Path
+from typing import Optional
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -32,8 +34,8 @@ from app.main import app  # noqa: E402
 
 from tests.db import TestingSessionLocal, test_engine  # noqa: E402
 
-TEST_JWT_SECRET = "test_supabase_jwt_secret_32_bytes_long_minimum!!"
 TEST_SUPABASE_URL = "https://legitimate-project.supabase.co"
+TEST_SUPABASE_PUBLISHABLE_KEY = "test_supabase_publishable_key_for_testing"
 
 
 def override_get_db():
@@ -47,17 +49,75 @@ def override_get_db():
 
 @pytest.fixture(autouse=True)
 def configure_test_jwt_settings():
-    """Configure shared test JWT secret and Supabase URL for all test modules."""
-    original_secret = settings.SUPABASE_JWT_SECRET
+    """Configure shared test Supabase URL and publishable key for all test modules."""
     original_url = settings.SUPABASE_URL
+    original_pub_key = settings.SUPABASE_PUBLISHABLE_KEY
 
-    settings.SUPABASE_JWT_SECRET = TEST_JWT_SECRET
     settings.SUPABASE_URL = TEST_SUPABASE_URL
+    settings.SUPABASE_PUBLISHABLE_KEY = TEST_SUPABASE_PUBLISHABLE_KEY
 
     yield
 
-    settings.SUPABASE_JWT_SECRET = original_secret
     settings.SUPABASE_URL = original_url
+    settings.SUPABASE_PUBLISHABLE_KEY = original_pub_key
+
+
+@pytest.fixture
+def mock_supabase_auth(monkeypatch):
+    """
+    Explicit fixture to mock Supabase verified claims for authenticated endpoint testing.
+    Maps bearer token strings to verified claims payloads.
+    """
+    claims_registry = {}
+
+    def register_token(
+        token: str,
+        claims: Optional[dict] = None,
+        exc: Optional[Exception] = None,
+    ):
+        claims_registry[token] = (claims, exc)
+
+    mock_client = MagicMock()
+
+    def get_claims(jwt=None, jwks=None):
+        token = jwt
+        if not token:
+            raise RuntimeError("Missing token")
+
+        if token in claims_registry:
+            claims, exc = claims_registry[token]
+            if exc is not None:
+                raise exc
+            if claims is None:
+                return None
+            return {
+                "claims": claims,
+                "headers": {"alg": "ES256", "typ": "JWT"},
+                "signature": b"mock_signature",
+            }
+
+        if token.startswith("valid-user-"):
+            user_id_str = token[len("valid-user-") :]
+            return {
+                "claims": {
+                    "iss": f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+                    "aud": "authenticated",
+                    "sub": user_id_str,
+                    "email": "student@example.com",
+                    "role": "authenticated",
+                },
+                "headers": {"alg": "ES256", "typ": "JWT"},
+                "signature": b"mock_signature",
+            }
+
+        raise RuntimeError("Invalid or unverified authentication token.")
+
+    mock_client.auth.get_claims.side_effect = get_claims
+    monkeypatch.setattr(
+        "app.core.security.create_client",
+        lambda url, key: mock_client,
+    )
+    return register_token
 
 
 @pytest.fixture(autouse=True)
@@ -78,10 +138,8 @@ def setup_test_database():
     for table_name in required_tables:
         if table_name not in Base.metadata.tables:
             raise RuntimeError(
-                f"Required table {table_name} is not registered "
-                "in Base.metadata before test setup."
+                f"Required table {table_name} is not registered in Base.metadata before test setup."
             )
-
 
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = override_get_db
@@ -89,8 +147,6 @@ def setup_test_database():
     yield
 
     app.dependency_overrides.pop(get_db, None)
-
-
 
 
 @pytest.fixture

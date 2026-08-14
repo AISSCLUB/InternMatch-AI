@@ -8,6 +8,7 @@ from datetime import date
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+import pytest
 from app.db.models import (
     EducationEntry,
     ExperienceEntry,
@@ -24,7 +25,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
-from tests.test_auth import generate_mock_jwt
+
+pytestmark = pytest.mark.usefixtures("mock_supabase_auth")
 
 
 def _get_or_create_test_skill(db, name: str) -> Skill:
@@ -48,7 +50,7 @@ def test_unauthenticated_profile_request_returns_401(client: TestClient):
 def test_authenticated_user_without_profile_returns_404(client: TestClient):
     """Test 2: Authenticated user with no database profile returns 404 NOT FOUND."""
     no_profile_user_id = uuid4()
-    token = generate_mock_jwt(user_id=no_profile_user_id)
+    token = f"valid-user-{no_profile_user_id}"
 
     response = client.get("/api/v1/profile", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
@@ -74,7 +76,7 @@ def test_authenticated_user_with_profile_returns_own_profile(client: TestClient)
     db.refresh(profile)
     db.close()
 
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
     response = client.get("/api/v1/profile", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
@@ -106,7 +108,7 @@ def test_client_supplied_user_id_cannot_override_jwt_identity(client: TestClient
     db.commit()
     db.close()
 
-    token = generate_mock_jwt(user_id=authenticated_user_id)
+    token = f"valid-user-{authenticated_user_id}"
 
     # Attempt attacker override via query parameter
     response = client.get(
@@ -163,7 +165,7 @@ def test_unauthenticated_put_profile_returns_401(client: TestClient):
 def test_authenticated_user_can_create_profile(client: TestClient):
     """Test 7: Authenticated user can create their own profile via PUT when none exists."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     payload = {
         "full_name": "Alex Student",
@@ -198,7 +200,7 @@ def test_authenticated_user_can_update_existing_profile(client: TestClient):
     db.commit()
     db.close()
 
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
     update_payload = {
         "full_name": "Updated Name",
         "headline": "New Lead Engineer",
@@ -233,7 +235,7 @@ def test_client_supplied_user_id_in_body_cannot_override_jwt(client: TestClient)
     db.commit()
     db.close()
 
-    token = generate_mock_jwt(user_id=authenticated_user_id)
+    token = f"valid-user-{authenticated_user_id}"
     malicious_payload = {
         "user_id": str(victim_user_id),
         "full_name": "Attacker Hijack Attempt",
@@ -273,7 +275,7 @@ def test_second_user_profile_remains_unchanged_on_update(client: TestClient):
     db.commit()
     db.close()
 
-    token_a = generate_mock_jwt(user_id=user_a)
+    token_a = f"valid-user-{user_a}"
     payload_a = {"full_name": "User A Modified"}
 
     response = client.put(
@@ -293,7 +295,7 @@ def test_second_user_profile_remains_unchanged_on_update(client: TestClient):
 def test_invalid_profile_input_rejected(client: TestClient):
     """Test 11: Invalid profile input (e.g. empty full_name) is rejected with 422."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     invalid_payload = {"full_name": ""}
     response = client.put(
@@ -307,7 +309,7 @@ def test_invalid_profile_input_rejected(client: TestClient):
 def test_put_profile_persists_in_fresh_database_session(client: TestClient):
     """Test 12: Verify that PUT /api/v1/profile commits transaction and persists to session."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     payload = {"full_name": "Persisted Student", "headline": "Persisted Headline"}
     response = client.put(
@@ -461,7 +463,7 @@ def test_endpoint_put_commits_invalidated_state_visible_in_fresh_session(client:
     finally:
         db.close()
 
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
     payload = {"full_name": "Updated Name", "headline": "New"}
 
     resp = client.put("/api/v1/profile", json=payload, headers={"Authorization": f"Bearer {token}"})
@@ -491,7 +493,7 @@ def test_unauthenticated_post_profile_cv_returns_401(client: TestClient):
 def test_post_profile_cv_valid_pdf_success(client: TestClient, monkeypatch):
     """Test 21: Valid PDF upload returns 202, creates ProcessingJob, commits before enqueue."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     storage_calls = []
     fake_storage_path = f"{user_id}/resume_123.pdf"
@@ -554,7 +556,7 @@ def test_post_profile_cv_valid_pdf_success(client: TestClient, monkeypatch):
 def test_post_profile_cv_valid_docx_success(client: TestClient, monkeypatch):
     """Test 22: Valid DOCX upload returns 202 and enqueues task."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     fake_storage_path = f"{user_id}/resume_456.docx"
@@ -593,7 +595,7 @@ def test_post_profile_cv_jwt_user_id_used_and_client_cannot_override(
     """Test 23: JWT identity is authoritative; client-supplied user_id form data is ignored."""
     authenticated_user_id = uuid4()
     other_user_id = uuid4()
-    token = generate_mock_jwt(user_id=authenticated_user_id)
+    token = f"valid-user-{authenticated_user_id}"
 
     storage_users = []
     monkeypatch.setattr(
@@ -632,7 +634,7 @@ def test_post_profile_cv_over_10mb_rejected_with_413_payload_too_large(
 ):
     """Test 24: Upload payload exceeding 10 MiB is rejected with HTTP 413 Payload Too Large."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     storage_called = []
     monkeypatch.setattr(
@@ -659,7 +661,7 @@ def test_post_profile_cv_over_10mb_rejected_with_413_payload_too_large(
 def test_post_profile_cv_invalid_mime_returns_400(client: TestClient, monkeypatch):
     """Test 25: Storage validation error (e.g. invalid MIME/extension) returns HTTP 400."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     def mock_store_fail(*args, **kwargs):
         raise CVStorageValidationError("Unsupported content type 'image/png'")
@@ -685,7 +687,7 @@ def test_post_profile_cv_enqueue_failure_marks_job_failed_and_returns_503(
 ):
     """Test 26: Redis/RQ enqueue failure updates committed job to failed and returns HTTP 503."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     monkeypatch.setattr(
         "app.api.v1.endpoints.profile.store_candidate_cv",
@@ -735,7 +737,7 @@ def test_post_profile_cv_no_parsing_llm_or_embedding_in_request_path(
 ):
     """Test 27: Request path does NOT invoke parser, LLM extraction, or embedding generation."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     forbidden_calls = []
     monkeypatch.setattr(
@@ -835,7 +837,7 @@ def test_get_profile_returns_structured_data(client: TestClient):
     finally:
         db.close()
 
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
     response = client.get("/api/v1/profile", headers={"Authorization": f"Bearer {token}"})
 
     assert response.status_code == 200
@@ -894,7 +896,7 @@ def test_get_profile_remains_user_scoped_with_structured_data(client: TestClient
     finally:
         db.close()
 
-    token_a = generate_mock_jwt(user_id=user_a)
+    token_a = f"valid-user-{user_a}"
     response_a = client.get("/api/v1/profile", headers={"Authorization": f"Bearer {token_a}"})
     assert response_a.status_code == 200
     data_a = response_a.json()
@@ -904,12 +906,10 @@ def test_get_profile_remains_user_scoped_with_structured_data(client: TestClient
     assert data_a["education"][0]["institution"] == "University A"
 
 
-def test_post_profile_cv_fake_pdf_signature_rejected_with_400(
-    client: TestClient, monkeypatch
-):
+def test_post_profile_cv_fake_pdf_signature_rejected_with_400(client: TestClient, monkeypatch):
     """Test 36: Uploading fake PDF bytes with valid MIME/ext returns HTTP 400."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     files = {"file": ("resume.pdf", b"fake non-pdf bytes", "application/pdf")}
 
@@ -922,30 +922,21 @@ def test_post_profile_cv_fake_pdf_signature_rejected_with_400(
     assert response.status_code == 400
     data = response.json()
     assert data["detail"]["error"]["code"] == "BAD_REQUEST"
-    assert (
-        "File signature does not match expected PDF format"
-        in data["detail"]["error"]["message"]
-    )
+    assert "File signature does not match expected PDF format" in data["detail"]["error"]["message"]
 
     # Verify no job was created
     db = TestingSessionLocal()
     try:
-        jobs = (
-            db.query(ProcessingJob)
-            .filter_by(user_id=user_id, job_type="cv_extraction")
-            .all()
-        )
+        jobs = db.query(ProcessingJob).filter_by(user_id=user_id, job_type="cv_extraction").all()
         assert len(jobs) == 0
     finally:
         db.close()
 
 
-def test_post_profile_cv_fake_docx_signature_rejected_with_400(
-    client: TestClient, monkeypatch
-):
+def test_post_profile_cv_fake_docx_signature_rejected_with_400(client: TestClient, monkeypatch):
     """Test 37: Uploading fake DOCX bytes with valid MIME/ext returns HTTP 400."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     files = {"file": ("resume.docx", b"fake non-docx bytes", docx_mime)}
@@ -960,18 +951,13 @@ def test_post_profile_cv_fake_docx_signature_rejected_with_400(
     data = response.json()
     assert data["detail"]["error"]["code"] == "BAD_REQUEST"
     assert (
-        "File signature does not match expected DOCX format"
-        in data["detail"]["error"]["message"]
+        "File signature does not match expected DOCX format" in data["detail"]["error"]["message"]
     )
 
     # Verify no job was created
     db = TestingSessionLocal()
     try:
-        jobs = (
-            db.query(ProcessingJob)
-            .filter_by(user_id=user_id, job_type="cv_extraction")
-            .all()
-        )
+        jobs = db.query(ProcessingJob).filter_by(user_id=user_id, job_type="cv_extraction").all()
         assert len(jobs) == 0
     finally:
         db.close()
@@ -983,7 +969,7 @@ def test_post_profile_cv_rate_limited_returns_429(client: TestClient, monkeypatc
     storage/job creation.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     def failing_rate_limit(*, user_id, scope):
         raise HTTPException(
@@ -999,9 +985,7 @@ def test_post_profile_cv_rate_limited_returns_429(client: TestClient, monkeypatc
             headers={"Retry-After": "600"},
         )
 
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.profile.enforce_rate_limit", failing_rate_limit
-    )
+    monkeypatch.setattr("app.api.v1.endpoints.profile.enforce_rate_limit", failing_rate_limit)
 
     storage_called = []
     monkeypatch.setattr(
@@ -1026,11 +1010,7 @@ def test_post_profile_cv_rate_limited_returns_429(client: TestClient, monkeypatc
     # Verify no job was created
     db = TestingSessionLocal()
     try:
-        jobs = (
-            db.query(ProcessingJob)
-            .filter_by(user_id=user_id, job_type="cv_extraction")
-            .all()
-        )
+        jobs = db.query(ProcessingJob).filter_by(user_id=user_id, job_type="cv_extraction").all()
         assert len(jobs) == 0
     finally:
         db.close()

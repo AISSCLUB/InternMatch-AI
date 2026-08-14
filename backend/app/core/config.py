@@ -22,8 +22,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = "placeholder_jwt_secret_for_local_development"
     DATABASE_URL: str = (
-        "postgresql://postgres:placeholder_password@"
-        "placeholder_project.supabase.co:5432/postgres"
+        "postgresql://postgres:placeholder_password@placeholder_project.supabase.co:5432/postgres"
     )
     CV_STORAGE_BUCKET: str = "cvs"
 
@@ -43,24 +42,16 @@ class Settings(BaseSettings):
     REVENUECAT_SECRET_KEY: str = ""
 
     # Security & CORS Origins Configuration
-    ALLOWED_ORIGINS: str = (
-        "http://localhost:3000,http://localhost:8000,http://localhost:19006"
-    )
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000,http://localhost:19006"
 
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse comma-separated CORS origins string into a list."""
         if not self.ALLOWED_ORIGINS:
             return []
-        return [
-            origin.strip()
-            for origin in self.ALLOWED_ORIGINS.split(",")
-            if origin.strip()
-        ]
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
 
 
 def validate_production_config(cfg: Settings) -> None:
@@ -76,11 +67,7 @@ def validate_production_config(cfg: Settings) -> None:
 
     # SUPABASE_URL
     sb_url = (cfg.SUPABASE_URL or "").strip()
-    if (
-        not sb_url
-        or "placeholder" in sb_url.lower()
-        or not sb_url.startswith("https://")
-    ):
+    if not sb_url or "placeholder" in sb_url.lower() or not sb_url.startswith("https://"):
         errors.append("SUPABASE_URL (must be non-placeholder HTTPS URL)")
 
     # SUPABASE_SERVICE_ROLE_KEY
@@ -88,12 +75,10 @@ def validate_production_config(cfg: Settings) -> None:
     if not sb_key or "placeholder" in sb_key.lower():
         errors.append("SUPABASE_SERVICE_ROLE_KEY (must be non-placeholder)")
 
-    # SUPABASE_JWT_SECRET
-    jwt_sec = (cfg.SUPABASE_JWT_SECRET or "").strip()
-    if not jwt_sec or "placeholder" in jwt_sec.lower() or len(jwt_sec) < 32:
-        errors.append(
-            "SUPABASE_JWT_SECRET (must be non-placeholder, >= 32 chars)"
-        )
+    # SUPABASE_PUBLISHABLE_KEY
+    sb_pub = (cfg.SUPABASE_PUBLISHABLE_KEY or "").strip()
+    if not sb_pub or "placeholder" in sb_pub.lower():
+        errors.append("SUPABASE_PUBLISHABLE_KEY (must be non-placeholder)")
 
     # DATABASE_URL
     db_url = (cfg.DATABASE_URL or "").strip()
@@ -135,9 +120,7 @@ def validate_production_config(cfg: Settings) -> None:
                 break
 
     if errors:
-        raise RuntimeError(
-            f"Production configuration validation failed for: {', '.join(errors)}"
-        )
+        raise RuntimeError(f"Production configuration validation failed for: {', '.join(errors)}")
 
 
 settings = Settings()

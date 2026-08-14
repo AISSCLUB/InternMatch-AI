@@ -12,7 +12,8 @@ from app.repositories.processing_job import ProcessingJobRepository
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
-from tests.test_auth import generate_mock_jwt
+
+pytestmark = pytest.mark.usefixtures("mock_supabase_auth")
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +47,7 @@ def test_authenticated_owner_can_retrieve_own_job(client: TestClient):
     """Test 2: Authenticated owner retrieves own job, verifies model.id -> job_id and progress."""
     user_id = uuid4()
     job_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
@@ -62,9 +63,7 @@ def test_authenticated_owner_can_retrieve_own_job(client: TestClient):
     finally:
         db.close()
 
-    response = client.get(
-        f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get(f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == str(job_id)
@@ -80,7 +79,7 @@ def test_completed_job_returns_progress_100_and_result(client: TestClient):
     and result payload."""
     user_id = uuid4()
     job_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
@@ -97,9 +96,7 @@ def test_completed_job_returns_progress_100_and_result(client: TestClient):
     finally:
         db.close()
 
-    response = client.get(
-        f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get(f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == str(job_id)
@@ -113,7 +110,7 @@ def test_failed_job_returns_stored_error_and_progress(client: TestClient):
     """Test 4: Failed job returns status='failed', stored error message, and stored progress."""
     user_id = uuid4()
     job_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
@@ -130,9 +127,7 @@ def test_failed_job_returns_stored_error_and_progress(client: TestClient):
     finally:
         db.close()
 
-    response = client.get(
-        f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get(f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == str(job_id)
@@ -161,7 +156,7 @@ def test_another_authenticated_user_receives_not_found(client: TestClient):
     finally:
         db.close()
 
-    other_user_token = generate_mock_jwt(user_id=other_user_id)
+    other_user_token = f"valid-user-{other_user_id}"
     response = client.get(
         f"/api/v1/jobs/{job_id}", headers={"Authorization": f"Bearer {other_user_token}"}
     )
@@ -174,7 +169,7 @@ def test_unknown_job_id_returns_not_found(client: TestClient):
     """Test 6: Requesting an unknown job UUID returns standard 404 NOT_FOUND."""
     user_id = uuid4()
     unknown_job_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     response = client.get(
         f"/api/v1/jobs/{unknown_job_id}", headers={"Authorization": f"Bearer {token}"}
@@ -224,9 +219,7 @@ def test_repository_create_processing_job():
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
-        job = ProcessingJobRepository.create(
-            db=db, user_id=user_id, job_type="cv_extraction"
-        )
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
         assert job.id is not None
         assert job.user_id == user_id
         assert job.job_type == "cv_extraction"
@@ -259,9 +252,7 @@ def test_repository_get_by_id_and_update_state():
             is None
         )
 
-        job = ProcessingJobRepository.create(
-            db=db, user_id=user_id, job_type="match_calculation"
-        )
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="match_calculation")
         db.commit()
 
         # Update progress and result
@@ -305,9 +296,7 @@ def test_repository_update_state_invalid_progress_raises():
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
-        job = ProcessingJobRepository.create(
-            db=db, user_id=user_id, job_type="cv_extraction"
-        )
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
         db.commit()
         job_id = job.id
 

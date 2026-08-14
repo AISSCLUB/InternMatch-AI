@@ -7,26 +7,27 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-import jwt
 from app.core.config import settings
 from app.core.logging import get_logger
 from fastapi import Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from supabase import create_client
 
 logger = get_logger(__name__)
-
-# Explicitly restricted algorithm list for symmetric Supabase HS256 secret verification
-ALLOWED_ALGORITHMS = ["HS256"]
 
 
 class AuthenticatedUser(BaseModel):
     """Container for validated Supabase authenticated user identity."""
 
-    user_id: UUID = Field(..., description="Supabase auth user UUID extracted from JWT sub claim")
+    user_id: UUID = Field(
+        ...,
+        description="Supabase auth user UUID extracted from JWT sub claim",
+    )
     email: Optional[str] = Field(None, description="Optional user email from JWT claims")
     role: Optional[str] = Field(None, description="Optional auth role (e.g. authenticated)")
     token_claims: Dict[str, Any] = Field(
-        default_factory=dict, description="Complete verified JWT payload claims"
+        default_factory=dict,
+        description="Complete verified JWT payload claims",
     )
 
 
@@ -44,103 +45,102 @@ def format_auth_error(message: str, code: str = "UNAUTHORIZED") -> Dict[str, Any
 
 def verify_jwt_token(token: str) -> Dict[str, Any]:
     """
-    Validate Supabase JWT bearer token algorithm, signature, expiration, issuer,
-    audience, and subject. Never logs or exposes the raw token string or secrets.
+    Validate Supabase JWT bearer token using Supabase Auth's verified claims API.
+    Cryptographically verifies algorithm (e.g. ES256/HS256/RS256), signature,
+    and expiration via supabase.auth.get_claims(jwt=token).
+    Validates issuer, audience, and subject (sub UUID).
+    Never logs or exposes the raw token string or secrets.
     """
+    supabase_url = settings.SUPABASE_URL.strip() if settings.SUPABASE_URL else ""
+    supabase_pub_key = (
+        settings.SUPABASE_PUBLISHABLE_KEY.strip() if settings.SUPABASE_PUBLISHABLE_KEY else ""
+    )
+
+    if (
+        not supabase_url
+        or "placeholder" in supabase_url.lower()
+        or not supabase_pub_key
+        or "placeholder" in supabase_pub_key.lower()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=format_auth_error("Authentication service is not configured."),
+        )
+
     try:
-        # Step 1: Restrict algorithm strictly to prevent algorithm confusion attacks
-        unverified_header = jwt.get_unverified_header(token)
-        alg = unverified_header.get("alg")
-        if not alg or alg not in ALLOWED_ALGORITHMS:
-            err_msg = (
-                f"Unsupported JWT algorithm '{alg}'. "
-                "Only HS256 is supported by the configured signing key strategy."
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=format_auth_error(err_msg),
-            )
-
-        secret = settings.SUPABASE_JWT_SECRET.strip()
-        expected_issuer = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1"
-
-        if (
-            not secret
-            or secret == "placeholder_jwt_secret_for_local_development"
-            or not settings.SUPABASE_URL
-            or "placeholder" in settings.SUPABASE_URL
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=format_auth_error("Authentication service is not configured."),
-            )
-
-        options = {
-            "verify_signature": True,
-            "verify_exp": True,
-            "verify_aud": True,
-            "verify_iss": True,
-        }
-
-        # Step 2: Decode and verify signature and standard claims
-        payload = jwt.decode(
-            token,
-            key=secret,
-            algorithms=ALLOWED_ALGORITHMS,
-            audience="authenticated",
-            issuer=expected_issuer,
-            options=options,
-        )
-
-        # Step 3: Explicit claim checks (Audience & Subject)
-        aud = payload.get("aud")
-        if aud != "authenticated":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=format_auth_error(
-                    f"Invalid JWT audience '{aud}'. Expected 'authenticated'."
-                ),
-            )
-
-        sub = payload.get("sub")
-        if not sub:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=format_auth_error("Token is missing required subject ('sub') claim."),
-            )
-
-        try:
-            UUID(str(sub))
-        except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=format_auth_error("Token subject claim is not a valid UUID."),
-            )
-
-        return payload
-
-    except HTTPException:
-        raise
-    except jwt.ExpiredSignatureError:
+        supabase = create_client(supabase_url, supabase_pub_key)
+        claims_response = supabase.auth.get_claims(jwt=token)
+    except Exception as exc:
+        logger.warning("Supabase JWT claims verification failed: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=format_auth_error("Authentication token has expired."),
-        )
-    except jwt.InvalidAudienceError:
+            detail=format_auth_error("Invalid or expired authentication token."),
+        ) from exc
+
+    if not claims_response:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=format_auth_error("Invalid JWT audience."),
+            detail=format_auth_error("Invalid or expired authentication token."),
         )
-    except jwt.InvalidIssuerError:
+
+    # Extract claims payload dictionary from ClaimsResponse, TypedDict, or dict
+    if isinstance(claims_response, dict) and "claims" in claims_response:
+        payload = claims_response["claims"]
+    elif hasattr(claims_response, "claims"):
+        payload = claims_response.claims
+    elif isinstance(claims_response, dict):
+        payload = claims_response
+    else:
+        payload = {}
+
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=format_auth_error("Invalid or expired authentication token."),
+        )
+
+    # 1. Require exact issuer: {SUPABASE_URL.rstrip('/')}/auth/v1
+    iss = payload.get("iss")
+    expected_issuer = f"{supabase_url.rstrip('/')}/auth/v1"
+    if iss != expected_issuer:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=format_auth_error("Invalid JWT issuer."),
         )
-    except jwt.PyJWTError:
+
+    # 2. Require audience 'authenticated'
+    aud = payload.get("aud")
+    if isinstance(aud, list):
+        aud_valid = "authenticated" in aud
+    elif isinstance(aud, str):
+        aud_valid = aud == "authenticated"
+    else:
+        aud_valid = False
+
+    if not aud_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=format_auth_error("Invalid or malformed authentication token signature."),
+            detail=format_auth_error(f"Invalid JWT audience '{aud}'. Expected 'authenticated'."),
         )
+
+    # 3. Require non-empty sub
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=format_auth_error("Token is missing required subject ('sub') claim."),
+        )
+
+    # 4. Require sub to be a valid UUID
+    try:
+        UUID(str(sub))
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=format_auth_error("Token subject claim is not a valid UUID."),
+        )
+
+    return payload
 
 
 async def get_current_user(
@@ -183,5 +183,8 @@ async def get_current_user(
 async def get_current_user_id(
     current_user: AuthenticatedUser = Depends(get_current_user),
 ) -> UUID:
-    """Convenience dependency for endpoints that only require the authenticated user_id UUID."""
+    """
+    Convenience dependency for endpoints that only require
+    the authenticated user_id UUID.
+    """
     return current_user.user_id

@@ -29,7 +29,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
-from tests.test_auth import generate_mock_jwt
+
+pytestmark = pytest.mark.usefixtures("mock_supabase_auth")
 
 
 @pytest.fixture(autouse=True)
@@ -66,9 +67,7 @@ def clean_database():
         db.close()
 
 
-def _mock_gemini_explanation_generate(
-    monkeypatch, explanation_obj: LLMMatchExplanation
-):
+def _mock_gemini_explanation_generate(monkeypatch, explanation_obj: LLMMatchExplanation):
     """Helper to mock Gemini client structured generate_content method."""
     mock_response = MagicMock()
     mock_response.text = explanation_obj.model_dump_json()
@@ -104,7 +103,7 @@ def test_unauthenticated_explanation_request_returns_401(client: TestClient):
 def test_nonexistent_match_returns_404(client: TestClient):
     """Test 2: Requesting explanation for nonexistent match returns 404."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
     nonexistent_id = uuid4()
 
     response = client.get(
@@ -119,13 +118,11 @@ def test_other_user_match_returns_404_tenant_isolation(client: TestClient):
     """Test 3: Another user's match returns 404 (never exposed)."""
     user_a = uuid4()
     user_b = uuid4()
-    token_b = generate_mock_jwt(user_id=user_b)
+    token_b = f"valid-user-{user_b}"
 
     db = TestingSessionLocal()
     try:
-        prof_a = StudentProfile(
-            id=uuid4(), user_id=user_a, full_name="Candidate A"
-        )
+        prof_a = StudentProfile(id=uuid4(), user_id=user_a, full_name="Candidate A")
         db.add(prof_a)
         db.flush()
 
@@ -172,16 +169,14 @@ def test_other_user_match_returns_404_tenant_isolation(client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-def test_authenticated_owner_gets_explanation_successfully(
-    client: TestClient, monkeypatch
-):
+def test_authenticated_owner_gets_explanation_successfully(client: TestClient, monkeypatch):
     """
     Test 4: Authenticated owner receives full grounded explanation with
     exact contract schema, matching/missing skills copied from canonical gap,
     and overall_score matching persisted Match.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
@@ -233,9 +228,7 @@ def test_authenticated_owner_gets_explanation_successfully(
             "Your experience with Python and FastAPI matches CloudTech's core "
             "backend stack perfectly."
         ),
-        skill_gap_summary=(
-            "You are missing 2 preferred containerization and caching skills."
-        ),
+        skill_gap_summary=("You are missing 2 preferred containerization and caching skills."),
         recommendations=[
             "Complete a 2-hour tutorial on Docker basics.",
             "Learn basic Redis key-value caching patterns.",
@@ -256,31 +249,21 @@ def test_authenticated_owner_gets_explanation_successfully(
     assert data["why_you_match"] == mock_llm_output.why_you_match
     assert data["matching_skills"] == ["Python", "FastAPI"]
     assert data["missing_skills"] == ["Docker", "Redis"]
-    assert (
-        data["skill_gap_analysis"]["summary"]
-        == mock_llm_output.skill_gap_summary
-    )
-    assert (
-        data["skill_gap_analysis"]["recommendations"]
-        == mock_llm_output.recommendations
-    )
+    assert data["skill_gap_analysis"]["summary"] == mock_llm_output.skill_gap_summary
+    assert data["skill_gap_analysis"]["recommendations"] == mock_llm_output.recommendations
 
 
-def test_generated_explanation_is_persisted_and_cached(
-    client: TestClient, monkeypatch
-):
+def test_generated_explanation_is_persisted_and_cached(client: TestClient, monkeypatch):
     """
     Test 5: First request generates and persists why_you_match and gap recommendations.
     Second request returns the cached result without calling Gemini.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -339,13 +322,9 @@ def test_generated_explanation_is_persisted_and_cached(
         assert persisted_match is not None
         assert persisted_match.skill_gap_analysis is not None
         assert persisted_match.why_you_match == mock_llm_output.why_you_match
+        assert persisted_match.skill_gap_analysis["summary"] == mock_llm_output.skill_gap_summary
         assert (
-            persisted_match.skill_gap_analysis["summary"]
-            == mock_llm_output.skill_gap_summary
-        )
-        assert (
-            persisted_match.skill_gap_analysis["recommendations"]
-            == mock_llm_output.recommendations
+            persisted_match.skill_gap_analysis["recommendations"] == mock_llm_output.recommendations
         )
         # Verify deterministic scores were NOT altered
         assert persisted_match.overall_score == 92
@@ -365,18 +344,14 @@ def test_generated_explanation_is_persisted_and_cached(
     assert mock_client.models.generate_content.call_count == 1
 
 
-def test_matching_and_missing_skills_are_never_overwritten_by_llm(
-    client: TestClient, monkeypatch
-):
+def test_matching_and_missing_skills_are_never_overwritten_by_llm(client: TestClient, monkeypatch):
     """Test 6: matching_skills and missing_skills are strictly preserved."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -437,13 +412,11 @@ def test_provider_failure_returns_safe_503_and_does_not_leak_secrets(
 ):
     """Test 7: Gemini failure returns HTTP 503 and does not leak secrets."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -478,9 +451,7 @@ def test_provider_failure_returns_safe_503_and_does_not_leak_secrets(
         db.close()
 
     def failing_gemini(*args, **kwargs):
-        raise ValueError(
-            "GEMINI_API_KEY configuration is missing or placeholder value"
-        )
+        raise ValueError("GEMINI_API_KEY configuration is missing or placeholder value")
 
     monkeypatch.setattr(
         "app.services.match_explanation.generate_grounded_match_explanation",
@@ -496,18 +467,14 @@ def test_provider_failure_returns_safe_503_and_does_not_leak_secrets(
     assert "GEMINI_API_KEY" not in response.text
 
 
-def test_malformed_canonical_skill_gap_handled_gracefully(
-    client: TestClient, monkeypatch
-):
+def test_malformed_canonical_skill_gap_handled_gracefully(client: TestClient, monkeypatch):
     """Test 8: Match with None skill_gap_analysis is handled gracefully."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
-        profile = StudentProfile(
-            id=uuid4(), user_id=user_id, full_name="Candidate"
-        )
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
         db.add(profile)
         db.flush()
 
@@ -609,16 +576,14 @@ def test_get_or_create_match_explanation_returns_none_for_missing_record():
         db.close()
 
 
-def test_get_match_explanation_rate_limited_returns_429(
-    client: TestClient, monkeypatch
-):
+def test_get_match_explanation_rate_limited_returns_429(client: TestClient, monkeypatch):
     """
     Test 11: Rate limit on GET /matches/{id}/explanation returns HTTP 429
     before LLM generation.
     """
     user_id = uuid4()
     match_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     def failing_rate_limit(*, user_id, scope):
         raise HTTPException(
@@ -634,9 +599,7 @@ def test_get_match_explanation_rate_limited_returns_429(
             headers={"Retry-After": "600"},
         )
 
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.matches.enforce_rate_limit", failing_rate_limit
-    )
+    monkeypatch.setattr("app.api.v1.endpoints.matches.enforce_rate_limit", failing_rate_limit)
 
     llm_called = []
     monkeypatch.setattr(

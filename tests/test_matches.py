@@ -17,7 +17,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
-from tests.test_auth import generate_mock_jwt
+
+pytestmark = pytest.mark.usefixtures("mock_supabase_auth")
 
 
 @pytest.fixture(autouse=True)
@@ -55,11 +56,9 @@ def test_unauthenticated_matches_request_returns_401(client: TestClient):
 def test_authenticated_user_with_no_matches_returns_empty_list(client: TestClient):
     """Test 2: Authenticated user with no persisted matches returns {"matches": []}."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
-    response = client.get(
-        "/api/v1/matches", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get("/api/v1/matches", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["matches"] == []
@@ -69,15 +68,13 @@ def test_authenticated_user_receives_own_matches_sorted(client: TestClient):
     """Test 3: Authenticated user receives own matches sorted by overall_score DESC with mapping."""
     user_id = uuid4()
     other_user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     db = TestingSessionLocal()
     try:
         # Create student profiles
         student = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate One")
-        other_student = StudentProfile(
-            id=uuid4(), user_id=other_user_id, full_name="Candidate Two"
-        )
+        other_student = StudentProfile(id=uuid4(), user_id=other_user_id, full_name="Candidate Two")
         db.add_all([student, other_student])
         db.flush()
 
@@ -143,9 +140,7 @@ def test_authenticated_user_receives_own_matches_sorted(client: TestClient):
     finally:
         db.close()
 
-    response = client.get(
-        "/api/v1/matches", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.get("/api/v1/matches", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
 
@@ -161,7 +156,6 @@ def test_authenticated_user_receives_own_matches_sorted(client: TestClient):
     assert first_match["internship"]["title"] == "AI Research Intern"
     assert first_match["internship"]["company"] == "NexaAI"
     assert first_match["internship"]["location"] == "San Francisco, CA"
-
 
     second_match = matches[1]
     assert second_match["match_id"] == str(target_match_id_lower)
@@ -244,7 +238,7 @@ def test_post_calculate_without_jwt_returns_401(client: TestClient, monkeypatch)
 def test_post_calculate_authenticated_success_202(client: TestClient, monkeypatch):
     """Test 2: Authenticated POST returns HTTP 202 and exact payload schema."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     monkeypatch.setattr(
         "app.api.v1.endpoints.matches.enqueue_match_calculation",
@@ -266,7 +260,7 @@ def test_post_calculate_authenticated_success_202(client: TestClient, monkeypatc
 def test_post_calculate_persists_exactly_one_processing_job(client: TestClient, monkeypatch):
     """Test 3: POST persists exactly one ProcessingJob with status=queued and progress=0."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     monkeypatch.setattr(
         "app.api.v1.endpoints.matches.enqueue_match_calculation",
@@ -297,7 +291,7 @@ def test_post_calculate_persists_exactly_one_processing_job(client: TestClient, 
 def test_post_calculate_identity_is_jwt_derived(client: TestClient, monkeypatch):
     """Tests 4 & 5 & 6: Identity is JWT-derived, limit=50, and job_id matches ProcessingJob."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     enqueue_args = {}
 
@@ -329,7 +323,7 @@ def test_post_calculate_commit_before_enqueue_mandatory(client: TestClient, monk
     ProcessingJob is ALREADY committed and visible in the database before enqueue executes.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     committed_job_visible = []
 
@@ -366,7 +360,7 @@ def test_post_calculate_enqueue_failure_returns_503_and_marks_job_failed(
     does not create a second job, and persists safe generic error message.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     sensitive_error = "Redis Connection Error with redis://user:SECRET@redis:6379/0"
 
@@ -402,7 +396,7 @@ def test_post_calculate_enqueue_failure_returns_503_and_marks_job_failed(
 def test_post_calculate_db_create_failure_prevents_enqueue(client: TestClient, monkeypatch):
     """Test 11: DB create failure before enqueue ensures enqueue helper is never called."""
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     called = []
     monkeypatch.setattr(
@@ -431,7 +425,6 @@ def test_post_calculate_db_create_failure_prevents_enqueue(client: TestClient, m
         assert db.query(ProcessingJob).count() == 0
     finally:
         db.close()
-
 
 
 # ENQUEUE SERVICE HELPER TESTS (12 - 17)
@@ -464,9 +457,7 @@ def test_enqueue_helper_queue_constructed_with_redis_conn(monkeypatch):
     mock_queue = MagicMock()
     connections = []
 
-    monkeypatch.setattr(
-        "app.services.match_enqueue.Redis.from_url", lambda url: mock_redis_conn
-    )
+    monkeypatch.setattr("app.services.match_enqueue.Redis.from_url", lambda url: mock_redis_conn)
 
     def mock_queue_cls(connection):
         connections.append(connection)
@@ -497,9 +488,7 @@ def test_enqueue_helper_rq_call_shape_and_keyword_protection(monkeypatch):
 
     mock_queue.enqueue = mock_enqueue
 
-    monkeypatch.setattr(
-        "app.services.match_enqueue.Redis.from_url", lambda url: mock_redis_conn
-    )
+    monkeypatch.setattr("app.services.match_enqueue.Redis.from_url", lambda url: mock_redis_conn)
     monkeypatch.setattr("app.services.match_enqueue.Queue", lambda connection: mock_queue)
 
     job_id = uuid4()
@@ -542,7 +531,7 @@ def test_calculate_matches_rate_limited_returns_429_before_job_creation(
     and creates no job/enqueue.
     """
     user_id = uuid4()
-    token = generate_mock_jwt(user_id=user_id)
+    token = f"valid-user-{user_id}"
 
     def failing_rate_limit(*, user_id, scope):
         raise HTTPException(
@@ -558,9 +547,7 @@ def test_calculate_matches_rate_limited_returns_429_before_job_creation(
             headers={"Retry-After": "600"},
         )
 
-    monkeypatch.setattr(
-        "app.api.v1.endpoints.matches.enforce_rate_limit", failing_rate_limit
-    )
+    monkeypatch.setattr("app.api.v1.endpoints.matches.enforce_rate_limit", failing_rate_limit)
 
     enqueue_called = []
     monkeypatch.setattr(
