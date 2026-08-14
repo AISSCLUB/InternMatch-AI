@@ -70,7 +70,7 @@ docker compose logs -f backend
 # Seed controlled internship dataset (30-50 listings)
 python scripts/seed_internships.py
 ```
-*Backend endpoints will be accessible at `http://localhost:8000/api/v1` and interactive Swagger docs at `http://localhost:8000/docs`. Infrastructure liveness probe is at `http://localhost:8000/health` and versioned API health check is at `http://localhost:8000/api/v1/health`.*
+*Backend endpoints will be accessible at `http://localhost:8000/api/v1` and interactive Swagger docs at `http://localhost:8000/docs`. The infrastructure process liveness probe is at `http://localhost:8000/health` (process liveness only), and the versioned operational readiness endpoint is at `http://localhost:8000/api/v1/health` (probes PostgreSQL database, Redis connectivity, and RQ worker readiness).*
 
 
 ### 3.3 Mobile App Setup (Engineer 2: Selen)

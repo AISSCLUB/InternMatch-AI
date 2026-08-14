@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
-from app.api.v1.endpoints.health import HealthResponse, get_health
+from app.api.v1.endpoints.health import HealthResponse, get_liveness
 from app.core.config import settings, validate_production_config
 from app.core.logging import logger
 
@@ -24,7 +24,6 @@ async def lifespan(app: FastAPI):
     )
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME} backend service.")
-
 
 
 app = FastAPI(
@@ -52,9 +51,9 @@ app.include_router(api_router, prefix="/api")
 # Mount Root Liveness Endpoint (/health)
 app.add_api_route(
     "/health",
-    endpoint=get_health,
+    endpoint=get_liveness,
     response_model=HealthResponse,
     methods=["GET"],
     tags=["Health Operations"],
-    summary="Root Liveness Endpoint"
+    summary="Root Liveness Endpoint",
 )
