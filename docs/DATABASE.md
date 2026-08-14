@@ -205,6 +205,7 @@ CREATE TABLE public.applications (
     internship_id UUID REFERENCES public.internship_listings(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'saved' CHECK (status IN ('saved', 'applied', 'interviewing', 'rejected', 'accepted')),
     generated_cover_letter TEXT,
+    applied_date DATE,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -213,6 +214,8 @@ CREATE TABLE public.applications (
 ```
 
 *Historical Record Preservation Note:* `applications.internship_id` uses `ON DELETE SET NULL`. If an internship listing is removed or archived, the candidate's historical application record, cover letter text, notes, and application status are preserved for student tracking history rather than being erased.
+
+*Applied Date Semantics Note:* `applied_date` is `NULL` initially (e.g. for saved applications) and is recorded as the UTC calendar date upon the candidate's first explicit transition to `"applied"`. Subsequent tracker status transitions (to interviewing, rejected, accepted, or back to saved) preserve the original `applied_date`.
 
 ### 2.7 Foreign Key Delete Policy Summary Matrix
 
