@@ -27,7 +27,13 @@ from app.db.models import InternshipListing  # noqa: E402
 from app.repositories.vector_retrieval import (  # noqa: E402
     VectorRetrievalRepository,
 )
-from sqlalchemy import create_engine, select, text  # noqa: E402
+from sqlalchemy import (  # noqa: E402
+    create_engine,
+    delete,
+    func,
+    select,
+    update,
+)
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 
 from scripts.seed_internships import (  # noqa: E402
@@ -88,8 +94,9 @@ def test_postgres_demo_seed_lifecycle_and_retrieval(pg_session: Session):
 
     # Clean only the 35 controlled demo internship rows before starting Phase A
     pg_session.execute(
-        text("DELETE FROM public.internship_listings WHERE id = ANY(:ids);"),
-        {"ids": [str(uid) for uid in expected_ids]},
+        delete(InternshipListing).where(
+            InternshipListing.id.in_(expected_ids)
+        )
     )
     pg_session.commit()
 
@@ -116,7 +123,9 @@ def test_postgres_demo_seed_lifecycle_and_retrieval(pg_session: Session):
     assert summary_run1.missing_embeddings == 0
 
     # Verify all 35 rows in DB have valid 1536-dimensional non-null vectors
-    stmt = select(InternshipListing).where(InternshipListing.id.in_(expected_ids))
+    stmt = select(InternshipListing).where(
+        InternshipListing.id.in_(expected_ids)
+    )
     listings_run1 = pg_session.scalars(stmt).all()
     assert len(listings_run1) == 35
     for listing in listings_run1:
@@ -150,16 +159,13 @@ def test_postgres_demo_seed_lifecycle_and_retrieval(pg_session: Session):
     assert original_listing is not None
     original_description = original_listing.description
 
-    # Mutate description directly in database to simulate out-of-band edit
-    pg_session.execute(
-        text(
-            "UPDATE public.internship_listings "
-            "SET description = :mutated WHERE id = :id;"
-        ),
-        {
-            "mutated": "Temporarily mutated description that diverges from SQL.",
-            "id": str(target_id),
-        },
+    # Mutate description directly in database using typed Core connection update
+    pg_session.connection().execute(
+        update(InternshipListing.__table__)
+        .where(InternshipListing.__table__.c.id == target_id)
+        .values(
+            description="Temporarily mutated description that diverges from SQL."
+        )
     )
     pg_session.commit()
 
@@ -189,14 +195,15 @@ def test_postgres_demo_seed_lifecycle_and_retrieval(pg_session: Session):
     # -----------------------------------------------------------------------
     # Phase D: Vector Retrieval Readiness via Real pgvector
     # -----------------------------------------------------------------------
-    # Proves zero NULL description embeddings exist across all 35 demo rows
-    null_check_stmt = text(
-        "SELECT count(*) FROM public.internship_listings "
-        "WHERE id = ANY(:ids) AND description_embedding IS NULL;"
+    # Proves zero NULL description embeddings exist across all 35 demo rows using typed count
+    null_count = pg_session.scalar(
+        select(func.count())
+        .select_from(InternshipListing)
+        .where(
+            InternshipListing.id.in_(expected_ids),
+            InternshipListing.description_embedding.is_(None),
+        )
     )
-    null_count = pg_session.execute(
-        null_check_stmt, {"ids": [str(uid) for uid in expected_ids]}
-    ).scalar()
     assert null_count == 0
 
     # Query using VectorRetrievalRepository against a fake candidate vector
