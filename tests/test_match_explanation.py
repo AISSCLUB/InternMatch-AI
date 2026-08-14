@@ -66,26 +66,22 @@ def clean_database():
         db.close()
 
 
-def _mock_openai_explanation_parse(
+def _mock_gemini_explanation_generate(
     monkeypatch, explanation_obj: LLMMatchExplanation
 ):
-    """Helper to mock OpenAI client structured output parse method."""
-    mock_choice = MagicMock()
-    mock_choice.message.refusal = None
-    mock_choice.message.parsed = explanation_obj
-
+    """Helper to mock Gemini client structured generate_content method."""
     mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
+    mock_response.text = explanation_obj.model_dump_json()
 
     mock_client = MagicMock()
-    mock_client.chat.completions.parse.return_value = mock_response
+    mock_client.models.generate_content.return_value = mock_response
 
     monkeypatch.setattr(
-        "app.services.match_explanation.settings.OPENAI_API_KEY",
-        "sk-test-match-explanation",
+        "app.services.match_explanation.settings.GEMINI_API_KEY",
+        "gemini-test-match-explanation",
     )
     monkeypatch.setattr(
-        "app.services.match_explanation.OpenAI",
+        "app.services.match_explanation.genai.Client",
         lambda api_key: mock_client,
     )
     return mock_client
@@ -245,7 +241,7 @@ def test_authenticated_owner_gets_explanation_successfully(
             "Learn basic Redis key-value caching patterns.",
         ],
     )
-    _mock_openai_explanation_parse(monkeypatch, mock_llm_output)
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
 
     response = client.get(
         f"/api/v1/matches/{target_match_id}/explanation",
@@ -275,7 +271,7 @@ def test_generated_explanation_is_persisted_and_cached(
 ):
     """
     Test 5: First request generates and persists why_you_match and gap recommendations.
-    Second request returns the cached result without calling OpenAI.
+    Second request returns the cached result without calling Gemini.
     """
     user_id = uuid4()
     token = generate_mock_jwt(user_id=user_id)
@@ -326,15 +322,15 @@ def test_generated_explanation_is_persisted_and_cached(
         skill_gap_summary="Missing Docker containerization skill.",
         recommendations=["Practice Dockerizing apps."],
     )
-    mock_client = _mock_openai_explanation_parse(monkeypatch, mock_llm_output)
+    mock_client = _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
 
-    # First call: triggers OpenAI parse
+    # First call: triggers Gemini generate_content
     resp1 = client.get(
         f"/api/v1/matches/{target_match_id}/explanation",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp1.status_code == 200
-    assert mock_client.chat.completions.parse.call_count == 1
+    assert mock_client.models.generate_content.call_count == 1
 
     # Verify database was updated
     db = TestingSessionLocal()
@@ -359,14 +355,14 @@ def test_generated_explanation_is_persisted_and_cached(
     finally:
         db.close()
 
-    # Second call: uses cached explanation (OpenAI not called again)
+    # Second call: uses cached explanation (Gemini not called again)
     resp2 = client.get(
         f"/api/v1/matches/{target_match_id}/explanation",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp2.status_code == 200
     assert resp2.json()["why_you_match"] == mock_llm_output.why_you_match
-    assert mock_client.chat.completions.parse.call_count == 1
+    assert mock_client.models.generate_content.call_count == 1
 
 
 def test_matching_and_missing_skills_are_never_overwritten_by_llm(
@@ -424,7 +420,7 @@ def test_matching_and_missing_skills_are_never_overwritten_by_llm(
         skill_gap_summary="Gap in cloud and orchestration.",
         recommendations=["Study Kubernetes."],
     )
-    _mock_openai_explanation_parse(monkeypatch, mock_llm_output)
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
 
     resp = client.get(
         f"/api/v1/matches/{target_match_id}/explanation",
@@ -439,7 +435,7 @@ def test_matching_and_missing_skills_are_never_overwritten_by_llm(
 def test_provider_failure_returns_safe_503_and_does_not_leak_secrets(
     client: TestClient, monkeypatch
 ):
-    """Test 7: OpenAI failure returns HTTP 503 and does not leak secrets."""
+    """Test 7: Gemini failure returns HTTP 503 and does not leak secrets."""
     user_id = uuid4()
     token = generate_mock_jwt(user_id=user_id)
 
@@ -481,14 +477,14 @@ def test_provider_failure_returns_safe_503_and_does_not_leak_secrets(
     finally:
         db.close()
 
-    def failing_openai(*args, **kwargs):
+    def failing_gemini(*args, **kwargs):
         raise ValueError(
-            "OPENAI_API_KEY configuration is missing or placeholder value"
+            "GEMINI_API_KEY configuration is missing or placeholder value"
         )
 
     monkeypatch.setattr(
         "app.services.match_explanation.generate_grounded_match_explanation",
-        failing_openai,
+        failing_gemini,
     )
 
     response = client.get(
@@ -497,7 +493,7 @@ def test_provider_failure_returns_safe_503_and_does_not_leak_secrets(
     )
     assert response.status_code == 503
     assert "sk-" not in response.text
-    assert "OPENAI_API_KEY" not in response.text
+    assert "GEMINI_API_KEY" not in response.text
 
 
 def test_malformed_canonical_skill_gap_handled_gracefully(
@@ -547,7 +543,7 @@ def test_malformed_canonical_skill_gap_handled_gracefully(
         skill_gap_summary="No specific gaps.",
         recommendations=[],
     )
-    _mock_openai_explanation_parse(monkeypatch, mock_llm_output)
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
 
     response = client.get(
         f"/api/v1/matches/{target_match_id}/explanation",
@@ -582,7 +578,7 @@ def test_generate_grounded_match_explanation_unit(monkeypatch):
         skill_gap_summary="No missing required skills.",
         recommendations=["Review transformer architectures."],
     )
-    _mock_openai_explanation_parse(monkeypatch, mock_llm_output)
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
 
     result = generate_grounded_match_explanation(
         profile=profile,

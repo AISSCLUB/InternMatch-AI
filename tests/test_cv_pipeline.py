@@ -202,85 +202,82 @@ def _sample_extracted_profile():
     )
 
 
-def test_openai_client_constructed_at_call_time(monkeypatch):
-    """Test 7: OpenAI client is constructed dynamically during function call."""
+def test_gemini_client_constructed_at_call_time(monkeypatch):
+    """Test 7: Gemini client is constructed dynamically during function call."""
     created_clients = []
 
-    class MockOpenAI:
+    class MockGemini:
         def __init__(self, api_key):
             created_clients.append(api_key)
-            mock_choice = MagicMock()
-            mock_choice.message.refusal = None
-            mock_choice.message.parsed = _sample_extracted_profile()
-            self.beta = MagicMock()
-            self.beta.chat.completions.parse.return_value = MagicMock(choices=[mock_choice])
+            self.models = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.text = _sample_extracted_profile().model_dump_json()
+            self.models.generate_content.return_value = mock_resp
 
-    monkeypatch.setattr("app.services.cv_profile_extraction.OpenAI", MockOpenAI)
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-test-key-12345")
+    monkeypatch.setattr("app.services.cv_profile_extraction.genai.Client", MockGemini)
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-test-key-12345")
 
     extract_structured_candidate_profile("Samantha Ray CV text")
     assert len(created_clients) == 1
-    assert created_clients[0] == "sk-test-key-12345"
+    assert created_clients[0] == "gemini-test-key-12345"
 
 
 def test_configured_llm_model_name_used(monkeypatch):
-    """Test 8: Configured settings.LLM_MODEL_NAME is passed to OpenAI structured parsing call."""
+    """Test 8: Configured settings.LLM_MODEL_NAME is passed to Gemini generate_content call."""
     used_models = []
 
-    class MockOpenAI:
+    class MockGemini:
         def __init__(self, api_key):
-            mock_choice = MagicMock()
-            mock_choice.message.refusal = None
-            mock_choice.message.parsed = _sample_extracted_profile()
+            self.models = MagicMock()
 
-            def mock_parse(**kwargs):
+            def mock_generate(**kwargs):
                 used_models.append(kwargs.get("model"))
-                return MagicMock(choices=[mock_choice])
+                mock_resp = MagicMock()
+                mock_resp.text = _sample_extracted_profile().model_dump_json()
+                return mock_resp
 
-            self.beta = MagicMock()
-            self.beta.chat.completions.parse = mock_parse
+            self.models.generate_content = mock_generate
 
-    monkeypatch.setattr("app.services.cv_profile_extraction.OpenAI", MockOpenAI)
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-valid-key")
-    monkeypatch.setattr("app.core.config.settings.LLM_MODEL_NAME", "gpt-4o-mini-2024-07-18")
+    monkeypatch.setattr("app.services.cv_profile_extraction.genai.Client", MockGemini)
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-valid-key")
+    monkeypatch.setattr("app.core.config.settings.LLM_MODEL_NAME", "gemini-3.5-flash-test")
 
     extract_structured_candidate_profile("Sample CV Text")
-    assert used_models == ["gpt-4o-mini-2024-07-18"]
+    assert used_models == ["gemini-3.5-flash-test"]
 
 
 def test_blank_api_key_fails_before_provider_call(monkeypatch):
-    """Test 9: Blank or placeholder OPENAI_API_KEY raises ValueError before client creation."""
+    """Test 9: Blank or placeholder GEMINI_API_KEY raises ValueError before client creation."""
     client_calls = []
     monkeypatch.setattr(
-        "app.services.cv_profile_extraction.OpenAI",
+        "app.services.cv_profile_extraction.genai.Client",
         lambda api_key: client_calls.append(api_key),
     )
 
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "")
-    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "")
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
         extract_structured_candidate_profile("CV text")
 
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-placeholder-key-value")
-    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-placeholder-key-value")
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
         extract_structured_candidate_profile("CV text")
 
     assert client_calls == []
 
 
 def test_structured_parsed_profile_returned(monkeypatch):
-    """Test 10: Valid OpenAI response returns ExtractedCandidateProfile instance."""
+    """Test 10: Valid Gemini response returns ExtractedCandidateProfile instance."""
     expected_profile = _sample_extracted_profile()
 
-    class MockOpenAI:
+    class MockGemini:
         def __init__(self, api_key):
-            mock_choice = MagicMock()
-            mock_choice.message.refusal = None
-            mock_choice.message.parsed = expected_profile
-            self.beta = MagicMock()
-            self.beta.chat.completions.parse.return_value = MagicMock(choices=[mock_choice])
+            self.models = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.text = expected_profile.model_dump_json()
+            self.models.generate_content.return_value = mock_resp
 
-    monkeypatch.setattr("app.services.cv_profile_extraction.OpenAI", MockOpenAI)
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-valid-key")
+    monkeypatch.setattr("app.services.cv_profile_extraction.genai.Client", MockGemini)
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-valid-key")
 
     result = extract_structured_candidate_profile("Samantha Ray CV text")
     assert isinstance(result, ExtractedCandidateProfile)
@@ -291,38 +288,37 @@ def test_structured_parsed_profile_returned(monkeypatch):
     assert result.education[0].institution == "MIT"
 
 
-def test_refusal_response_rejected(monkeypatch):
-    """Test 11: Model refusal raises ValueError."""
+def test_empty_response_rejected(monkeypatch):
+    """Test 11: Empty model response text raises ValueError."""
 
-    class MockOpenAI:
+    class MockGemini:
         def __init__(self, api_key):
-            mock_choice = MagicMock()
-            mock_choice.message.refusal = "I cannot process this document."
-            mock_choice.message.parsed = None
-            self.beta = MagicMock()
-            self.beta.chat.completions.parse.return_value = MagicMock(choices=[mock_choice])
+            self.models = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.text = ""
+            self.models.generate_content.return_value = mock_resp
 
-    monkeypatch.setattr("app.services.cv_profile_extraction.OpenAI", MockOpenAI)
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-valid-key")
+    monkeypatch.setattr("app.services.cv_profile_extraction.genai.Client", MockGemini)
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-valid-key")
 
-    with pytest.raises(ValueError, match="Model refused CV extraction"):
+    with pytest.raises(ValueError, match="Model returned unparseable or empty structured output"):
         extract_structured_candidate_profile("CV text")
 
 
 def test_llm_provider_exception_propagates(monkeypatch):
-    """Test 12: Genuine OpenAI provider exception propagates unchanged."""
+    """Test 12: Genuine Gemini provider exception propagates unchanged."""
 
-    class MockOpenAI:
+    class MockGemini:
         def __init__(self, api_key):
-            self.beta = MagicMock()
-            self.beta.chat.completions.parse.side_effect = RuntimeError(
-                "OpenAI 500 internal server error"
+            self.models = MagicMock()
+            self.models.generate_content.side_effect = RuntimeError(
+                "Gemini 500 internal server error"
             )
 
-    monkeypatch.setattr("app.services.cv_profile_extraction.OpenAI", MockOpenAI)
-    monkeypatch.setattr("app.core.config.settings.OPENAI_API_KEY", "sk-valid-key")
+    monkeypatch.setattr("app.services.cv_profile_extraction.genai.Client", MockGemini)
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-valid-key")
 
-    with pytest.raises(RuntimeError, match="OpenAI 500 internal server error"):
+    with pytest.raises(RuntimeError, match="Gemini 500 internal server error"):
         extract_structured_candidate_profile("CV text")
 
 
@@ -330,7 +326,7 @@ def test_import_cv_profile_extraction_performs_no_work(monkeypatch):
     """Test 13: Importing module performs zero network or client creation."""
     calls = []
     monkeypatch.setattr(
-        "app.services.cv_profile_extraction.OpenAI",
+        "app.services.cv_profile_extraction.genai.Client",
         lambda api_key: calls.append(api_key),
     )
 

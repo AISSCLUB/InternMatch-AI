@@ -17,6 +17,7 @@ worker_dir = Path(__file__).parent.parent / "worker"
 if str(worker_dir) not in sys.path:
     sys.path.insert(0, str(worker_dir))
 
+from app.core.config import settings  # noqa: E402
 from app.db.models import (  # noqa: E402
     Application,
     EducationEntry,
@@ -94,26 +95,22 @@ def override_worker_sessionlocal(monkeypatch):
     )
 
 
-def _mock_openai_cover_letter_parse(
+def _mock_gemini_cover_letter_generate(
     monkeypatch, cover_letter_obj: LLMCoverLetter
 ):
-    """Helper to mock OpenAI client structured output parse method."""
-    mock_choice = MagicMock()
-    mock_choice.message.refusal = None
-    mock_choice.message.parsed = cover_letter_obj
-
+    """Helper to mock Gemini client structured generate_content method."""
     mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
+    mock_response.text = cover_letter_obj.model_dump_json()
 
     mock_client = MagicMock()
-    mock_client.chat.completions.parse.return_value = mock_response
+    mock_client.models.generate_content.return_value = mock_response
 
     monkeypatch.setattr(
-        "app.services.application_generation.settings.OPENAI_API_KEY",
-        "sk-test-application-generation",
+        "app.services.application_generation.settings.GEMINI_API_KEY",
+        "gemini-test-application-generation",
     )
     monkeypatch.setattr(
-        "app.services.application_generation.OpenAI",
+        "app.services.application_generation.genai.Client",
         lambda api_key: mock_client,
     )
     return mock_client
@@ -428,7 +425,7 @@ def test_enqueue_application_generation_service(monkeypatch):
 
 
 def test_generate_grounded_cover_letter_service_success(monkeypatch):
-    """Test 9: generate_grounded_cover_letter calls OpenAI with prompt context."""
+    """Test 9: generate_grounded_cover_letter calls Gemini with prompt context."""
     profile = StudentProfile(
         id=uuid4(),
         user_id=uuid4(),
@@ -461,7 +458,7 @@ def test_generate_grounded_cover_letter_service_success(monkeypatch):
             "for the AI Engineer role. With my background in Python and PyTorch..."
         )
     )
-    mock_client = _mock_openai_cover_letter_parse(monkeypatch, mock_llm_output)
+    mock_client = _mock_gemini_cover_letter_generate(monkeypatch, mock_llm_output)
 
     result = generate_grounded_cover_letter(
         profile=profile,
@@ -474,11 +471,11 @@ def test_generate_grounded_cover_letter_service_success(monkeypatch):
     )
 
     assert result == mock_llm_output.generated_cover_letter
-    mock_client.chat.completions.parse.assert_called_once()
-    call_kwargs = mock_client.chat.completions.parse.call_args.kwargs
-    messages = call_kwargs["messages"]
-    sys_msg = messages[0]["content"]
-    user_msg = messages[1]["content"]
+    mock_client.models.generate_content.assert_called_once()
+    call_kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert call_kwargs["model"] == settings.LLM_MODEL_NAME
+    sys_msg = call_kwargs["config"].system_instruction
+    user_msg = call_kwargs["contents"]
 
     # Security check: tone must NOT be in system instructions
     assert "Requested Tone: enthusiastic" not in sys_msg
@@ -495,7 +492,7 @@ def test_generate_grounded_cover_letter_service_success(monkeypatch):
 def test_generate_grounded_cover_letter_missing_api_key_fails(monkeypatch):
     """Test 10: Missing/placeholder API key raises ValueError."""
     monkeypatch.setattr(
-        "app.services.application_generation.settings.OPENAI_API_KEY",
+        "app.services.application_generation.settings.GEMINI_API_KEY",
         "placeholder-key",
     )
 
@@ -518,7 +515,7 @@ def test_generate_grounded_cover_letter_missing_api_key_fails(monkeypatch):
         attribute_score=80,
     )
 
-    with pytest.raises(ValueError, match="OPENAI_API_KEY configuration"):
+    with pytest.raises(ValueError, match="GEMINI_API_KEY configuration"):
         generate_grounded_cover_letter(
             profile=profile,
             internship=listing,
@@ -683,7 +680,7 @@ def test_worker_run_application_generation_success(monkeypatch):
     mock_llm_output = LLMCoverLetter(
         generated_cover_letter="Dear AlphaCorp, here is my grounded application."
     )
-    _mock_openai_cover_letter_parse(monkeypatch, mock_llm_output)
+    _mock_gemini_cover_letter_generate(monkeypatch, mock_llm_output)
 
     result = run_application_generation(
         job_id=str(job_id),

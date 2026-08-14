@@ -1,21 +1,23 @@
 """
-OpenAI Embedding Service Foundation
-Provides reusable synchronous provider boundary for generating text embeddings via OpenAI API.
+Google Gemini Embedding Service Foundation
+Provides reusable synchronous provider boundary for generating text embeddings
+via Google Gemini API (google-genai SDK).
 """
 
 import math
 from typing import List
 
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 from app.core.config import settings
 
 
 def generate_embedding(text: str) -> List[float]:
     """
-    Generate floating point embedding vector for text using OpenAI API.
-    Validates inputs, constructs OpenAI client dynamically, requests embeddings
-    matching project config model/dimensions, and strictly validates provider output.
+    Generate floating point embedding vector for text using Google Gemini API.
+    Validates inputs, constructs Gemini client dynamically, requests embeddings
+    matching project config model/dimensions (1536), and strictly validates provider output.
     """
     if not isinstance(text, str):
         raise TypeError(f"text input must be a string, got {type(text).__name__}")
@@ -23,28 +25,29 @@ def generate_embedding(text: str) -> List[float]:
     if not text.strip():
         raise ValueError("text input cannot be empty or whitespace-only")
 
-    api_key = settings.OPENAI_API_KEY.strip() if settings.OPENAI_API_KEY else ""
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY configuration is missing or empty")
+    api_key = settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else ""
+    if not api_key or "placeholder" in api_key.lower():
+        raise ValueError("GEMINI_API_KEY configuration is missing or empty")
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    response = client.embeddings.create(
-        input=text,
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    response = client.models.embed_content(
         model=settings.EMBEDDING_MODEL_NAME,
-        dimensions=settings.EMBEDDING_DIMENSION,
-        encoding_format="float",
+        contents=text,
+        config=types.EmbedContentConfig(
+            output_dimensionality=settings.EMBEDDING_DIMENSION,
+        ),
     )
 
-    if not hasattr(response, "data") or not response.data:
-        raise ValueError("OpenAI embedding API response returned empty data")
+    if not hasattr(response, "embeddings") or not response.embeddings:
+        raise ValueError("Gemini embedding API response returned empty embeddings")
 
-    first_item = response.data[0]
-    if not hasattr(first_item, "embedding") or first_item.embedding is None:
-        raise ValueError("OpenAI embedding result item contains no embedding vector")
+    first_item = response.embeddings[0]
+    raw_embedding = getattr(first_item, "values", None)
+    if raw_embedding is None:
+        raise ValueError("Gemini embedding result item contains no embedding vector")
 
-    raw_embedding = first_item.embedding
     if not isinstance(raw_embedding, (list, tuple)):
-        raise ValueError("OpenAI embedding result is not a valid sequence")
+        raise ValueError("Gemini embedding result is not a valid sequence")
 
     if len(raw_embedding) != settings.EMBEDDING_DIMENSION:
         raise ValueError(

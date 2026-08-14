@@ -99,7 +99,7 @@ def test_development_config_validation_is_noop():
         SUPABASE_JWT_SECRET="short",
         DATABASE_URL="postgresql://placeholder",
         REDIS_URL="redis://placeholder",
-        OPENAI_API_KEY="",
+        GEMINI_API_KEY="",
         CV_STORAGE_BUCKET="",
         ALLOWED_ORIGINS="*",
     )
@@ -116,7 +116,7 @@ def test_production_config_with_placeholder_supabase_url_fails():
         SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -133,7 +133,7 @@ def test_production_config_with_missing_service_role_fails():
         SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -150,7 +150,7 @@ def test_production_config_with_short_or_placeholder_jwt_secret_fails():
         SUPABASE_JWT_SECRET="short_secret",
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -164,7 +164,7 @@ def test_production_config_with_short_or_placeholder_jwt_secret_fails():
         SUPABASE_JWT_SECRET="placeholder_jwt_secret_for_local_development",
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -184,7 +184,7 @@ def test_production_config_with_placeholder_database_url_fails():
             "placeholder_project.supabase.co:5432/postgres"
         ),
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -201,7 +201,7 @@ def test_production_config_with_placeholder_redis_url_fails():
         SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://placeholder-redis:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -209,8 +209,8 @@ def test_production_config_with_placeholder_redis_url_fails():
         validate_production_config(cfg)
 
 
-def test_production_config_with_missing_openai_key_fails():
-    """Test 7: Production config with missing/placeholder OPENAI_API_KEY fails."""
+def test_production_config_with_missing_gemini_key_fails():
+    """Test 7: Production config with missing/placeholder GEMINI_API_KEY fails."""
     cfg = Settings(
         ENVIRONMENT="production",
         SUPABASE_URL="https://real-project.supabase.co",
@@ -218,11 +218,11 @@ def test_production_config_with_missing_openai_key_fails():
         SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-placeholder-openai-key-server-only",
+        GEMINI_API_KEY="gemini-placeholder-key-server-only",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         validate_production_config(cfg)
 
 
@@ -235,7 +235,7 @@ def test_production_config_with_empty_cv_bucket_fails():
         SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="",
         ALLOWED_ORIGINS="https://app.internmatch.ai",
     )
@@ -261,7 +261,7 @@ def test_production_config_with_insecure_origins_fails(invalid_origin):
         SUPABASE_JWT_SECRET="a" * 32,
         DATABASE_URL="postgresql://user:pass@db.real.co:5432/db",
         REDIS_URL="redis://default:pass@redis.real.co:6379/0",
-        OPENAI_API_KEY="sk-real-secret-key-for-prod",
+        GEMINI_API_KEY="gemini-real-secret-key-for-prod",
         CV_STORAGE_BUCKET="cvs",
         ALLOWED_ORIGINS=invalid_origin,
     )
@@ -281,7 +281,7 @@ def test_valid_production_config_passes():
             "aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
         ),
         REDIS_URL="rediss://default:prodredispass@eu-redis.upstash.io:6379",
-        OPENAI_API_KEY="sk-proj-abc123def456ghi789jkl012mno345pqr678",
+        GEMINI_API_KEY="gemini-prod-key-1234567890abcdef",
         CV_STORAGE_BUCKET="internmatch-cv-production",
         ALLOWED_ORIGINS="https://internmatch.ai,https://admin.internmatch.ai",
     )

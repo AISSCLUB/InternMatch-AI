@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
 
     # Pinned AI Engine & Vector Search Models
-    OPENAI_API_KEY: str = ""
-    LLM_MODEL_NAME: str = "gpt-4o-mini"
-    EMBEDDING_MODEL_NAME: str = "text-embedding-3-small"
+    GEMINI_API_KEY: str = ""
+    LLM_MODEL_NAME: str = "gemini-3.5-flash"
+    EMBEDDING_MODEL_NAME: str = "gemini-embedding-2"
     EMBEDDING_DIMENSION: int = 1536
 
     # RapidFuzz Skill Matching Threshold (MVP Default: 85)
@@ -105,10 +105,10 @@ def validate_production_config(cfg: Settings) -> None:
     if not redis_url or "placeholder" in redis_url.lower():
         errors.append("REDIS_URL (must be non-placeholder)")
 
-    # OPENAI_API_KEY
-    openai_key = (cfg.OPENAI_API_KEY or "").strip()
-    if not openai_key or "placeholder" in openai_key.lower():
-        errors.append("OPENAI_API_KEY (must be non-placeholder)")
+    # GEMINI_API_KEY
+    gemini_key = (cfg.GEMINI_API_KEY or "").strip()
+    if not gemini_key or "placeholder" in gemini_key.lower():
+        errors.append("GEMINI_API_KEY (must be non-placeholder)")
 
     # CV_STORAGE_BUCKET
     cv_bucket = (cfg.CV_STORAGE_BUCKET or "").strip()

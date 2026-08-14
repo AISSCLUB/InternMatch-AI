@@ -14,7 +14,7 @@ class SecretMaskingFormatter(logging.Formatter):
 
     SENSITIVE_PATTERNS = [
         "SUPABASE_SERVICE_ROLE_KEY",
-        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
         "REVENUECAT_SECRET_KEY",
         "Bearer ",
     ]
@@ -24,7 +24,7 @@ class SecretMaskingFormatter(logging.Formatter):
         # Ensure raw secret values are masked if accidentally included in log messages
         for secret_val in [
             settings.SUPABASE_SERVICE_ROLE_KEY,
-            settings.OPENAI_API_KEY,
+            settings.GEMINI_API_KEY,
             settings.REVENUECAT_SECRET_KEY,
         ]:
             if secret_val and len(secret_val) > 4 and secret_val in formatted:

@@ -1,12 +1,13 @@
 """
 Grounded Application Cover Letter Generation Service
-Generates tailored, grounded cover letters using OpenAI Structured Outputs
+Generates tailored, grounded cover letters using Google Gemini structured output
 based strictly on persisted candidate, internship, and match data.
 """
 
 from typing import List, Optional
 
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import settings
@@ -73,17 +74,17 @@ def generate_grounded_cover_letter(
     content_locale: str = "en",
 ) -> str:
     """
-    Generate personalized grounded cover letter using OpenAI Structured Outputs.
-    Constructs OpenAI client at call-time from settings.
+    Generate personalized grounded cover letter using Google Gemini structured output.
+    Constructs Gemini client at call-time from settings.
     Enforces strict grounding and Pydantic validation.
     """
-    api_key = settings.OPENAI_API_KEY.strip() if settings.OPENAI_API_KEY else ""
+    api_key = settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else ""
     if not api_key or "placeholder" in api_key.lower():
         raise ValueError(
-            "OPENAI_API_KEY configuration is missing or placeholder value"
+            "GEMINI_API_KEY configuration is missing or placeholder value"
         )
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
     system_prompt = _build_system_prompt(content_locale=content_locale or "en")
 
     # Extract match skills and details safely from Match model
@@ -157,52 +158,28 @@ def generate_grounded_cover_letter(
 
     user_content = "\n".join(user_lines)
 
-    chat = getattr(client, "chat", None)
-    chat_completions = (
-        getattr(chat, "completions", None) if chat is not None else None
-    )
-    parse_fn = getattr(chat_completions, "parse", None)
-
-    if parse_fn is None:
-        beta = getattr(client, "beta", None)
-        beta_chat = getattr(beta, "chat", None) if beta is not None else None
-        beta_completions = (
-            getattr(beta_chat, "completions", None)
-            if beta_chat is not None
-            else None
-        )
-        parse_fn = getattr(beta_completions, "parse", None)
-
-    if parse_fn is None:
-        raise RuntimeError("OpenAI SDK structured parse method is unavailable")
-
-    response = parse_fn(
+    response = client.models.generate_content(
         model=settings.LLM_MODEL_NAME,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content},
-        ],
-        response_format=LLMCoverLetter,
+        contents=user_content,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            response_schema=LLMCoverLetter,
+        ),
     )
 
-    if not hasattr(response, "choices") or not response.choices:
+    if response is None:
+        raise ValueError("Gemini structured output response returned no content")
+
+    raw_text = getattr(response, "text", None)
+    if not raw_text or not isinstance(raw_text, str) or not raw_text.strip():
+        raise ValueError("Model returned unparseable or empty structured output")
+
+    try:
+        parsed = LLMCoverLetter.model_validate_json(raw_text)
+    except Exception as err:
         raise ValueError(
-            "OpenAI structured output response returned no choices"
-        )
-
-    choice = response.choices[0]
-    message = getattr(choice, "message", None)
-    if not message:
-        raise ValueError("OpenAI response choice contains no message")
-
-    refusal = getattr(message, "refusal", None)
-    if refusal:
-        raise ValueError(f"Model refused cover letter generation: {refusal}")
-
-    parsed = getattr(message, "parsed", None)
-    if parsed is None or not isinstance(parsed, LLMCoverLetter):
-        raise ValueError(
-            "Model returned unparseable or empty structured output"
-        )
+            f"Model returned unparseable or empty structured output: {err}"
+        ) from err
 
     return parsed.generated_cover_letter

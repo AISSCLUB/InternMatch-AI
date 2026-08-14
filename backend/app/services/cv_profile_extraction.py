@@ -1,6 +1,6 @@
 """
 Structured CV Candidate Profile Extraction Service
-Uses OpenAI Structured Outputs with strict Pydantic schemas to extract factual,
+Uses Google Gemini structured output with strict Pydantic schemas to extract factual,
 grounded candidate profile details (skills, education, experience, projects, preferences)
 from raw parsed CV document text.
 """
@@ -8,7 +8,8 @@ from raw parsed CV document text.
 from datetime import date
 from typing import List, Optional
 
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import settings
@@ -130,8 +131,8 @@ def extract_structured_candidate_profile(
     content_locale: str = "en",
 ) -> ExtractedCandidateProfile:
     """
-    Extract structured candidate profile from CV text using OpenAI Structured Outputs.
-    Constructs OpenAI client at call-time.
+    Extract structured candidate profile from CV text using Google Gemini structured output.
+    Constructs Gemini client at call-time.
     Validates API key configuration before making external calls.
     Enforces strict Pydantic validation on the LLM response.
     """
@@ -142,52 +143,36 @@ def extract_structured_candidate_profile(
     if not clean_text:
         raise ValueError("CV text input cannot be empty or whitespace-only")
 
-    api_key = settings.OPENAI_API_KEY.strip() if settings.OPENAI_API_KEY else ""
+    api_key = settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else ""
     if not api_key or "placeholder" in api_key.lower():
-        raise ValueError("OPENAI_API_KEY configuration is missing or placeholder value")
+        raise ValueError("GEMINI_API_KEY configuration is missing or placeholder value")
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
     system_prompt = _build_system_prompt(content_locale=content_locale or "en")
 
-    chat = getattr(client, "chat", None)
-    chat_completions = getattr(chat, "completions", None) if chat is not None else None
-    parse_fn = getattr(chat_completions, "parse", None)
-
-    if parse_fn is None:
-        beta = getattr(client, "beta", None)
-        beta_chat = getattr(beta, "chat", None) if beta is not None else None
-        beta_completions = (
-            getattr(beta_chat, "completions", None) if beta_chat is not None else None
-        )
-        parse_fn = getattr(beta_completions, "parse", None)
-
-    if parse_fn is None:
-        raise RuntimeError("OpenAI SDK structured parse method is unavailable")
-
-    response = parse_fn(
+    response = client.models.generate_content(
         model=settings.LLM_MODEL_NAME,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Candidate CV Document Text:\n\n{clean_text}"},
-        ],
-        response_format=ExtractedCandidateProfile,
+        contents=f"Candidate CV Document Text:\n\n{clean_text}",
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            response_schema=ExtractedCandidateProfile,
+        ),
     )
 
-    if not hasattr(response, "choices") or not response.choices:
-        raise ValueError("OpenAI structured output response returned no choices")
+    if response is None:
+        raise ValueError("Gemini structured output response returned no content")
 
-    choice = response.choices[0]
-    message = getattr(choice, "message", None)
-    if not message:
-        raise ValueError("OpenAI response choice contains no message")
-
-    refusal = getattr(message, "refusal", None)
-    if refusal:
-        raise ValueError(f"Model refused CV extraction: {refusal}")
-
-    parsed = getattr(message, "parsed", None)
-    if parsed is None or not isinstance(parsed, ExtractedCandidateProfile):
+    raw_text = getattr(response, "text", None)
+    if not raw_text or not isinstance(raw_text, str) or not raw_text.strip():
         raise ValueError("Model returned unparseable or empty structured output")
+
+    try:
+        parsed = ExtractedCandidateProfile.model_validate_json(raw_text)
+    except Exception as err:
+        raise ValueError(
+            f"Model returned unparseable or empty structured output: {err}"
+        ) from err
 
     if not parsed.full_name or not parsed.full_name.strip():
         raise ValueError("Extracted candidate profile missing required non-blank full_name")
