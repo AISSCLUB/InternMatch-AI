@@ -7,13 +7,13 @@
 
 ## 1. Project Identity & Team
 
-- **Authors & Developers:** Mohamad Barakat & Selenur Yurdakul (Two-Person Student Team)
+- **Authors & Developers:** Mohamad Barakat & Selanur Yurdakul (Two-Person Student Team)
 - **Team Responsibilities:**
   - **Mohamad:** Backend Gateway, Database Schemas, Infrastructure, APIs, AI Pipeline, Vector Search, Security, Containerization, Deployment.
-  - **Selenur:** Mobile Application (React Native / Expo), Next.js Landing Page, UI/UX, Interaction Design, RevenueCat Integration, Frontend API Integration.
+  - **Selanur:** Mobile Application (React Native / Expo), Next.js Landing Page, UI/UX, Interaction Design, RevenueCat Integration, Frontend API Integration.
   - **Both:** Product Strategy, Architecture Review, Testing, Demo Video Creation, Submission.
 - **Affiliation:** **AISS Club — Üsküdar University**  
-  *Mohammad serves as President of AISS Club; Selen serves as Vice President of AISS Club.*  
+  *Mohammad serves as President of AISS Club; Selanur serves as Vice President of AISS Club.*  
   *(Note: AISS Club represents the team's student-club affiliation and does not imply university ownership, sponsorship, funding, or intellectual property holding.*
 - **Code Repository:** `https://github.com/aissclub/internmatch-ai`
 
