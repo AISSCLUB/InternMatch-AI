@@ -407,7 +407,7 @@ def test_run_match_calculation_calculation_exception_rolls_back_and_marks_failed
         assert persisted_job.status == "failed"
         assert persisted_job.progress_percent == 100
         assert persisted_job.result is None
-        assert persisted_job.error == "Calculation internal crash"
+        assert persisted_job.error == "Match calculation failed."
     finally:
         db.close()
 
@@ -441,7 +441,7 @@ def test_run_match_calculation_precondition_error_follows_failed_lifecycle(monke
         assert persisted is not None
         assert persisted.status == "failed"
         assert persisted.progress_percent == 100
-        assert persisted.error == "Profile summary_embedding missing"
+        assert persisted.error == "Match calculation failed."
     finally:
         db.close()
 
@@ -477,12 +477,19 @@ def test_run_match_calculation_clears_stale_job_result_and_error(monkeypatch):
         db.close()
 
 
-def test_run_match_calculation_truncates_long_error_message_to_1000_chars(monkeypatch):
-    """Test 14: Exception message exceeding 1000 chars is persisted truncated to 1000 chars."""
+def test_run_match_calculation_failure_persists_safe_error_and_hides_raw_exception(
+    monkeypatch,
+):
+    """
+    Test 14: Match worker failure persists safe generic error message
+    and hides long internal exception text.
+    """
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
-        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="match_calculation")
+        job = ProcessingJobRepository.create(
+            db=db, user_id=user_id, job_type="match_calculation"
+        )
         db.commit()
         job_id = job.id
     finally:
@@ -506,8 +513,10 @@ def test_run_match_calculation_truncates_long_error_message_to_1000_chars(monkey
         persisted = ProcessingJobRepository.get_by_id(db=db, job_id=job_id)
         assert persisted is not None
         assert persisted.status == "failed"
-        assert len(persisted.error) == 1000
-        assert persisted.error == "X" * 1000
+        assert persisted.progress_percent == 100
+        assert persisted.error == "Match calculation failed."
+        assert long_msg not in (persisted.error or "")
+        assert "X" * 1000 not in (persisted.error or "")
     finally:
         db.close()
 
@@ -754,7 +763,8 @@ def test_run_cv_extraction_storage_failure_rolls_back_and_marks_failed(monkeypat
         assert persisted is not None
         assert persisted.status == "failed"
         assert persisted.progress_percent == 100
-        assert "Storage service unavailable" in persisted.error
+        assert persisted.error == "CV processing failed."
+        assert "Storage service unavailable" not in (persisted.error or "")
     finally:
         fresh_db.close()
 
@@ -788,7 +798,8 @@ def test_run_cv_extraction_parser_failure_rolls_back_and_marks_failed(monkeypatc
         persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
         assert persisted is not None
         assert persisted.status == "failed"
-        assert "Corrupt PDF" in persisted.error
+        assert persisted.error == "CV processing failed."
+        assert "Corrupt PDF" not in (persisted.error or "")
     finally:
         fresh_db.close()
 
@@ -823,7 +834,7 @@ def test_run_cv_extraction_llm_failure_rolls_back_and_marks_failed(monkeypatch):
         persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
         assert persisted is not None
         assert persisted.status == "failed"
-        assert "OpenAI API rate limit" in persisted.error
+        assert persisted.error == "CV processing failed."
     finally:
         fresh_db.close()
 
@@ -867,7 +878,7 @@ def test_run_cv_extraction_embedding_failure_rolls_back_and_marks_failed(monkeyp
         persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
         assert persisted is not None
         assert persisted.status == "failed"
-        assert "Embedding model service crash" in persisted.error
+        assert persisted.error == "CV processing failed."
     finally:
         fresh_db.close()
 
@@ -908,9 +919,9 @@ def test_run_cv_extraction_result_contains_profile_id_only(monkeypatch):
         fresh_db.close()
 
 
-def test_run_cv_extraction_truncates_long_error_to_1000_chars(monkeypatch):
+def test_run_cv_extraction_failure_persists_safe_error_and_hides_raw_exception(monkeypatch):
     """
-    Test 27: Worker errors longer than 1000 chars are persisted truncated.
+    Test 27: Worker failures persist generic safe error message and never leak raw exception.
     """
     user_id = uuid4()
     db = TestingSessionLocal()
@@ -921,10 +932,10 @@ def test_run_cv_extraction_truncates_long_error_to_1000_chars(monkeypatch):
     finally:
         db.close()
 
-    long_error = "Y" * 2000
+    sensitive_error = "Internal database connection failure: postgresql://admin:SECRET@db/prod"
     monkeypatch.setattr(
         "tasks.cv_extraction.download_candidate_cv",
-        MagicMock(side_effect=RuntimeError(long_error)),
+        MagicMock(side_effect=RuntimeError(sensitive_error)),
     )
 
     with pytest.raises(RuntimeError):
@@ -935,7 +946,7 @@ def test_run_cv_extraction_truncates_long_error_to_1000_chars(monkeypatch):
         persisted = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
         assert persisted is not None
         assert persisted.status == "failed"
-        assert len(persisted.error) == 1000
-        assert persisted.error == "Y" * 1000
+        assert persisted.error == "CV processing failed."
+        assert "SECRET" not in (persisted.error or "")
     finally:
         fresh_db.close()

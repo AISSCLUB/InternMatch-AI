@@ -839,7 +839,7 @@ def test_worker_unowned_match_fails_and_marks_job_failed():
         assert persisted_job is not None
         assert persisted_job.status == "failed"
         assert persisted_job.progress_percent == 100
-        assert "not found or not owned" in (persisted_job.error or "")
+        assert persisted_job.error == "Application generation failed."
     finally:
         db.close()
 
@@ -847,7 +847,7 @@ def test_worker_unowned_match_fails_and_marks_job_failed():
 def test_worker_provider_failure_rolls_back_application_mutation(monkeypatch):
     """
     Test 17: LLM provider failure rolls back Application mutation
-    and marks job failed.
+    and marks job failed with safe generic error.
     """
     job_id = uuid4()
     user_id = uuid4()
@@ -894,8 +894,10 @@ def test_worker_provider_failure_rolls_back_application_mutation(monkeypatch):
     finally:
         db.close()
 
+    sensitive_error = "OpenAI rate limit exceeded with sk-SECRET_KEY_12345"
+
     def failing_generation(*args, **kwargs):
-        raise RuntimeError("OpenAI rate limit exceeded")
+        raise RuntimeError(sensitive_error)
 
     monkeypatch.setattr(
         "tasks.application_generation.generate_grounded_cover_letter",
@@ -916,10 +918,11 @@ def test_worker_provider_failure_rolls_back_application_mutation(monkeypatch):
         apps = db.query(Application).all()
         assert len(apps) == 0
 
-        # Verify job marked failed in database
+        # Verify job marked failed in database with safe generic message
         persisted_job = db.query(ProcessingJob).filter_by(id=job_id).first()
         assert persisted_job is not None
         assert persisted_job.status == "failed"
-        assert "OpenAI rate limit exceeded" in (persisted_job.error or "")
+        assert persisted_job.error == "Application generation failed."
+        assert "SECRET_KEY" not in (persisted_job.error or "")
     finally:
         db.close()

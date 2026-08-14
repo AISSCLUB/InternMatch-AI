@@ -79,9 +79,8 @@ def calculate_matches(
             user_id=current_user.user_id,
             candidate_limit=50,
         )
-    except Exception as exc:
-        err_msg = str(exc)
-        safe_error = err_msg[:1000] if len(err_msg) > 1000 else err_msg
+    except Exception:
+        safe_error = "Failed to enqueue match calculation job."
         try:
             processing_job.status = "failed"
             processing_job.progress_percent = 100

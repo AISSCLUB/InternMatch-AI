@@ -129,7 +129,7 @@ def run_cv_extraction(
             "status": "completed",
             "profile_id": str(profile.id),
         }
-    except Exception as exc:
+    except Exception:
         try:
             db.rollback()
         finally:
@@ -144,8 +144,7 @@ def run_cv_extraction(
                     fail_job.status = "failed"
                     fail_job.progress_percent = 100
                     fail_job.result = None
-                    err_msg = str(exc)
-                    fail_job.error = err_msg[:1000] if len(err_msg) > 1000 else err_msg
+                    fail_job.error = "CV processing failed."
                     fail_db.commit()
             except Exception:
                 fail_db.rollback()

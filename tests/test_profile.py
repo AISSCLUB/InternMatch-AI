@@ -721,7 +721,8 @@ def test_post_profile_cv_enqueue_failure_marks_job_failed_and_returns_503(
         persisted_job = jobs[0]
         assert persisted_job.status == "failed"
         assert persisted_job.progress_percent == 100
-        assert "Redis connection refused" in persisted_job.error
+        assert persisted_job.error == "Failed to enqueue CV extraction job."
+        assert "Redis connection refused" not in (persisted_job.error or "")
     finally:
         db_check.close()
 

@@ -10,15 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.api.v1.endpoints.health import HealthResponse, get_health
-from app.core.config import settings
+from app.core.config import settings, validate_production_config
 from app.core.logging import logger
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle events manager for application startup and shutdown."""
+    validate_production_config(settings)
     logger.info(
-        f"Starting {settings.PROJECT_NAME} backend v{settings.VERSION} [{settings.ENVIRONMENT}]"
+        f"Starting {settings.PROJECT_NAME} backend v{settings.VERSION} "
+        f"[{settings.ENVIRONMENT}]"
     )
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME} backend service.")

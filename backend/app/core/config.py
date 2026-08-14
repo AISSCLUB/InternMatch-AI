@@ -22,14 +22,15 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = ""
     SUPABASE_JWT_SECRET: str = "placeholder_jwt_secret_for_local_development"
     DATABASE_URL: str = (
-        "postgresql://postgres:placeholder_password@placeholder_project.supabase.co:5432/postgres"
+        "postgresql://postgres:placeholder_password@"
+        "placeholder_project.supabase.co:5432/postgres"
     )
     CV_STORAGE_BUCKET: str = "cvs"
 
     # Redis Async Task Queue
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # Pinned AI Engine & Vector Search Models (MUST NOT be hardcoded in business logic)
+    # Pinned AI Engine & Vector Search Models
     OPENAI_API_KEY: str = ""
     LLM_MODEL_NAME: str = "gpt-4o-mini"
     EMBEDDING_MODEL_NAME: str = "text-embedding-3-small"
@@ -42,16 +43,101 @@ class Settings(BaseSettings):
     REVENUECAT_SECRET_KEY: str = ""
 
     # Security & CORS Origins Configuration
-    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000,http://localhost:19006"
+    ALLOWED_ORIGINS: str = (
+        "http://localhost:3000,http://localhost:8000,http://localhost:19006"
+    )
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse comma-separated CORS origins string into a list."""
         if not self.ALLOWED_ORIGINS:
             return []
-        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.ALLOWED_ORIGINS.split(",")
+            if origin.strip()
+        ]
+
+
+def validate_production_config(cfg: Settings) -> None:
+    """
+    Validate required settings when running in production environment.
+    No-op when ENVIRONMENT != 'production'.
+    Raises RuntimeError identifying invalid field names without leaking secrets.
+    """
+    if (cfg.ENVIRONMENT or "").strip().lower() != "production":
+        return
+
+    errors: List[str] = []
+
+    # SUPABASE_URL
+    sb_url = (cfg.SUPABASE_URL or "").strip()
+    if (
+        not sb_url
+        or "placeholder" in sb_url.lower()
+        or not sb_url.startswith("https://")
+    ):
+        errors.append("SUPABASE_URL (must be non-placeholder HTTPS URL)")
+
+    # SUPABASE_SERVICE_ROLE_KEY
+    sb_key = (cfg.SUPABASE_SERVICE_ROLE_KEY or "").strip()
+    if not sb_key or "placeholder" in sb_key.lower():
+        errors.append("SUPABASE_SERVICE_ROLE_KEY (must be non-placeholder)")
+
+    # SUPABASE_JWT_SECRET
+    jwt_sec = (cfg.SUPABASE_JWT_SECRET or "").strip()
+    if not jwt_sec or "placeholder" in jwt_sec.lower() or len(jwt_sec) < 32:
+        errors.append(
+            "SUPABASE_JWT_SECRET (must be non-placeholder, >= 32 chars)"
+        )
+
+    # DATABASE_URL
+    db_url = (cfg.DATABASE_URL or "").strip()
+    if not db_url or "placeholder" in db_url.lower():
+        errors.append("DATABASE_URL (must be non-placeholder)")
+
+    # REDIS_URL
+    redis_url = (cfg.REDIS_URL or "").strip()
+    if not redis_url or "placeholder" in redis_url.lower():
+        errors.append("REDIS_URL (must be non-placeholder)")
+
+    # OPENAI_API_KEY
+    openai_key = (cfg.OPENAI_API_KEY or "").strip()
+    if not openai_key or "placeholder" in openai_key.lower():
+        errors.append("OPENAI_API_KEY (must be non-placeholder)")
+
+    # CV_STORAGE_BUCKET
+    cv_bucket = (cfg.CV_STORAGE_BUCKET or "").strip()
+    if not cv_bucket:
+        errors.append("CV_STORAGE_BUCKET (must be non-empty)")
+
+    # ALLOWED_ORIGINS
+    origins = cfg.cors_origins_list
+    if not origins:
+        errors.append("ALLOWED_ORIGINS (must specify at least one origin)")
+    else:
+        for orig in origins:
+            orig_lower = orig.lower()
+            if (
+                "*" in orig
+                or "localhost" in orig_lower
+                or "127.0.0.1" in orig_lower
+                or not orig.startswith("https://")
+            ):
+                errors.append(
+                    "ALLOWED_ORIGINS (must use https:// and cannot contain "
+                    "*, localhost, or 127.0.0.1)"
+                )
+                break
+
+    if errors:
+        raise RuntimeError(
+            f"Production configuration validation failed for: {', '.join(errors)}"
+        )
 
 
 settings = Settings()

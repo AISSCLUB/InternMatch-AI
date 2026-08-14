@@ -362,15 +362,15 @@ def test_post_calculate_enqueue_failure_returns_503_and_marks_job_failed(
 ):
     """
     Tests 8 & 9 & 10: Enqueue failure returns 503, updates original job to failed (100%),
-    does not create a second job, and truncates long error messages to <= 1000 chars.
+    does not create a second job, and persists safe generic error message.
     """
     user_id = uuid4()
     token = generate_mock_jwt(user_id=user_id)
 
-    long_error = "Redis Connection Error: " + ("E" * 1200)
+    sensitive_error = "Redis Connection Error with redis://user:SECRET@redis:6379/0"
 
     def failing_enqueue(job_id, user_id, candidate_limit):
-        raise RuntimeError(long_error)
+        raise RuntimeError(sensitive_error)
 
     monkeypatch.setattr(
         "app.api.v1.endpoints.matches.enqueue_match_calculation",
@@ -392,9 +392,8 @@ def test_post_calculate_enqueue_failure_returns_503_and_marks_job_failed(
         assert job.status == "failed"
         assert job.progress_percent == 100
         assert job.result is None
-        assert job.error is not None
-        assert len(job.error) <= 1000
-        assert job.error.startswith("Redis Connection Error:")
+        assert job.error == "Failed to enqueue match calculation job."
+        assert "SECRET" not in (job.error or "")
     finally:
         db.close()
 

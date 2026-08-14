@@ -258,15 +258,14 @@ async def upload_candidate_cv(
             user_id=current_user.user_id,
             storage_path=stored_cv.storage_path,
         )
-    except Exception as enqueue_exc:
+    except Exception:
         # If durable ProcessingJob commit succeeded but RQ enqueue failed:
         # mark ProcessingJob failed, commit, and return HTTP 503
         try:
-            err_msg = str(enqueue_exc)
             job.status = "failed"
             job.progress_percent = 100
             job.result = None
-            job.error = err_msg[:1000] if len(err_msg) > 1000 else err_msg
+            job.error = "Failed to enqueue CV extraction job."
             db.commit()
         except Exception:
             db.rollback()

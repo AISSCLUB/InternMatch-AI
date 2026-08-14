@@ -1,4 +1,4 @@
-﻿"""
+"""
 RQ Match Calculation Task
 Provides background execution boundary for candidate match calculation jobs.
 """
@@ -93,7 +93,7 @@ def run_match_calculation(
             "status": "completed",
             "match_count": match_count,
         }
-    except Exception as exc:
+    except Exception:
         try:
             db.rollback()
         finally:
@@ -108,8 +108,7 @@ def run_match_calculation(
                     fail_job.status = "failed"
                     fail_job.progress_percent = 100
                     fail_job.result = None
-                    err_msg = str(exc)
-                    fail_job.error = err_msg[:1000] if len(err_msg) > 1000 else err_msg
+                    fail_job.error = "Match calculation failed."
                     fail_db.commit()
             except Exception:
                 fail_db.rollback()
