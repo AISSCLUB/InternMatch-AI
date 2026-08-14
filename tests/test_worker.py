@@ -48,6 +48,9 @@ def override_worker_sessionlocal(monkeypatch):
     monkeypatch.setattr("tasks.job_state.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr("tasks.match_calculation.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr("tasks.cv_extraction.SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(
+        "tasks.application_generation.SessionLocal", TestingSessionLocal
+    )
 
 
 def test_worker_ping_task():

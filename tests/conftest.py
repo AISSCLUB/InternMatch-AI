@@ -16,6 +16,7 @@ if str(backend_dir) not in sys.path:
 
 from app.core.config import settings  # noqa: E402
 from app.db.models import (  # noqa: E402,F401
+    Application,
     EducationEntry,
     ExperienceEntry,
     InternshipListing,
@@ -33,6 +34,7 @@ from tests.db import TestingSessionLocal, test_engine  # noqa: E402
 
 TEST_JWT_SECRET = "test_supabase_jwt_secret_32_bytes_long_minimum!!"
 TEST_SUPABASE_URL = "https://legitimate-project.supabase.co"
+
 
 def override_get_db():
     """Override get_db dependency to use the shared SQLite test database."""
@@ -71,11 +73,13 @@ def setup_test_database():
         "internship_listings",
         "processing_jobs",
         "matches",
+        "applications",
     ]
     for table_name in required_tables:
         if table_name not in Base.metadata.tables:
             raise RuntimeError(
-                f"Required table {table_name} is not registered in Base.metadata before test setup."
+                f"Required table {table_name} is not registered "
+                "in Base.metadata before test setup."
             )
 
 

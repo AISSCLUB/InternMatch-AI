@@ -1,0 +1,188 @@
+"""
+RQ Application Generation Task
+Provides background execution boundary for candidate personalized
+cover-letter generation jobs.
+"""
+
+from typing import Any, Dict, Union
+from uuid import UUID
+
+from app.db.session import SessionLocal
+from app.repositories.application import ApplicationRepository
+from app.repositories.match import MatchRepository
+from app.repositories.matching_data import MatchingDataRepository
+from app.repositories.processing_job import ProcessingJobRepository
+from app.services.application_generation import generate_grounded_cover_letter
+
+
+def _normalize_uuid(val: Union[UUID, str], param_name: str) -> UUID:
+    """
+    Normalize UUID object or string to UUID instance.
+    Raises ValueError for invalid format.
+    """
+    if isinstance(val, UUID):
+        return val
+    if isinstance(val, str):
+        try:
+            return UUID(val)
+        except (ValueError, AttributeError, TypeError):
+            raise ValueError(
+                f"Invalid UUID string format for {param_name}: '{val}'"
+            )
+    raise ValueError(
+        f"Invalid UUID type for {param_name}: expected UUID or str, "
+        f"got {type(val).__name__}"
+    )
+
+
+def run_application_generation(
+    job_id: Union[UUID, str],
+    user_id: Union[UUID, str],
+    match_id: Union[UUID, str],
+    tone: str,
+    content_locale: str = "en",
+) -> Dict[str, Any]:
+    """
+    RQ Task execution boundary for personalized cover-letter generation.
+    Accepts job_id, user_id, match_id, tone, and content_locale.
+    Validates job ownership and type, verifies match ownership,
+    calls grounded LLM generation, persists application, and manages
+    the transaction lifecycle cleanly.
+    """
+    norm_job_id = _normalize_uuid(job_id, "job_id")
+    norm_user_id = _normalize_uuid(user_id, "user_id")
+    norm_match_id = _normalize_uuid(match_id, "match_id")
+
+    db = SessionLocal()
+    job_validated = False
+
+    try:
+        job = ProcessingJobRepository.get_by_id(db, norm_job_id)
+        if job is None:
+            raise ValueError(
+                f"ProcessingJob with id '{norm_job_id}' not found."
+            )
+
+        if job.user_id != norm_user_id:
+            raise ValueError(
+                f"Job ownership mismatch: ProcessingJob {norm_job_id} "
+                f"belongs to user {job.user_id}, not user {norm_user_id}."
+            )
+
+        if job.job_type != "application_generation":
+            raise ValueError(
+                "ProcessingJob type mismatch: expected "
+                f"'application_generation', got '{job.job_type}'."
+            )
+
+        # Precondition checks passed for target job
+        job_validated = True
+
+        # Transition to processing state
+        job.status = "processing"
+        job.progress_percent = 10
+        job.result = None
+        job.error = None
+        db.flush()
+
+        # Fetch match and verify ownership in SQL
+        match_record = MatchRepository.get_match_with_details_for_user(
+            db=db,
+            match_id=norm_match_id,
+            user_id=norm_user_id,
+        )
+        if not match_record:
+            raise ValueError(
+                f"Match '{norm_match_id}' not found or not owned "
+                f"by user '{norm_user_id}'."
+            )
+
+        match, profile, internship = match_record
+
+        # Gather grounded contextual candidate data
+        cand_skills = MatchingDataRepository.get_skill_names_for_student(
+            db, profile.id
+        )
+        edu_list = [
+            f"{e.degree} at {e.institution} ({e.start_year or ''}-{e.end_year or ''})"
+            for e in MatchingDataRepository.get_education_for_student(
+                db, profile.id
+            )
+        ]
+        exp_list = [
+            f"{e.role} at {e.company}: {e.description or ''}"
+            for e in MatchingDataRepository.get_experience_for_student(
+                db, profile.id
+            )
+        ]
+        proj_list = [
+            f"{p.title} ({', '.join(p.tech_stack or [])}): {p.description or ''}"
+            for p in MatchingDataRepository.get_projects_for_student(
+                db, profile.id
+            )
+        ]
+
+        # Call grounded LLM cover-letter generation
+        cover_letter = generate_grounded_cover_letter(
+            profile=profile,
+            internship=internship,
+            match=match,
+            tone=tone,
+            candidate_skills=cand_skills,
+            education_entries=edu_list,
+            experience_entries=exp_list,
+            project_entries=proj_list,
+            content_locale=content_locale,
+        )
+
+        # Create or update application in database
+        application = ApplicationRepository.upsert_generated_cover_letter(
+            db=db,
+            student_id=profile.id,
+            internship_id=internship.id,
+            generated_cover_letter=cover_letter,
+        )
+
+        # Transition job to completed state
+        job.status = "completed"
+        job.progress_percent = 100
+        job.error = None
+        job.result = {"application_id": str(application.id)}
+
+        db.commit()
+
+        return {
+            "job_id": str(norm_job_id),
+            "status": "completed",
+            "application_id": str(application.id),
+        }
+    except Exception as exc:
+        try:
+            db.rollback()
+        finally:
+            db.close()
+
+        # If job was validated, persist failure state in a fresh session
+        if job_validated:
+            fail_db = SessionLocal()
+            try:
+                fail_job = ProcessingJobRepository.get_by_id(
+                    fail_db, norm_job_id
+                )
+                if fail_job:
+                    fail_job.status = "failed"
+                    fail_job.progress_percent = 100
+                    fail_job.result = None
+                    err_msg = str(exc)
+                    fail_job.error = (
+                        err_msg[:1000] if len(err_msg) > 1000 else err_msg
+                    )
+                    fail_db.commit()
+            except Exception:
+                fail_db.rollback()
+            finally:
+                fail_db.close()
+
+        raise
+    finally:
+        db.close()
