@@ -6,6 +6,7 @@ and POST trigger to enqueue match calculation.
 
 from uuid import UUID
 
+from app.core.rate_limit import enforce_rate_limit
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.repositories.match import MatchRepository
@@ -62,6 +63,10 @@ def calculate_matches(
     Creates ProcessingJob record (status='queued'), commits before enqueue,
     and dispatches task to Redis RQ queue.
     """
+    enforce_rate_limit(
+        user_id=current_user.user_id, scope="match_calculate"
+    )
+
     try:
         processing_job = ProcessingJobRepository.create(
             db=db,
@@ -118,6 +123,10 @@ def get_match_explanation(
     Identity is strictly derived from the validated JWT subject UUID.
     Returns 404 if match is not found or owned by another user.
     """
+    enforce_rate_limit(
+        user_id=current_user.user_id, scope="match_explanation"
+    )
+
     try:
         explanation = get_or_create_match_explanation(
             db=db,

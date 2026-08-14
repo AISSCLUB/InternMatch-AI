@@ -6,6 +6,7 @@ listing, and tracker status/notes updates.
 
 from uuid import UUID
 
+from app.core.rate_limit import enforce_rate_limit
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.repositories.application import ApplicationRepository
@@ -67,6 +68,10 @@ def generate_application(
     Verifies match ownership prior to enqueuing job. Returns 404 if match is
     not found or owned by another user.
     """
+    enforce_rate_limit(
+        user_id=current_user.user_id, scope="application_generate"
+    )
+
     # Verify match exists and is owned by authenticated user
     match_record = MatchRepository.get_match_with_details_for_user(
         db=db,

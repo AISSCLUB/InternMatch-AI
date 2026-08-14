@@ -25,6 +25,7 @@ from app.services.match_explanation import (
     generate_grounded_match_explanation,
     get_or_create_match_explanation,
 )
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
@@ -610,3 +611,50 @@ def test_get_or_create_match_explanation_returns_none_for_missing_record():
         assert result is None
     finally:
         db.close()
+
+
+def test_get_match_explanation_rate_limited_returns_429(
+    client: TestClient, monkeypatch
+):
+    """
+    Test 11: Rate limit on GET /matches/{id}/explanation returns HTTP 429
+    before LLM generation.
+    """
+    user_id = uuid4()
+    match_id = uuid4()
+    token = generate_mock_jwt(user_id=user_id)
+
+    def failing_rate_limit(*, user_id, scope):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": "Too many requests. Please retry later.",
+                    "details": {"retry_after_seconds": 600},
+                    "timestamp": "2026-08-14T00:00:00Z",
+                }
+            },
+            headers={"Retry-After": "600"},
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.matches.enforce_rate_limit", failing_rate_limit
+    )
+
+    llm_called = []
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.matches.get_or_create_match_explanation",
+        lambda *args, **kwargs: llm_called.append(1),
+    )
+
+    response = client.get(
+        f"/api/v1/matches/{match_id}/explanation",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers.get("retry-after") == "600"
+    data = response.json()
+    assert data["detail"]["error"]["code"] == "RATE_LIMITED"
+    assert llm_called == []

@@ -4,6 +4,8 @@ Provides trusted server-side upload boundary for candidate CV documents (PDF/DOC
 Validates MIME type, extension agreement, size limits, and delegates to Supabase Storage.
 """
 
+import io
+import zipfile
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -90,6 +92,30 @@ def store_candidate_cv(
             f"MIME type '{clean_mime}' does not match file extension '.{actual_ext}' "
             f"(expected .{expected_ext})"
         )
+
+    # 8. File signature and container structure validation
+    if expected_ext == "pdf":
+        if not content.startswith(b"%PDF-"):
+            raise CVStorageValidationError(
+                "File signature does not match expected PDF format."
+            )
+    elif expected_ext == "docx":
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                namelist = zf.namelist()
+                if (
+                    "[Content_Types].xml" not in namelist
+                    or "word/document.xml" not in namelist
+                ):
+                    raise CVStorageValidationError(
+                        "File signature does not match expected DOCX format."
+                    )
+        except Exception as exc:
+            if isinstance(exc, CVStorageValidationError):
+                raise
+            raise CVStorageValidationError(
+                "File signature does not match expected DOCX format."
+            ) from exc
 
     # Validate Supabase configuration credentials before constructing client
     url = settings.SUPABASE_URL.strip() if settings.SUPABASE_URL else ""

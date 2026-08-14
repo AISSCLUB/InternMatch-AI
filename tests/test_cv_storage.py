@@ -5,6 +5,8 @@ server-side object key generation, Supabase credential checking, and exception p
 All tests use monkeypatched Supabase client mocks with zero real network calls.
 """
 
+import io
+import zipfile
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
@@ -15,6 +17,15 @@ from app.services.cv_storage import (
     CVStoredObject,
     store_candidate_cv,
 )
+
+
+def _make_valid_docx_bytes() -> bytes:
+    """Create minimal valid in-memory DOCX ZIP container with required OOXML files."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", b"<?xml version='1.0'?><Types/>")
+        zf.writestr("word/document.xml", b"<?xml version='1.0'?><w:document/>")
+    return buf.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +87,7 @@ def test_store_candidate_cv_valid_docx_upload(monkeypatch):
     monkeypatch.setattr("app.services.cv_storage.create_client", lambda url, key: mock_client)
 
     user_id = uuid4()
-    docx_bytes = b"PK\x03\x04 docx content"
+    docx_bytes = _make_valid_docx_bytes()
     docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     res = store_candidate_cv(
@@ -105,7 +116,7 @@ def test_store_candidate_cv_object_path_format(monkeypatch):
         user_id=user_id,
         filename="cv.pdf",
         content_type="application/pdf",
-        content=b"%PDF content",
+        content=b"%PDF-1.4 test content",
     )
 
     parts = res.storage_path.split("/")
@@ -128,7 +139,7 @@ def test_store_candidate_cv_original_filename_not_in_key(monkeypatch):
         user_id=user_id,
         filename=original_name,
         content_type="application/pdf",
-        content=b"%PDF content",
+        content=b"%PDF-1.4 test content",
     )
 
     assert "Jane" not in res.storage_path
@@ -232,7 +243,7 @@ def test_store_candidate_cv_exactly_10mb_accepted(monkeypatch):
     mock_client, _ = make_mock_supabase_client()
     monkeypatch.setattr("app.services.cv_storage.create_client", lambda url, key: mock_client)
 
-    exact_10mb = b"a" * MAX_CV_SIZE_BYTES
+    exact_10mb = b"%PDF-" + b"a" * (MAX_CV_SIZE_BYTES - 5)
     res = store_candidate_cv(
         user_id=uuid4(),
         filename="resume.pdf",
@@ -274,7 +285,7 @@ def test_store_candidate_cv_blank_service_role_key_rejected(monkeypatch):
             user_id=uuid4(),
             filename="resume.pdf",
             content_type="application/pdf",
-            content=b"%PDF content",
+            content=b"%PDF-1.4 test content",
         )
 
     monkeypatch.setattr(
@@ -286,7 +297,7 @@ def test_store_candidate_cv_blank_service_role_key_rejected(monkeypatch):
             user_id=uuid4(),
             filename="resume.pdf",
             content_type="application/pdf",
-            content=b"%PDF content",
+            content=b"%PDF-1.4 test content",
         )
 
     assert client_created == []
@@ -308,7 +319,7 @@ def test_store_candidate_cv_placeholder_supabase_url_rejected(monkeypatch):
             user_id=uuid4(),
             filename="resume.pdf",
             content_type="application/pdf",
-            content=b"%PDF content",
+            content=b"%PDF-1.4 test content",
         )
 
     assert client_created == []
@@ -324,7 +335,7 @@ def test_store_candidate_cv_uses_configured_bucket(monkeypatch):
         user_id=uuid4(),
         filename="resume.pdf",
         content_type="application/pdf",
-        content=b"%PDF content",
+        content=b"%PDF-1.4 test content",
     )
 
     mock_client.storage.from_.assert_called_once_with("custom_resumes")
@@ -341,7 +352,7 @@ def test_store_candidate_cv_provider_exception_propagates(monkeypatch):
             user_id=uuid4(),
             filename="resume.pdf",
             content_type="application/pdf",
-            content=b"%PDF content",
+            content=b"%PDF-1.4 test content",
         )
 
 
@@ -389,8 +400,121 @@ def test_uppercase_extensions_accepted_and_canonical_lowercase(monkeypatch):
         user_id=user_id,
         filename="MY_RESUME.PDF",
         content_type="application/pdf",
-        content=b"%PDF content",
+        content=b"%PDF-1.4 test content",
     )
 
     assert res.storage_path.endswith(".pdf")
     assert not res.storage_path.endswith(".PDF")
+
+
+def test_store_candidate_cv_fake_pdf_bytes_rejected_before_client_creation(
+    monkeypatch,
+):
+    """
+    Test 19: Non-PDF bytes with PDF extension are rejected before
+    Supabase client creation.
+    """
+    client_created = []
+    monkeypatch.setattr(
+        "app.services.cv_storage.create_client",
+        lambda url, key: client_created.append(1),
+    )
+
+    with pytest.raises(
+        CVStorageValidationError,
+        match="File signature does not match expected PDF format",
+    ):
+        store_candidate_cv(
+            user_id=uuid4(),
+            filename="fake.pdf",
+            content_type="application/pdf",
+            content=b"not a real pdf content",
+        )
+
+    assert client_created == []
+
+
+def test_store_candidate_cv_fake_docx_bytes_rejected_before_client_creation(
+    monkeypatch,
+):
+    """
+    Test 20: Non-ZIP bytes with DOCX extension are rejected before
+    Supabase client creation.
+    """
+    client_created = []
+    monkeypatch.setattr(
+        "app.services.cv_storage.create_client",
+        lambda url, key: client_created.append(1),
+    )
+
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    with pytest.raises(
+        CVStorageValidationError,
+        match="File signature does not match expected DOCX format",
+    ):
+        store_candidate_cv(
+            user_id=uuid4(),
+            filename="fake.docx",
+            content_type=docx_mime,
+            content=b"not a real zip/docx file",
+        )
+
+    assert client_created == []
+
+
+def test_store_candidate_cv_docx_zip_missing_required_entry_rejected(
+    monkeypatch,
+):
+    """
+    Test 21: ZIP archive missing required OOXML entries is rejected
+    as invalid DOCX.
+    """
+    client_created = []
+    monkeypatch.setattr(
+        "app.services.cv_storage.create_client",
+        lambda url, key: client_created.append(1),
+    )
+
+    # Incomplete ZIP (only contains a random file, not [Content_Types].xml or word/document.xml)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("random.txt", b"some text")
+    bad_zip_bytes = buf.getvalue()
+
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    with pytest.raises(
+        CVStorageValidationError,
+        match="File signature does not match expected DOCX format",
+    ):
+        store_candidate_cv(
+            user_id=uuid4(),
+            filename="incomplete.docx",
+            content_type=docx_mime,
+            content=bad_zip_bytes,
+        )
+
+    assert client_created == []
+
+
+def test_store_candidate_cv_corrupt_docx_zip_rejected(monkeypatch):
+    """Test 22: Corrupted ZIP header bytes are rejected as invalid DOCX."""
+    client_created = []
+    monkeypatch.setattr(
+        "app.services.cv_storage.create_client",
+        lambda url, key: client_created.append(1),
+    )
+
+    corrupted_zip_bytes = b"PK\x03\x04corrupted_header_data_not_valid_archive"
+    docx_mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    with pytest.raises(
+        CVStorageValidationError,
+        match="File signature does not match expected DOCX format",
+    ):
+        store_candidate_cv(
+            user_id=uuid4(),
+            filename="corrupt.docx",
+            content_type=docx_mime,
+            content=corrupted_zip_bytes,
+        )
+
+    assert client_created == []

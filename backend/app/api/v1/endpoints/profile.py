@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
+from app.core.rate_limit import enforce_rate_limit
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
 from app.repositories.matching_data import MatchingDataRepository
@@ -203,20 +204,23 @@ async def upload_candidate_cv(
     Validates file format and size <= 10 MiB, uploads securely to private Supabase Storage,
     persists durable ProcessingJob, and enqueues background worker task.
     """
-    # 1. Read content up to max size + 1 to guard against oversized payloads
+    # 1. Enforce rate limiting before reading/storing content
+    enforce_rate_limit(user_id=current_user.user_id, scope="cv_upload")
+
+    # 2. Read content up to max size + 1 to guard against oversized payloads
     max_read_bytes = MAX_CV_SIZE_BYTES + 1
     content = await file.read(max_read_bytes)
 
     if len(content) > MAX_CV_SIZE_BYTES:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail=format_error_payload(
-                "BAD_REQUEST",
-                f"CV file size ({len(content)} bytes) exceeds maximum limit of 10 MB",
+                "PAYLOAD_TOO_LARGE",
+                "CV file exceeds maximum limit of 10 MB.",
             ),
         )
 
-    # 2. Validate MIME/extension and upload to private Supabase Storage
+    # 3. Validate MIME/extension/signature and upload to private Supabase Storage
     try:
         stored_cv = store_candidate_cv(
             user_id=current_user.user_id,

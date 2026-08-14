@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.models import InternshipListing, Match, ProcessingJob, StudentProfile
 from app.repositories.match import MatchRepository
 from app.services.match_enqueue import enqueue_match_calculation
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from tests.db import TestingSessionLocal
@@ -531,3 +532,56 @@ def test_enqueue_helper_candidate_limit_zero_or_negative_raises_value_error(monk
         enqueue_match_calculation(job_id=job_id, user_id=user_id, candidate_limit=-10)
 
     assert redis_calls == []
+
+
+def test_calculate_matches_rate_limited_returns_429_before_job_creation(
+    client: TestClient, monkeypatch
+):
+    """
+    Test 18: Rate limit on /matches/calculate returns HTTP 429
+    and creates no job/enqueue.
+    """
+    user_id = uuid4()
+    token = generate_mock_jwt(user_id=user_id)
+
+    def failing_rate_limit(*, user_id, scope):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": "Too many requests. Please retry later.",
+                    "details": {"retry_after_seconds": 600},
+                    "timestamp": "2026-08-14T00:00:00Z",
+                }
+            },
+            headers={"Retry-After": "600"},
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.matches.enforce_rate_limit", failing_rate_limit
+    )
+
+    enqueue_called = []
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.matches.enqueue_match_calculation",
+        lambda *args, **kwargs: enqueue_called.append(1),
+    )
+
+    response = client.post(
+        "/api/v1/matches/calculate",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers.get("retry-after") == "600"
+    data = response.json()
+    assert data["detail"]["error"]["code"] == "RATE_LIMITED"
+    assert enqueue_called == []
+
+    db = TestingSessionLocal()
+    try:
+        jobs = db.query(ProcessingJob).filter_by(user_id=user_id).all()
+        assert len(jobs) == 0
+    finally:
+        db.close()

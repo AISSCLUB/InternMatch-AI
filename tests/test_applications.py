@@ -40,6 +40,7 @@ from app.services.application_generation import (  # noqa: E402
     LLMCoverLetter,
     generate_grounded_cover_letter,
 )
+from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from tasks.application_generation import (  # noqa: E402
     run_application_generation,
@@ -924,5 +925,61 @@ def test_worker_provider_failure_rolls_back_application_mutation(monkeypatch):
         assert persisted_job.status == "failed"
         assert persisted_job.error == "Application generation failed."
         assert "SECRET_KEY" not in (persisted_job.error or "")
+    finally:
+        db.close()
+
+
+def test_post_applications_generate_rate_limited_returns_429(
+    client: TestClient, monkeypatch
+):
+    """
+    Test 23: Rate limit on POST /applications/generate returns HTTP 429
+    before job creation.
+    """
+    user_id = uuid4()
+    match_id = uuid4()
+    token = generate_mock_jwt(user_id=user_id)
+
+    def failing_rate_limit(*, user_id, scope):
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "code": "RATE_LIMITED",
+                    "message": "Too many requests. Please retry later.",
+                    "details": {"retry_after_seconds": 600},
+                    "timestamp": "2026-08-14T00:00:00Z",
+                }
+            },
+            headers={"Retry-After": "600"},
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.applications.enforce_rate_limit", failing_rate_limit
+    )
+
+    enqueue_called = []
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.applications.enqueue_application_generation",
+        lambda *args, **kwargs: enqueue_called.append(1),
+    )
+
+    response = client.post(
+        "/api/v1/applications/generate",
+        json={"match_id": str(match_id), "tone": "professional"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers.get("retry-after") == "600"
+    data = response.json()
+    assert data["detail"]["error"]["code"] == "RATE_LIMITED"
+    assert enqueue_called == []
+
+    # Verify no processing job was created
+    db = TestingSessionLocal()
+    try:
+        jobs = db.query(ProcessingJob).filter_by(user_id=user_id).all()
+        assert len(jobs) == 0
     finally:
         db.close()
