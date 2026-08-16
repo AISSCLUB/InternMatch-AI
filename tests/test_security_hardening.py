@@ -529,6 +529,7 @@ def test_cv_worker_failure_persists_safe_error(monkeypatch):
 
     monkeypatch.setattr("tasks.cv_extraction.download_candidate_cv", lambda **kwargs: b"pdf")
     monkeypatch.setattr("tasks.cv_extraction.extract_cv_text", lambda **kwargs: "text")
+    monkeypatch.setattr("tasks.cv_extraction.validate_cv_document", lambda **kwargs: None)
     monkeypatch.setattr(
         "tasks.cv_extraction.extract_structured_candidate_profile",
         MagicMock(side_effect=RuntimeError(sensitive_error)),

@@ -156,7 +156,7 @@ def extract_structured_candidate_profile(
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=ExtractedCandidateProfile,
+            response_json_schema=ExtractedCandidateProfile.model_json_schema(),
         ),
     )
 

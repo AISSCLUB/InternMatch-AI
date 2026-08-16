@@ -70,7 +70,7 @@ export default function SettingsScreen({ navigation }) {
       <Row label="Export My Data" right={<Ionicons name="chevron-forward" size={18} color={colors.textMuted} />} onPress={() => {}} />
 
       <Text style={styles.sectionTitle}>Preferences</Text>
-      <Row label="Language" right={<Text style={styles.valueText}>English  ></Text>} onPress={() => {}} />
+      <Row label="Language" right={<Text style={styles.valueText}>{'English  >'}</Text>} onPress={() => {}} />
 
       <TouchableOpacity style={styles.dangerButton} onPress={handleExit}>
         <Text style={styles.dangerText}>Exit</Text>

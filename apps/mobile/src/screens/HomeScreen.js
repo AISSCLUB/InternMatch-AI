@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
@@ -12,19 +12,18 @@ const MOCK_MATCHUPS = [
   { id: '3', title: 'Backend Intern', score: 71 },
 ];
 
-export default function HomeScreen({ navigation, route }) {
+export default function HomeScreen({ navigation }) {
   const { profile } = useProfile();
   const displayName = profile?.full_name?.trim() || 'Student';
 
-  // Toggle this (or wire to real state) to preview both Figma states:
-  // false -> "Upload your CV" empty state / true -> "Today's matchups" state
-  const [cvAnalyzed, setCvAnalyzed] = useState(false);
-
-  useEffect(() => {
-    if (route?.params?.cvAnalyzed === true) {
-      setCvAnalyzed(true);
-    }
-  }, [route?.params?.cvAnalyzed]);
+  // Derived from real backend profile state
+  const hasAnalyzedCV = Boolean(
+    profile?.cv_url ||
+      (profile?.skills && profile.skills.length > 0) ||
+      (profile?.education && profile.education.length > 0) ||
+      (profile?.experience && profile.experience.length > 0) ||
+      (profile?.projects && profile.projects.length > 0)
+  );
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -34,7 +33,7 @@ export default function HomeScreen({ navigation, route }) {
       </View>
       <Text style={styles.hello}>Hello, {displayName} 👋</Text>
 
-      {!cvAnalyzed ? (
+      {!hasAnalyzedCV ? (
         <>
           <View style={styles.uploadCard}>
             <View style={styles.uploadIconCircle}>

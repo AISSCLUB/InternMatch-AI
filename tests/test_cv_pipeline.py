@@ -34,6 +34,12 @@ from app.services.cv_storage import (
     CVStorageValidationError,
     download_candidate_cv,
 )
+from app.services.cv_validation import (
+    CVValidationResult,
+    CVValidationServiceError,
+    InvalidCVDocumentError,
+    validate_cv_document,
+)
 from docx import Document
 
 from tests.db import TestingSessionLocal
@@ -731,3 +737,122 @@ def test_repository_does_not_commit_or_rollback():
             fresh_db.close()
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# 5. SEMANTIC VALIDATION TESTS (28 - 34)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_cv_document_deterministic_sanity_empty_text():
+    """Test 28: Empty or whitespace-only text raises InvalidCVDocumentError."""
+    with pytest.raises(InvalidCVDocumentError, match="empty or contains only whitespace"):
+        validate_cv_document("")
+
+    with pytest.raises(InvalidCVDocumentError, match="empty or contains only whitespace"):
+        validate_cv_document("   \n\t  ")
+
+
+def test_validate_cv_document_deterministic_sanity_too_short_text():
+    """Test 29: Insufficient text (< 40 chars or < 6 words) raises InvalidCVDocumentError."""
+    with pytest.raises(InvalidCVDocumentError, match="insufficient text content"):
+        validate_cv_document("Hello world")
+
+    with pytest.raises(InvalidCVDocumentError, match="insufficient text content"):
+        validate_cv_document("Short text 12345")
+
+
+def test_validate_cv_document_plausible_cv_passes(monkeypatch):
+    """Test 30: Plausible student CV text passes validation when semantic classifier approves."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = '{"is_cv": true, "confidence": 0.95, "reason_code": "valid_cv"}'
+    mock_client.models.generate_content.return_value = mock_response
+
+    monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
+
+    sample_cv = (
+        "Jane Doe\n"
+        "jane.doe@university.edu\n"
+        "Education: Bachelor of Science in Computer Science, 2022-2026\n"
+        "Skills: Python, FastAPI, React Native, Git, SQL\n"
+        "Projects: InternMatch AI - Full-stack mobile platform"
+    )
+    result = validate_cv_document(sample_cv, content_locale="en")
+    assert isinstance(result, CVValidationResult)
+    assert result.is_cv is True
+    assert result.confidence == 0.95
+    assert result.reason_code == "valid_cv"
+
+
+def test_validate_cv_document_unrelated_text_rejected_by_semantic_classifier(monkeypatch):
+    """Test 31: Unrelated document (e.g. invoice/receipt) is rejected by classifier."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = (
+        '{"is_cv": false, "confidence": 0.98, "reason_code": "invoice_or_financial"}'
+    )
+    mock_client.models.generate_content.return_value = mock_response
+
+    monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
+
+    invoice_text = (
+        "INVOICE #98765\n"
+        "Billed To: ACME Corporation\n"
+        "Item 1: Cloud Hosting Services - $450.00\n"
+        "Item 2: Domain Registration - $50.00\n"
+        "Total Balance Due: $500.00\n"
+        "Please submit wire transfer to Bank Account 123456789."
+    )
+    with pytest.raises(InvalidCVDocumentError) as exc_info:
+        validate_cv_document(invoice_text, content_locale="en")
+
+    assert "does not appear to be a valid CV or resume" in str(exc_info.value)
+    assert exc_info.value.reason_code == "invoice_or_financial"
+
+
+def test_validate_cv_document_low_confidence_rejected(monkeypatch):
+    """Test 32: Ambiguous document with low confidence (< 0.5) is rejected."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = '{"is_cv": true, "confidence": 0.40, "reason_code": "ambiguous_fragment"}'
+    mock_client.models.generate_content.return_value = mock_response
+
+    monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
+
+    text = "Some random text fragment discussing computer programming and software development."
+    with pytest.raises(InvalidCVDocumentError):
+        validate_cv_document(text, content_locale="en")
+
+
+def test_validate_cv_document_provider_error_raises_service_error(monkeypatch):
+    """Test 33: Provider exception raises CVValidationServiceError, not InvalidCVDocumentError."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = RuntimeError("API connection timeout")
+
+    monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
+
+    text = "Jane Doe Computer Science Student Resume Python SQL"
+    with pytest.raises(CVValidationServiceError, match="LLM classification service error"):
+        validate_cv_document(text, content_locale="en")
+
+
+def test_validate_cv_document_turkish_and_arabic_supported(monkeypatch):
+    """Test 34: Multilingual resumes (Turkish, Arabic) pass validation with target locale."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = '{"is_cv": true, "confidence": 0.96, "reason_code": "valid_cv"}'
+    mock_client.models.generate_content.return_value = mock_response
+
+    monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
+
+    turkish_cv = (
+        "Ahmet Yılmaz\n"
+        "Özgeçmiş\n"
+        "Eğitim: Bilgisayar Mühendisliği, Boğaziçi Üniversitesi (2021-2025)\n"
+        "Yetenekler: Python, Django, PostgreSQL, Docker\n"
+        "Projeler: Akıllı Eşleştirme Uygulaması"
+    )
+    result = validate_cv_document(turkish_cv, content_locale="tr")
+    assert result.is_cv is True
+    assert result.confidence == 0.96

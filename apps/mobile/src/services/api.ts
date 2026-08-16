@@ -164,3 +164,45 @@ export async function upsertProfile(
   });
 }
 
+export type CVProcessingResponse = {
+  job_id: string;
+  status: 'queued';
+  message: string;
+  estimated_seconds: number;
+};
+
+export type ProcessingJobResponse = {
+  job_id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  progress_percent: number;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  updated_at: string;
+};
+
+export async function uploadCV(file: {
+  uri: string;
+  name: string;
+  type?: string;
+}): Promise<CVProcessingResponse> {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.type || 'application/pdf',
+  } as any);
+
+  return apiRequest<CVProcessingResponse>('/profile/cv', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function getProcessingJob(
+  jobId: string
+): Promise<ProcessingJobResponse> {
+  return apiRequest<ProcessingJobResponse>(`/jobs/${encodeURIComponent(jobId)}`, {
+    method: 'GET',
+  });
+}
+

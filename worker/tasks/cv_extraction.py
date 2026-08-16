@@ -20,6 +20,10 @@ from app.services.cv_profile_extraction import (
     extract_structured_candidate_profile,
 )
 from app.services.cv_storage import download_candidate_cv
+from app.services.cv_validation import (
+    InvalidCVDocumentError,
+    validate_cv_document,
+)
 
 
 def _normalize_uuid(val: Union[UUID, str], param_name: str) -> UUID:
@@ -96,13 +100,19 @@ def run_cv_extraction(
             content=cv_bytes,
         )
 
-        # Step 3: Structured LLM extraction
+        # Step 3: Semantic CV Validation (before any profile extraction/mutation)
+        validate_cv_document(
+            text=extracted_text,
+            content_locale=content_locale or "en",
+        )
+
+        # Step 4: Structured LLM extraction
         extracted_profile = extract_structured_candidate_profile(
             text=extracted_text,
             content_locale=content_locale or "en",
         )
 
-        # Step 4: Transactional structured candidate data persistence
+        # Step 5: Transactional structured candidate data persistence
         profile = replace_candidate_profile_from_extraction(
             db=db,
             user_id=norm_user_id,
@@ -110,13 +120,13 @@ def run_cv_extraction(
             extracted=extracted_profile,
         )
 
-        # Step 5: Candidate summary embedding generation & persistence
+        # Step 6: Candidate summary embedding generation & persistence
         generate_and_persist_candidate_embedding(
             db=db,
             user_id=norm_user_id,
         )
 
-        # Step 6: Mark job completed
+        # Step 7: Mark job completed
         job.status = "completed"
         job.progress_percent = 100
         job.error = None
@@ -129,7 +139,7 @@ def run_cv_extraction(
             "status": "completed",
             "profile_id": str(profile.id),
         }
-    except Exception:
+    except Exception as exc:
         try:
             db.rollback()
         finally:
@@ -144,7 +154,13 @@ def run_cv_extraction(
                     fail_job.status = "failed"
                     fail_job.progress_percent = 100
                     fail_job.result = None
-                    fail_job.error = "CV processing failed."
+                    if isinstance(exc, InvalidCVDocumentError):
+                        fail_job.error = (
+                            "The uploaded document does not appear to be a valid CV or resume. "
+                            "Please upload a valid resume."
+                        )
+                    else:
+                        fail_job.error = "CV processing failed."
                     fail_db.commit()
             except Exception:
                 fail_db.rollback()
