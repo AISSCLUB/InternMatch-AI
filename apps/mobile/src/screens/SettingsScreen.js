@@ -3,6 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } f
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
 
+import { signOut } from '../services/auth';
+import { useProfile } from '../context/ProfileContext';
+
 function Row({ label, right, onPress }) {
   const Wrapper = onPress ? TouchableOpacity : View;
   return (
@@ -17,6 +20,26 @@ export default function SettingsScreen({ navigation }) {
   const [newMatches, setNewMatches] = useState(true);
   const [statusUpdates, setStatusUpdates] = useState(true);
   const [searchable, setSearchable] = useState(false);
+  const { clearProfile } = useProfile();
+
+  const handleExit = async () => {
+    try {
+      const { error } = await signOut();
+
+      if (error) {
+        throw error;
+      }
+
+      clearProfile();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SignIn' }],
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to sign out.';
+      Alert.alert('Sign out failed', message);
+    }
+  };
 
   const confirmDelete = () => {
     Alert.alert('Delete Account', 'This action cannot be undone. Are you sure?', [
@@ -47,9 +70,9 @@ export default function SettingsScreen({ navigation }) {
       <Row label="Export My Data" right={<Ionicons name="chevron-forward" size={18} color={colors.textMuted} />} onPress={() => {}} />
 
       <Text style={styles.sectionTitle}>Preferences</Text>
-      <Row label="Language" right={<Text style={styles.valueText}>English  â€º</Text>} onPress={() => {}} />
+      <Row label="Language" right={<Text style={styles.valueText}>English  ></Text>} onPress={() => {}} />
 
-      <TouchableOpacity style={styles.dangerButton} onPress={() => navigation.getParent()?.navigate('SignIn')}>
+      <TouchableOpacity style={styles.dangerButton} onPress={handleExit}>
         <Text style={styles.dangerText}>Exit</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.dangerButton} onPress={confirmDelete}>

@@ -1,28 +1,57 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
+import { useProfile } from '../context/ProfileContext';
+import { upsertProfile } from '../services/api';
 
 export default function EditProfileScreen({ navigation }) {
-  const [fullName, setFullName] = useState('');
-  const [department, setDepartment] = useState('');
-  const [university, setUniversity] = useState('');
-  const [grade, setGrade] = useState('');
-  const [skills, setSkills] = useState(['Python', 'ML', 'SQL']);
-  const [linkedin, setLinkedin] = useState('');
-  const [github, setGithub] = useState('');
+  const { profile, setProfile } = useProfile();
 
-  const removeSkill = (skill) => setSkills((prev) => prev.filter((s) => s !== skill));
+  const [fullName, setFullName] = useState(profile?.full_name ?? '');
+  const [headline, setHeadline] = useState(profile?.headline ?? '');
+  const [department, setDepartment] = useState(
+    typeof profile?.preferences?.department === 'string' ? profile.preferences.department : ''
+  );
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    // TODO: persist changes to backend / store
-    navigation.goBack();
+  const skills = profile?.skills || [];
+
+  const handleSave = async () => {
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      Alert.alert('Edit Profile', 'Please enter your full name.');
+      return;
+    }
+
+    if (saving) return;
+
+    setSaving(true);
+    try {
+      const payload = {
+        full_name: trimmedName,
+        headline: headline.trim() || (department.trim() ? department.trim() : null),
+        preferences: {
+          ...(profile?.preferences || {}),
+          department: department.trim() || null,
+        },
+      };
+
+      const updated = await upsertProfile(payload);
+      setProfile(updated);
+      navigation.goBack();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save profile.';
+      Alert.alert('Save failed', message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
         <Ionicons name="arrow-back" size={22} color={colors.textDark} />
       </TouchableOpacity>
@@ -33,33 +62,53 @@ export default function EditProfileScreen({ navigation }) {
         <View style={styles.avatarPlaceholder}>
           <Ionicons name="person-add-outline" size={26} color={colors.teal} />
         </View>
-        <Text style={styles.avatarLabel}>Update Photo</Text>
+        <Text style={styles.avatarLabel}>Profile Picture</Text>
       </View>
 
-      <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#8A8A8A" value={fullName} onChangeText={setFullName} />
-      <TextInput style={styles.input} placeholder="Department" placeholderTextColor="#8A8A8A" value={department} onChangeText={setDepartment} />
-      <TextInput style={styles.input} placeholder="University" placeholderTextColor="#8A8A8A" value={university} onChangeText={setUniversity} />
-      <TouchableOpacity style={styles.input}>
-        <View style={styles.gradeRow}>
-          <Text style={{ color: grade ? colors.textDark : '#8A8A8A' }}>{grade || 'Grade'}</Text>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </View>
-      </TouchableOpacity>
+      <Text style={styles.label}>Full Name</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Full Name"
+        placeholderTextColor="#8A8A8A"
+        value={fullName}
+        onChangeText={setFullName}
+      />
 
-      <Text style={styles.sectionTitle}>Skills</Text>
-      <View style={styles.chipRow}>
-        {skills.map((s) => (
-          <Chip key={s} label={s} variant="skill" onRemove={() => removeSkill(s)} />
-        ))}
-        <TouchableOpacity style={styles.addChip}>
-          <Ionicons name="add" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.label}>Headline</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Computer Science Student"
+        placeholderTextColor="#8A8A8A"
+        value={headline}
+        onChangeText={setHeadline}
+      />
 
-      <TextInput style={styles.input} placeholder="LinkedIn" placeholderTextColor="#8A8A8A" value={linkedin} onChangeText={setLinkedin} />
-      <TextInput style={styles.input} placeholder="GitHub" placeholderTextColor="#8A8A8A" value={github} onChangeText={setGithub} />
+      <Text style={styles.label}>Department / Major</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Computer Engineering"
+        placeholderTextColor="#8A8A8A"
+        value={department}
+        onChangeText={setDepartment}
+      />
 
-      <GradientButton title="Save" color={colors.teal} onPress={handleSave} style={{ marginTop: 20 }} />
+      {skills.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Skills (Extracted from CV)</Text>
+          <View style={styles.chipRow}>
+            {skills.map((s) => (
+              <Chip key={s} label={s} variant="skill" />
+            ))}
+          </View>
+        </>
+      )}
+
+      <GradientButton
+        title={saving ? "Saving..." : "Save"}
+        color={colors.teal}
+        onPress={handleSave}
+        style={{ marginTop: 20 }}
+      />
     </ScrollView>
   );
 }
@@ -80,25 +129,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarLabel: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
+  label: { fontSize: 12, fontWeight: '600', color: colors.textDark, marginBottom: 4, marginLeft: 4 },
   input: {
     borderWidth: 1.5,
     borderColor: colors.teal,
     borderRadius: 22,
     height: 46,
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     justifyContent: 'center',
     color: colors.textDark,
   },
-  gradeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontWeight: '700', color: colors.textDark, marginBottom: 8 },
+  sectionTitle: { fontWeight: '700', color: colors.textDark, marginTop: 8, marginBottom: 8 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 },
-  addChip: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#EDEDED',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 });

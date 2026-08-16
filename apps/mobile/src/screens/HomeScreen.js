@@ -1,19 +1,21 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
 import GradientButton from '../components/GradientButton';
 import MatchBadge from '../components/MatchBadge';
+import { useProfile } from '../context/ProfileContext';
 
-// Replace with real user / CV state from your store (Redux, Zustand, Context...)
-const MOCK_USER_NAME = 'Aiss Club';
 const MOCK_MATCHUPS = [
-  { id: '1', title: 'AI Engineer Intern', company: 'Nova Labs', location: 'Ã„Â°stanbul', score: 94, highlight: true },
+  { id: '1', title: 'AI Engineer Intern', company: 'Nova Labs', location: 'İstanbul', score: 94, highlight: true },
   { id: '2', title: 'Data Analyst Intern', score: 88 },
   { id: '3', title: 'Backend Intern', score: 71 },
 ];
 
 export default function HomeScreen({ navigation, route }) {
+  const { profile } = useProfile();
+  const displayName = profile?.full_name?.trim() || 'Student';
+
   // Toggle this (or wire to real state) to preview both Figma states:
   // false -> "Upload your CV" empty state / true -> "Today's matchups" state
   const [cvAnalyzed, setCvAnalyzed] = useState(false);
@@ -30,7 +32,7 @@ export default function HomeScreen({ navigation, route }) {
         <Text style={styles.brand}>InternMatch</Text>
         <Ionicons name="locate" size={20} color={colors.teal} style={{ marginLeft: 4 }} />
       </View>
-      <Text style={styles.hello}>Hello, {MOCK_USER_NAME} Ã°Å¸â€˜â€¹</Text>
+      <Text style={styles.hello}>Hello, {displayName} 👋</Text>
 
       {!cvAnalyzed ? (
         <>
@@ -39,7 +41,7 @@ export default function HomeScreen({ navigation, route }) {
               <Ionicons name="arrow-up" size={22} color={colors.teal} />
             </View>
             <Text style={styles.uploadTitle}>Upload your CV and let the matches begin.</Text>
-            <Text style={styles.uploadSubtitle}>Drag and drop or select a PDF Ã¢â‚¬â€ AI analyzes it in 30 seconds.</Text>
+            <Text style={styles.uploadSubtitle}>Drag and drop or select a PDF — AI analyzes it in 30 seconds.</Text>
             <GradientButton
               title="Upload CV"
               color={colors.teal}
@@ -68,7 +70,7 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={styles.statusLabel}>CV STATUS</Text>
             <Text style={styles.statusTitle}>Your profile has been analyzed.</Text>
             <View style={styles.statusFileRow}>
-              <Text style={styles.statusFileName}>CV_Aiss_Club.pdf</Text>
+              <Text style={styles.statusFileName}>CV Document</Text>
               <TouchableOpacity onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}>
                 <Text style={styles.reloadLink}>Reload</Text>
               </TouchableOpacity>
@@ -90,7 +92,7 @@ export default function HomeScreen({ navigation, route }) {
                     <MatchBadge score={item.score} />
                   </View>
                   <Text style={styles.highlightMeta}>
-                    {item.company} Ã‚Â· {item.location}
+                    {item.company} · {item.location}
                   </Text>
                 </>
               ) : (
@@ -170,4 +172,3 @@ const styles = StyleSheet.create({
   },
   plainTitle: { fontWeight: '600', color: colors.textDark },
 });
-

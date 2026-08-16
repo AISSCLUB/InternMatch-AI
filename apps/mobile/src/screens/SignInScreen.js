@@ -1,23 +1,84 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { gradientColors, colors } from '../theme/colors';
 import GradientButton from '../components/GradientButton';
 import { signInWithGoogle } from '../services/googleAuth';
+import { signInWithEmail } from '../services/auth';
+import { syncAuthenticatedUser, upsertProfile } from '../services/api';
+import { useProfile } from '../context/ProfileContext';
 
 export default function SignInScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { refreshProfile, setProfile } = useProfile();
 
-  const handleContinue = () => {
-    // TODO: hook up to real auth (Firebase / your backend)
-    navigation.replace('MainTabs');
+  const handleContinue = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !password) {
+      Alert.alert('Sign in', 'Please enter your email and password.');
+      return;
+    }
+
+    if (loading) return;
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await signInWithEmail(normalizedEmail, password);
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.session?.access_token) {
+        throw new Error('Authentication succeeded but no active session was returned.');
+      }
+
+      const syncResult = await syncAuthenticatedUser();
+      if (syncResult.has_profile) {
+        await refreshProfile();
+        navigation.replace('MainTabs');
+      } else {
+        const meta = data.session?.user?.user_metadata || {};
+        const metaName = typeof meta.full_name === 'string' ? meta.full_name.trim() : '';
+        const metaDept = typeof meta.department === 'string' ? meta.department.trim() : '';
+        const metaAccountType = meta.account_type === 'employer' ? 'employer' : 'intern';
+
+        if (metaName) {
+          try {
+            const created = await upsertProfile({
+              full_name: metaName,
+              headline: null,
+              preferences: {
+                account_type: metaAccountType,
+                department: metaDept || null,
+              },
+            });
+            setProfile(created);
+            navigation.replace('MainTabs');
+          } catch (createErr) {
+            console.warn('Failed to bootstrap profile from metadata:', createErr);
+            throw createErr;
+          }
+        } else {
+          navigation.replace('OnboardingProfile');
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to sign in.';
+      Alert.alert('Sign in failed', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogle = async () => {
     try {
       await signInWithGoogle();
-      navigation.replace('MainTabs');
+      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
     } catch (e) {
       console.warn('Google sign-in failed', e);
     }
@@ -54,7 +115,7 @@ export default function SignInScreen({ navigation }) {
             <Text style={styles.forgot}>I forgot my password</Text>
           </TouchableOpacity>
 
-          <GradientButton title="Continue" color={colors.primaryBlue} onPress={handleContinue} style={{ marginTop: 24 }} />
+          <GradientButton title={loading ? "Signing in..." : "Continue"} color={colors.primaryBlue} onPress={handleContinue} style={{ marginTop: 24 }} />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />

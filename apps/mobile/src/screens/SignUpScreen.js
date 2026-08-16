@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { gradientColors, colors } from '../theme/colors';
 import GradientButton from '../components/GradientButton';
 import { signInWithGoogle } from '../services/googleAuth';
+import { signUpWithEmail } from '../services/auth';
+import { syncAuthenticatedUser, upsertProfile } from '../services/api';
+import { useProfile } from '../context/ProfileContext';
 
 export default function SignUpScreen({ navigation }) {
   const [accountType, setAccountType] = useState('intern'); // 'intern' | 'employer'
@@ -12,16 +15,76 @@ export default function SignUpScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [department, setDepartment] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { setProfile } = useProfile();
 
-  const handleCreateAccount = () => {
-    // TODO: hook up to real signup (Firebase / your backend)
-    navigation.replace('MainTabs');
+  const handleCreateAccount = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedName = fullName.trim();
+    const normalizedDepartment = department.trim();
+
+    if (!normalizedName || !normalizedEmail || !password) {
+      Alert.alert('Create account', 'Please enter your full name, email, and password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Create account', 'Password must contain at least 6 characters.');
+      return;
+    }
+
+    if (loading) return;
+
+    setLoading(true);
+
+    try {
+      const metadata = {
+        full_name: normalizedName,
+        department: normalizedDepartment || null,
+        account_type: accountType,
+      };
+
+      const { data, error } = await signUpWithEmail(normalizedEmail, password, metadata);
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.session?.access_token) {
+        Alert.alert(
+          'Check your email',
+          'Your account was created. Please confirm your email address, then sign in.'
+        );
+        navigation.replace('SignIn');
+        return;
+      }
+
+      await syncAuthenticatedUser();
+
+      const createdProfile = await upsertProfile({
+        full_name: normalizedName,
+        headline: null,
+        preferences: {
+          account_type: accountType,
+          department: normalizedDepartment || null,
+        },
+      });
+
+      setProfile(createdProfile);
+
+      navigation.replace('MainTabs');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create account.';
+      Alert.alert('Sign up failed', message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogle = async () => {
     try {
       await signInWithGoogle();
-      navigation.replace('MainTabs');
+      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
     } catch (e) {
       console.warn('Google sign-in failed', e);
     }
@@ -73,7 +136,7 @@ export default function SignUpScreen({ navigation }) {
           <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#8A8A8A" secureTextEntry value={password} onChangeText={setPassword} />
           <TextInput style={styles.input} placeholder="Department" placeholderTextColor="#8A8A8A" value={department} onChangeText={setDepartment} />
 
-          <GradientButton title="Create an account" color={colors.primaryBlue} onPress={handleCreateAccount} style={{ marginTop: 20 }} />
+          <GradientButton title={loading ? "Creating account..." : "Create an account"} color={colors.primaryBlue} onPress={handleCreateAccount} style={{ marginTop: 20 }} />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />

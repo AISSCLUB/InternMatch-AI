@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SplashScreen from '../screens/SplashScreen';
 import SignInScreen from '../screens/SignInScreen';
 import SignUpScreen from '../screens/SignUpScreen';
+import OnboardingProfileScreen from '../screens/OnboardingProfileScreen';
 import MainTabs from './MainTabs';
 import InternshipDetailScreen from '../screens/InternshipDetailScreen';
 import WhyYouMatchScreen from '../screens/WhyYouMatchScreen';
@@ -24,6 +25,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="SignIn" component={SignInScreen} />
         <Stack.Screen name="SignUp" component={SignUpScreen} />
+        <Stack.Screen name="OnboardingProfile" component={OnboardingProfileScreen} />
 
         {/* Main app (bottom tabs) */}
         <Stack.Screen name="MainTabs" component={MainTabs} />

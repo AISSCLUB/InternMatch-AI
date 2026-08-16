@@ -5,14 +5,27 @@ import {
 } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+export type SignUpMetadata = {
+  full_name?: string;
+  department?: string;
+  account_type?: string;
+  [key: string]: unknown;
+};
+
 /**
  * Sign up a new user using email and password credentials via Supabase Auth.
+ * Accepts optional user metadata (e.g. full_name, department, account_type) for bootstrap.
  */
 export async function signUpWithEmail(
   email: string,
-  password: string
+  password: string,
+  metadata?: SignUpMetadata
 ): Promise<AuthResponse> {
-  return await supabase.auth.signUp({ email, password });
+  return await supabase.auth.signUp({
+    email,
+    password,
+    options: metadata ? { data: metadata } : undefined,
+  });
 }
 
 /**
