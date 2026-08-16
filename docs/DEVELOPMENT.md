@@ -131,3 +131,14 @@ The mobile app uses `react-native-purchases` for in-app subscription management 
    - `feature/backend-<feature>`: Backend work (Mohammad).
    - `feature/frontend-<feature>`: Mobile/Landing UI work (Selen).
 
+
+---
+
+## Current Mobile Runtime Notes
+
+- Current integrated mobile baseline uses Expo SDK 54.
+- Start Metro / Expo with: npm start
+- Start React Native Web for rapid desktop UI inspection with: npm run web
+- Expo Go is used for physical-device development smoke testing.
+- React Native Web is not a substitute for physical-device verification of native features.
+- Do not add newArchEnabled=false to app.json.

@@ -471,3 +471,18 @@ The software codebase, architecture designs, dataset definitions, and original p
 8. **Implementation Boundary:** No i18n libraries, translation dictionaries, or database translation tables are introduced in Gate 1 scaffolding.
 
 
+
+---
+
+## 15. Mobile Runtime & Integration Contract
+
+- Mobile runtime: Expo SDK 54, React 19.1, React Native 0.81.
+- React Native New Architecture uses the Expo SDK 54 default; do not set newArchEnabled=false.
+- React Navigation route params must remain serializable; do not pass callbacks or state setters through route params.
+- Timers/intervals must be cleared on stop and unmount.
+- Supabase Auth is the mobile identity provider.
+- Protected FastAPI requests must send Authorization: Bearer <SUPABASE_ACCESS_TOKEN>.
+- Backend identity is derived only from verified Supabase JWT claims.
+- Current frontend CV analysis/progress is temporary simulated behavior and is not an authoritative AI result.
+- Final CV flow must use POST /api/v1/profile/cv, processing jobs, and GET /api/v1/profile.
+- Google and Apple authentication remain provider-specific integration work until fully implemented and verified.
