@@ -206,3 +206,80 @@ export async function getProcessingJob(
   });
 }
 
+export type InternshipSummary = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  work_type: string;
+  required_skills: string[];
+  preferred_skills: string[];
+  posted_at: string;
+};
+
+export type InternshipListResponse = {
+  items: InternshipSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type InternshipDetail = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  work_type: string;
+  description: string;
+  required_skills: string[];
+  preferred_skills: string[];
+  languages: string[];
+  min_education: string | null;
+  posted_at: string;
+};
+
+export type GetInternshipsParams = {
+  work_type?: string;
+  location?: string;
+  skill?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function getInternships(
+  params: GetInternshipsParams = {}
+): Promise<InternshipListResponse> {
+  const queryParts: string[] = [];
+
+  if (params.work_type && params.work_type.trim()) {
+    queryParts.push(`work_type=${encodeURIComponent(params.work_type.trim())}`);
+  }
+  if (params.location && params.location.trim()) {
+    queryParts.push(`location=${encodeURIComponent(params.location.trim())}`);
+  }
+  if (params.skill && params.skill.trim()) {
+    queryParts.push(`skill=${encodeURIComponent(params.skill.trim())}`);
+  }
+  if (typeof params.limit === 'number' && params.limit > 0) {
+    queryParts.push(`limit=${encodeURIComponent(params.limit.toString())}`);
+  }
+  if (typeof params.offset === 'number' && params.offset >= 0) {
+    queryParts.push(`offset=${encodeURIComponent(params.offset.toString())}`);
+  }
+
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+  return apiRequest<InternshipListResponse>(`/internships${queryString}`, {
+    method: 'GET',
+    authenticated: false,
+  });
+}
+
+export async function getInternshipDetail(
+  id: string
+): Promise<InternshipDetail> {
+  return apiRequest<InternshipDetail>(`/internships/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    authenticated: false,
+  });
+}
