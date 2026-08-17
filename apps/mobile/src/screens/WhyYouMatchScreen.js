@@ -10,6 +10,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import Chip from '../components/Chip';
 import { getMatchExplanation, ApiError } from '../services/api';
 
@@ -22,12 +27,19 @@ function ScoreRing({ score, size = 140, strokeWidth = 12 }) {
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#E1EEF0" strokeWidth={strokeWidth} fill="none" />
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={colors.tealDark}
+          stroke="#E1EEF0"
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={colors.accentStrong || colors.tealDark}
           strokeWidth={strokeWidth}
           fill="none"
           strokeDasharray={circumference}
@@ -84,241 +96,382 @@ export default function WhyYouMatchScreen({ route, navigation }) {
   }, [fetchExplanationData]);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <Ionicons name="arrow-back" size={22} color={colors.textDark} />
-      </TouchableOpacity>
+    <ScreenContainer edges={['top', 'bottom']}>
+      <ScreenHeader
+        title="Why You Match"
+        showBack={true}
+        navigation={navigation}
+      />
 
-      <Text style={styles.title}>Why You Match</Text>
-
-      {/* Loading State */}
-      {loading && (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.teal} />
-          <Text style={styles.loadingText}>Generating AI Match Breakdown...</Text>
-          <Text style={styles.loadingSubtext}>Analyzing requirements against your verified background</Text>
-        </View>
-      )}
-
-      {/* 404 Not Found */}
-      {!loading && isNotFound && (
-        <View style={styles.card}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.cardTitle}>Match Record Not Found</Text>
-          <Text style={styles.cardSubtitle}>
-            This match explanation could not be found. Please recalculate matches from the Matchups tab.
-          </Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.primaryButtonText}>Back to Matchups</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Error State */}
-      {!loading && !isNotFound && error && (
-        <View style={styles.card}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.red || '#EF4444'} />
-          <Text style={styles.cardTitle}>Could Not Load Explanation</Text>
-          <Text style={styles.cardSubtitle}>{error}</Text>
-          <TouchableOpacity style={styles.primaryButton} onPress={fetchExplanationData}>
-            <Text style={styles.primaryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Populated Explanation */}
-      {!loading && !isNotFound && !error && explanation && (
-        <>
-          {/* Compatibility Ring */}
-          <View style={styles.ringWrap}>
-            <ScoreRing score={explanation.overall_score} />
-            <Text style={styles.scoreLabel}>Overall Compatibility Fit</Text>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Loading State */}
+        {loading && (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+            <Text style={styles.loadingText}>Generating AI Match Breakdown...</Text>
+            <Text style={styles.loadingSubtext}>
+              Analyzing requirements against your verified background
+            </Text>
           </View>
+        )}
 
-          {/* AI Narrative Breakdown */}
-          {explanation.why_you_match ? (
-            <View style={styles.narrativeCard}>
-              <View style={styles.narrativeHeader}>
-                <Ionicons name="sparkles" size={16} color={colors.tealDark} style={{ marginRight: 6 }} />
-                <Text style={styles.narrativeTitle}>AI Fit Assessment</Text>
+        {/* 404 Not Found State */}
+        {!loading && isNotFound && (
+          <Card style={styles.statusCard} padding="lg">
+            <Ionicons name="alert-circle-outline" size={48} color={colors.textTertiary || colors.textMuted} />
+            <Text style={styles.cardTitle}>Match Record Not Found</Text>
+            <Text style={styles.cardSubtitle}>
+              This match explanation could not be found. Please recalculate matches from the Matchups tab.
+            </Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+              accessibilityLabel="Back to Matchups"
+            >
+              <Text style={styles.primaryButtonText}>Back to Matchups</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Error State */}
+        {!loading && !isNotFound && error && (
+          <Card style={styles.errorCard} padding="lg">
+            <Ionicons name="alert-circle-outline" size={48} color={colors.danger || '#EF4444'} />
+            <Text style={styles.cardTitle}>Could Not Load Explanation</Text>
+            <Text style={styles.cardSubtitle}>{error}</Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={fetchExplanationData}
+              accessibilityRole="button"
+              accessibilityLabel="Try Again"
+            >
+              <Text style={styles.primaryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Populated Match Breakdown */}
+        {!loading && !isNotFound && !error && explanation && (
+          <>
+            {/* Compatibility Score Hero */}
+            <View style={styles.ringWrap}>
+              <ScoreRing score={explanation.overall_score} />
+              <Text style={styles.scoreLabel}>Overall Compatibility Fit</Text>
+            </View>
+
+            {/* AI Narrative Fit Assessment */}
+            {explanation.why_you_match ? (
+              <Card style={styles.narrativeCard} padding="md">
+                <View style={styles.narrativeHeader}>
+                  <Ionicons
+                    name="sparkles"
+                    size={16}
+                    color={colors.accentStrong || colors.tealDark}
+                    style={styles.headerIcon}
+                  />
+                  <Text style={styles.narrativeTitle}>AI Fit Assessment</Text>
+                </View>
+                <Text style={styles.narrativeBody}>{explanation.why_you_match}</Text>
+              </Card>
+            ) : null}
+
+            {/* Matching Competencies */}
+            <Text style={styles.sectionTitle}>Matching Competencies</Text>
+            {explanation.matching_skills && explanation.matching_skills.length > 0 ? (
+              <View style={styles.chipRow}>
+                {explanation.matching_skills.map((skill) => (
+                  <Chip key={skill} label={skill} variant="skill" />
+                ))}
               </View>
-              <Text style={styles.narrativeBody}>{explanation.why_you_match}</Text>
-            </View>
-          ) : null}
+            ) : (
+              <Text style={styles.emptySkillsNotice}>No direct skill overlaps identified.</Text>
+            )}
 
-          {/* Matching Skills */}
-          <Text style={styles.sectionTitle}>Matching Competencies</Text>
-          {explanation.matching_skills && explanation.matching_skills.length > 0 ? (
-            <View style={styles.chipRow}>
-              {explanation.matching_skills.map((skill) => (
-                <Chip key={skill} label={skill} variant="skill" />
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptySkillsNotice}>No direct skill overlaps identified.</Text>
-          )}
-
-          {/* Missing Skills / Skill Gap */}
-          <Text style={styles.sectionTitle}>Identified Skill Gaps</Text>
-          {explanation.missing_skills && explanation.missing_skills.length > 0 ? (
-            <View style={styles.chipRow}>
-              {explanation.missing_skills.map((skill) => (
-                <Chip key={skill} label={skill} variant="gap" />
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptySkillsNotice}>No major skill gaps identified for this role.</Text>
-          )}
-
-          {/* Skill Gap Analysis & Recommendations */}
-          {explanation.skill_gap_analysis && (
-            <View style={styles.recommendationsBox}>
-              <View style={styles.recHeaderRow}>
-                <Ionicons name="bulb-outline" size={18} color={colors.orange || '#F59E0B'} style={{ marginRight: 6 }} />
-                <Text style={styles.recBoxTitle}>Skill Gap Analysis & Next Steps</Text>
+            {/* Identified Skill Gaps */}
+            <Text style={styles.sectionTitle}>Identified Skill Gaps</Text>
+            {explanation.missing_skills && explanation.missing_skills.length > 0 ? (
+              <View style={styles.chipRow}>
+                {explanation.missing_skills.map((skill) => (
+                  <Chip key={skill} label={skill} variant="gap" />
+                ))}
               </View>
+            ) : (
+              <Text style={styles.emptySkillsNotice}>No major skill gaps identified for this role.</Text>
+            )}
 
-              {explanation.skill_gap_analysis.summary ? (
-                <Text style={styles.recSummaryText}>{explanation.skill_gap_analysis.summary}</Text>
-              ) : null}
+            {/* Skill Gap Analysis & Recommendations */}
+            {explanation.skill_gap_analysis ? (
+              <View style={styles.recommendationsBox}>
+                <View style={styles.recHeaderRow}>
+                  <Ionicons
+                    name="bulb-outline"
+                    size={18}
+                    color="#B45309"
+                    style={styles.headerIcon}
+                  />
+                  <Text style={styles.recBoxTitle}>Skill Gap Analysis & Recommendations</Text>
+                </View>
 
-              {explanation.skill_gap_analysis.recommendations &&
-                explanation.skill_gap_analysis.recommendations.length > 0 && (
+                {explanation.skill_gap_analysis.summary ? (
+                  <Text style={styles.recSummaryText}>
+                    {explanation.skill_gap_analysis.summary}
+                  </Text>
+                ) : null}
+
+                {explanation.skill_gap_analysis.recommendations &&
+                explanation.skill_gap_analysis.recommendations.length > 0 ? (
                   <View style={styles.recommendationsList}>
                     {explanation.skill_gap_analysis.recommendations.map((rec, idx) => (
                       <View key={idx} style={styles.recItemRow}>
-                        <Ionicons name="checkmark-circle" size={16} color={colors.teal} style={styles.recIcon} />
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={16}
+                          color={colors.accent || colors.teal}
+                          style={styles.recIcon}
+                        />
                         <Text style={styles.recItemText}>{rec}</Text>
                       </View>
                     ))}
                   </View>
-                )}
-            </View>
-          )}
+                ) : null}
+              </View>
+            ) : null}
 
-          {/* Personalized Cover Letter Generation CTA */}
-          <View style={styles.generateCtaCard}>
-            <View style={styles.generateCtaHeader}>
-              <Ionicons name="document-text-outline" size={20} color={colors.teal} style={{ marginRight: 8 }} />
-              <Text style={styles.generateCtaTitle}>Personalized Application</Text>
-            </View>
-            <Text style={styles.generateCtaSubtitle}>
-              Generate a tailored, grounded cover letter crafted from your verified profile and this match breakdown.
-            </Text>
-            <TouchableOpacity
-              style={styles.generateButton}
-              onPress={() =>
-                navigation.navigate('CoverLetterDraft', {
-                  matchId,
-                  internshipId,
-                })
-              }
-            >
-              <Ionicons name="sparkles" size={16} color={colors.white} style={{ marginRight: 6 }} />
-              <Text style={styles.generateButtonText}>Generate Cover Letter</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-    </ScrollView>
+            {/* Personalized Cover Letter Generation CTA */}
+            <Card variant="highlight" style={styles.generateCtaCard} padding="lg">
+              <View style={styles.generateCtaHeader}>
+                <Ionicons
+                  name="document-text-outline"
+                  size={20}
+                  color={colors.accent || colors.teal}
+                  style={styles.headerIcon}
+                />
+                <Text style={styles.generateCtaTitle}>Personalized Application</Text>
+              </View>
+              <Text style={styles.generateCtaSubtitle}>
+                Generate a tailored, grounded cover letter crafted from your verified profile and this match breakdown.
+              </Text>
+              <TouchableOpacity
+                style={styles.generateButton}
+                onPress={() =>
+                  navigation.navigate('CoverLetterDraft', {
+                    matchId,
+                    internshipId,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Generate Cover Letter"
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="sparkles"
+                  size={16}
+                  color={colors.textInverse || colors.white}
+                  style={styles.buttonIcon}
+                />
+                <Text style={styles.generateButtonText}>Generate Cover Letter</Text>
+              </TouchableOpacity>
+            </Card>
+          </>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cardBg },
-  content: { padding: 20, paddingBottom: 40 },
-  backBtn: { marginBottom: 12 },
-  title: { fontSize: 22, fontWeight: '700', color: colors.textDark, textAlign: 'center', marginBottom: 10 },
-  centerContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64 },
-  loadingText: { fontSize: 15, fontWeight: '700', color: colors.textDark, marginTop: 16 },
-  loadingSubtext: { fontSize: 12, color: colors.textMuted, marginTop: 4, textAlign: 'center' },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 28,
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xxxl,
+  },
+  centerContainer: {
     alignItems: 'center',
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl * 2,
   },
-  cardTitle: { fontSize: 17, fontWeight: '700', color: colors.textDark, marginTop: 12 },
-  cardSubtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 18 },
+  loadingText: {
+    ...typography.bodyEmphasis,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.lg,
+  },
+  loadingSubtext: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  statusCard: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+  },
+  errorCard: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    borderColor: colors.dangerSoft || '#FEE2E2',
+    backgroundColor: '#FEF2F2',
+  },
+  cardTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.md,
+  },
+  cardSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
   primaryButton: {
-    marginTop: 18,
-    backgroundColor: colors.teal,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 8,
+    marginTop: spacing.lg,
+    backgroundColor: colors.accent || colors.teal,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + spacing.xxs,
+    borderRadius: spacing.radii.sm,
+    minHeight: spacing.minimumTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  primaryButtonText: { color: colors.white, fontWeight: '600', fontSize: 13 },
-  ringWrap: { alignItems: 'center', marginVertical: 16 },
-  scoreText: { position: 'absolute', fontSize: 26, fontWeight: '700', color: colors.tealDark },
-  scoreLabel: { fontSize: 13, color: colors.textMuted, fontWeight: '600', marginTop: 8 },
+  primaryButtonText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+  },
+  ringWrap: {
+    alignItems: 'center',
+    marginVertical: spacing.lg,
+  },
+  scoreText: {
+    position: 'absolute',
+    ...typography.display,
+    color: colors.accentStrong || colors.tealDark,
+  },
+  scoreLabel: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    fontWeight: '600',
+    marginTop: spacing.sm,
+  },
   narrativeCard: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    marginBottom: spacing.lg,
   },
-  narrativeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  narrativeTitle: { fontSize: 14, fontWeight: '700', color: colors.tealDark },
-  narrativeBody: { fontSize: 13, color: colors.textDark, lineHeight: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.textDark, marginTop: 16, marginBottom: 10 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
-  emptySkillsNotice: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginBottom: 10 },
+  narrativeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  headerIcon: {
+    marginEnd: spacing.xs + spacing.xxs,
+  },
+  buttonIcon: {
+    marginEnd: spacing.xs + spacing.xxs,
+  },
+  narrativeTitle: {
+    ...typography.sectionTitle,
+    color: colors.accentStrong || colors.tealDark,
+  },
+  narrativeBody: {
+    ...typography.body,
+    color: colors.textPrimary || colors.textDark,
+    lineHeight: 22,
+  },
+  sectionTitle: {
+    ...typography.sectionTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  emptySkillsNotice: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    fontStyle: 'italic',
+    marginBottom: spacing.sm,
+  },
   recommendationsBox: {
     backgroundColor: '#FFFBEB',
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 20,
+    borderRadius: spacing.radii.lg,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
-  recHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  recBoxTitle: { fontSize: 14, fontWeight: '700', color: '#92400E' },
-  recSummaryText: { fontSize: 13, color: '#78350F', lineHeight: 18, marginBottom: 10 },
-  recommendationsList: { marginTop: 4 },
-  recItemRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 6 },
-  recIcon: { marginRight: 8, marginTop: 2 },
-  recItemText: { flex: 1, fontSize: 12, color: '#78350F', lineHeight: 18 },
+  recHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  recBoxTitle: {
+    ...typography.sectionTitle,
+    color: '#92400E',
+  },
+  recSummaryText: {
+    ...typography.body,
+    color: '#78350F',
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  recommendationsList: {
+    marginTop: spacing.xxs,
+  },
+  recItemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: spacing.xs + spacing.xxs,
+  },
+  recIcon: {
+    marginEnd: spacing.sm,
+    marginTop: spacing.xxs,
+  },
+  recItemText: {
+    flex: 1,
+    ...typography.caption,
+    color: '#78350F',
+    lineHeight: 18,
+  },
   generateCtaCard: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    padding: 18,
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
   },
   generateCtaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: spacing.xs,
   },
   generateCtaTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textDark,
+    ...typography.sectionTitle,
+    color: colors.textPrimary || colors.textDark,
   },
   generateCtaSubtitle: {
-    fontSize: 13,
-    color: colors.textMuted,
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
     lineHeight: 18,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   generateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.teal,
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: colors.accent || colors.teal,
+    borderRadius: spacing.radii.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: spacing.minimumTouchTarget,
   },
   generateButtonText: {
-    color: colors.white,
-    fontWeight: '700',
-    fontSize: 14,
+    ...typography.button,
+    color: colors.textInverse || colors.white,
   },
 });
