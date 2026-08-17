@@ -283,3 +283,66 @@ export async function getInternshipDetail(
     authenticated: false,
   });
 }
+
+export type InternshipMatchSummary = {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+};
+
+export type MatchItem = {
+  match_id: string;
+  internship: InternshipMatchSummary;
+  overall_score: number;
+  skill_score: number;
+  vector_score: number;
+  created_at: string;
+};
+
+export type MatchListResponse = {
+  matches: MatchItem[];
+};
+
+export type MatchCalculationAcceptedResponse = {
+  job_id: string;
+  status: 'queued';
+  message: string;
+};
+
+export type SkillGapAnalysis = {
+  summary: string;
+  recommendations: string[];
+};
+
+export type MatchExplanationResponse = {
+  match_id: string;
+  overall_score: number;
+  why_you_match: string;
+  matching_skills: string[];
+  missing_skills: string[];
+  skill_gap_analysis: SkillGapAnalysis;
+};
+
+export async function getMatches(): Promise<MatchListResponse> {
+  return apiRequest<MatchListResponse>('/matches', {
+    method: 'GET',
+  });
+}
+
+export async function calculateMatches(): Promise<MatchCalculationAcceptedResponse> {
+  return apiRequest<MatchCalculationAcceptedResponse>('/matches/calculate', {
+    method: 'POST',
+  });
+}
+
+export async function getMatchExplanation(
+  matchId: string
+): Promise<MatchExplanationResponse> {
+  return apiRequest<MatchExplanationResponse>(
+    `/matches/${encodeURIComponent(matchId)}/explanation`,
+    {
+      method: 'GET',
+    }
+  );
+}

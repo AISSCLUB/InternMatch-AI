@@ -163,7 +163,7 @@ def generate_grounded_match_explanation(
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=LLMMatchExplanation,
+            response_json_schema=LLMMatchExplanation.model_json_schema(),
         ),
     )
 
