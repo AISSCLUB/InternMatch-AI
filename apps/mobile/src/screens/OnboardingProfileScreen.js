@@ -12,12 +12,16 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { gradientColors, colors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 import GradientButton from '../components/GradientButton';
 import { upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 
 export default function OnboardingProfileScreen({ navigation, route }) {
+  const insets = useSafeAreaInsets();
   const initialName = typeof route?.params?.initialName === 'string' ? route.params.initialName : '';
   const initialDepartment = typeof route?.params?.initialDepartment === 'string' ? route.params.initialDepartment : '';
   const initialAccountType = route?.params?.initialAccountType === 'employer' ? 'employer' : 'intern';
@@ -65,8 +69,21 @@ export default function OnboardingProfileScreen({ navigation, route }) {
 
   return (
     <LinearGradient colors={gradientColors} style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + spacing.lg,
+              paddingBottom: insets.bottom + spacing.xl,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.title}>Complete Your Profile</Text>
           <Text style={styles.subtitle}>
             Please set up your profile details before exploring internship opportunities.
@@ -77,16 +94,32 @@ export default function OnboardingProfileScreen({ navigation, route }) {
             <TouchableOpacity
               style={[styles.typeButton, accountType === 'intern' && styles.typeButtonActive]}
               onPress={() => setAccountType('intern')}
+              accessibilityRole="button"
+              accessibilityLabel="Account type: Intern"
             >
-              <Ionicons name="school" size={16} color={accountType === 'intern' ? colors.white : colors.textDark} />
-              <Text style={[styles.typeText, accountType === 'intern' && styles.typeTextActive]}>Intern</Text>
+              <Ionicons
+                name="school"
+                size={16}
+                color={accountType === 'intern' ? colors.white : colors.textDark}
+              />
+              <Text style={[styles.typeText, accountType === 'intern' && styles.typeTextActive]}>
+                Intern
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.typeButton, accountType === 'employer' && styles.typeButtonActive]}
               onPress={() => setAccountType('employer')}
+              accessibilityRole="button"
+              accessibilityLabel="Account type: Employer"
             >
-              <Ionicons name="briefcase" size={16} color={accountType === 'employer' ? colors.white : colors.textDark} />
-              <Text style={[styles.typeText, accountType === 'employer' && styles.typeTextActive]}>Employer</Text>
+              <Ionicons
+                name="briefcase"
+                size={16}
+                color={accountType === 'employer' ? colors.white : colors.textDark}
+              />
+              <Text style={[styles.typeText, accountType === 'employer' && styles.typeTextActive]}>
+                Employer
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -121,7 +154,7 @@ export default function OnboardingProfileScreen({ navigation, route }) {
             title={saving ? "Saving profile..." : "Save & Continue"}
             color={colors.primaryBlue}
             onPress={handleComplete}
-            style={{ marginTop: 24 }}
+            style={{ marginTop: spacing.xl }}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -132,28 +165,66 @@ export default function OnboardingProfileScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  content: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
-  title: { fontSize: 24, fontWeight: '700', color: colors.white, marginBottom: 8 },
-  subtitle: { fontSize: 13, color: 'rgba(255, 255, 255, 0.85)', marginBottom: 24, lineHeight: 18 },
-  sectionLabel: { color: colors.white, fontWeight: '600', marginBottom: 8, fontSize: 12 },
-  typeRow: { flexDirection: 'row', marginBottom: 18 },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+  },
+  title: {
+    ...typography.display,
+    fontSize: 24,
+    color: colors.white,
+    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    ...typography.caption,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginBottom: spacing.xl,
+    lineHeight: 18,
+  },
+  sectionLabel: {
+    ...typography.caption,
+    color: colors.white,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.lg,
+  },
   typeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    marginRight: 10,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: spacing.radii.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginEnd: spacing.sm,
+    minHeight: 40,
   },
-  typeButtonActive: { backgroundColor: colors.primaryBlue },
-  typeText: { marginLeft: 6, color: colors.textDark, fontWeight: '600' },
-  typeTextActive: { color: colors.white },
-  label: { color: colors.white, fontWeight: '600', marginBottom: 6, marginTop: 10, fontSize: 12 },
+  typeButtonActive: {
+    backgroundColor: colors.primaryBlue,
+  },
+  typeText: {
+    marginStart: spacing.xs + 2,
+    color: colors.textDark,
+    ...typography.button,
+    fontSize: 13,
+  },
+  typeTextActive: {
+    color: colors.white,
+  },
+  label: {
+    ...typography.caption,
+    color: colors.white,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
   input: {
     backgroundColor: colors.inputBg,
-    borderRadius: 10,
-    height: 46,
-    paddingHorizontal: 14,
+    borderRadius: spacing.radii.md,
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    color: colors.textDark,
+    ...typography.body,
   },
 });

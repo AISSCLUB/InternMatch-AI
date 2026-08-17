@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
@@ -51,95 +65,145 @@ export default function EditProfileScreen({ navigation }) {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <Ionicons name="arrow-back" size={22} color={colors.textDark} />
-      </TouchableOpacity>
-
-      <Text style={styles.title}>Edit Profile</Text>
-
-      <View style={styles.avatarWrap}>
-        <View style={styles.avatarPlaceholder}>
-          <Ionicons name="person-add-outline" size={26} color={colors.teal} />
-        </View>
-        <Text style={styles.avatarLabel}>Profile Picture</Text>
-      </View>
-
-      <Text style={styles.label}>Full Name</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name"
-        placeholderTextColor="#8A8A8A"
-        value={fullName}
-        onChangeText={setFullName}
+    <ScreenContainer edges={['top', 'bottom']}>
+      <ScreenHeader
+        title="Edit Profile"
+        showBack={true}
+        navigation={navigation}
       />
 
-      <Text style={styles.label}>Headline</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Computer Science Student"
-        placeholderTextColor="#8A8A8A"
-        value={headline}
-        onChangeText={setHeadline}
-      />
-
-      <Text style={styles.label}>Department / Major</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Computer Engineering"
-        placeholderTextColor="#8A8A8A"
-        value={department}
-        onChangeText={setDepartment}
-      />
-
-      {skills.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>Skills (Extracted from CV)</Text>
-          <View style={styles.chipRow}>
-            {skills.map((s) => (
-              <Chip key={s} label={s} variant="skill" />
-            ))}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          style={styles.screen}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatarPlaceholder}>
+              <Ionicons
+                name="person-add-outline"
+                size={26}
+                color={colors.accent || colors.teal}
+              />
+            </View>
+            <Text style={styles.avatarLabel}>Profile Picture</Text>
           </View>
-        </>
-      )}
 
-      <GradientButton
-        title={saving ? "Saving..." : "Save"}
-        color={colors.teal}
-        onPress={handleSave}
-        style={{ marginTop: 20 }}
-      />
-    </ScrollView>
+          <Text style={styles.label}>Full Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Full Name"
+            placeholderTextColor={colors.textTertiary || colors.textMuted}
+            value={fullName}
+            onChangeText={setFullName}
+          />
+
+          <Text style={styles.label}>Headline</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Computer Science Student"
+            placeholderTextColor={colors.textTertiary || colors.textMuted}
+            value={headline}
+            onChangeText={setHeadline}
+          />
+
+          <Text style={styles.label}>Department / Major</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Computer Engineering"
+            placeholderTextColor={colors.textTertiary || colors.textMuted}
+            value={department}
+            onChangeText={setDepartment}
+          />
+
+          {skills.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Skills (Extracted from CV)</Text>
+              <View style={styles.chipRow}>
+                {skills.map((s) => (
+                  <Chip key={s} label={s} variant="skill" />
+                ))}
+              </View>
+            </>
+          )}
+
+          <GradientButton
+            title={saving ? "Saving..." : "Save"}
+            color={colors.accent || colors.teal}
+            onPress={handleSave}
+            style={{ marginTop: spacing.lg }}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cardBg },
-  content: { padding: 20, paddingBottom: 40 },
-  backBtn: { marginBottom: 8 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.textDark, textAlign: 'center', marginBottom: 16 },
-  avatarWrap: { alignItems: 'center', marginBottom: 20 },
+  flex: {
+    flex: 1,
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl,
+  },
+  avatarWrap: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
   avatarPlaceholder: {
     width: 56,
     height: 56,
     borderRadius: 28,
     borderWidth: 1.5,
-    borderColor: colors.teal,
+    borderColor: colors.accent || colors.teal,
+    backgroundColor: colors.surface || colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarLabel: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
-  label: { fontSize: 12, fontWeight: '600', color: colors.textDark, marginBottom: 4, marginLeft: 4 },
-  input: {
-    borderWidth: 1.5,
-    borderColor: colors.teal,
-    borderRadius: 22,
-    height: 46,
-    paddingHorizontal: 16,
-    marginBottom: 14,
-    justifyContent: 'center',
-    color: colors.textDark,
+  avatarLabel: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
   },
-  sectionTitle: { fontWeight: '700', color: colors.textDark, marginTop: 8, marginBottom: 8 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 },
+  label: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textPrimary || colors.textDark,
+    marginBottom: spacing.xxs + 2,
+    marginStart: spacing.xxs,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.borderSubtle || colors.border,
+    backgroundColor: colors.surface || colors.cardBg,
+    borderRadius: spacing.radii.md,
+    minHeight: 46,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    justifyContent: 'center',
+    color: colors.textPrimary || colors.textDark,
+    ...typography.body,
+  },
+  sectionTitle: {
+    ...typography.sectionTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
 });

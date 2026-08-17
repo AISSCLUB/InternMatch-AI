@@ -13,6 +13,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import { updateApplicationStatus, ApiError } from '../services/api';
 
@@ -83,222 +88,250 @@ export default function CoverLetterScreen({ route, navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.screen}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
+    <ScreenContainer edges={['top', 'bottom']}>
+      <ScreenHeader
+        title="Cover Letter"
+        showBack={true}
+        navigation={navigation}
+      />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
       >
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backBtn}
+        <ScrollView
+          style={styles.screen}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Ionicons name="arrow-back" size={22} color={colors.textDark} />
-        </TouchableOpacity>
+          {/* Role & Company Header */}
+          {(jobTitle || companyName) && (
+            <Card style={styles.roleCard} padding="md">
+              <Text style={styles.roleTitle}>{jobTitle || 'Internship'}</Text>
+              {companyName ? (
+                <Text style={styles.companyName}>{companyName}</Text>
+              ) : null}
+            </Card>
+          )}
 
-        <Text style={styles.title}>Cover Letter</Text>
-
-        {/* Role & Company Header */}
-        {(jobTitle || companyName) && (
-          <View style={styles.roleHeader}>
-            <Text style={styles.roleTitle}>{jobTitle || 'Internship'}</Text>
-            {companyName && (
-              <Text style={styles.companyName}>{companyName}</Text>
-            )}
-          </View>
-        )}
-
-        {/* Tracker Status Pill */}
-        <View style={styles.statusRow}>
-          <Text style={styles.statusHeading}>TRACKER STATUS:</Text>
-          <View
-            style={[
-              styles.statusPill,
-              currentStatus === 'applied' && styles.statusPillApplied,
-              currentStatus === 'interviewing' && styles.statusPillInterviewing,
-              currentStatus === 'accepted' && styles.statusPillAccepted,
-            ]}
-          >
-            <Text
+          {/* Tracker Status Pill */}
+          <View style={styles.statusRow}>
+            <Text style={styles.statusHeading}>TRACKER STATUS:</Text>
+            <View
               style={[
-                styles.statusPillText,
-                currentStatus === 'applied' && styles.statusTextApplied,
-                currentStatus === 'interviewing' && styles.statusTextInterviewing,
-                currentStatus === 'accepted' && styles.statusTextAccepted,
+                styles.statusPill,
+                currentStatus === 'applied' && styles.statusPillApplied,
+                currentStatus === 'interviewing' && styles.statusPillInterviewing,
+                currentStatus === 'accepted' && styles.statusPillAccepted,
               ]}
             >
-              {STATUS_LABELS[currentStatus] || currentStatus}
+              <Text
+                style={[
+                  styles.statusPillText,
+                  currentStatus === 'applied' && styles.statusTextApplied,
+                  currentStatus === 'interviewing' && styles.statusTextInterviewing,
+                  currentStatus === 'accepted' && styles.statusTextAccepted,
+                ]}
+              >
+                {STATUS_LABELS[currentStatus] || currentStatus}
+              </Text>
+            </View>
+          </View>
+
+          {/* Notice on Edit Semantics */}
+          <View style={styles.noticeBox}>
+            <Ionicons
+              name="information-circle-outline"
+              size={16}
+              color={colors.accentStrong || colors.tealDark}
+              style={styles.noticeIcon}
+            />
+            <Text style={styles.noticeText}>
+              You can customize this draft below for external submission. Generating this draft created a tracker record.
             </Text>
           </View>
-        </View>
 
-        {/* Notice on Edit Semantics */}
-        <View style={styles.noticeBox}>
-          <Ionicons
-            name="information-circle-outline"
-            size={16}
-            color={colors.tealDark}
-            style={{ marginRight: 6 }}
-          />
-          <Text style={styles.noticeText}>
-            You can customize this draft below for external submission. Generating this draft created a tracker record.
-          </Text>
-        </View>
+          {/* Editable Cover Letter Input */}
+          <Card style={styles.draftCard} padding="md">
+            <TextInput
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              multiline
+              textAlignVertical="top"
+              placeholder="Your generated cover letter will appear here..."
+              placeholderTextColor={colors.textTertiary || colors.textMuted}
+            />
+          </Card>
 
-        {/* Editable Cover Letter Input */}
-        <View style={styles.draftBox}>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            multiline
-            textAlignVertical="top"
-            placeholder="Your generated cover letter will appear here..."
-            placeholderTextColor={colors.textMuted}
-          />
-        </View>
+          {updateError && (
+            <Text style={styles.errorBanner}>{updateError}</Text>
+          )}
 
-        {updateError && (
-          <Text style={styles.errorBanner}>{updateError}</Text>
-        )}
-
-        {/* Actions */}
-        {currentStatus === 'saved' ? (
-          <View style={styles.actionContainer}>
-            {isUpdating ? (
-              <ActivityIndicator
-                size="small"
-                color={colors.teal}
-                style={{ marginTop: 20 }}
-              />
-            ) : (
-              <GradientButton
-                title="Mark as Applied"
-                color={colors.teal}
-                onPress={handleMarkAsApplied}
-                style={{ marginTop: 20 }}
-              />
-            )}
-          </View>
-        ) : (
-          <View style={styles.actionContainer}>
-            <TouchableOpacity
-              style={styles.trackerBtn}
-              onPress={() =>
-                navigation.navigate('MainTabs', { screen: 'Applications' })
-              }
-            >
-              <Ionicons
-                name="list-outline"
-                size={16}
-                color={colors.tealDark}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.trackerBtnText}>
-                View in Application Tracker
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {/* Actions */}
+          {currentStatus === 'saved' ? (
+            <View style={styles.actionContainer}>
+              {isUpdating ? (
+                <ActivityIndicator
+                  size="small"
+                  color={colors.accent || colors.teal}
+                  style={{ marginTop: spacing.lg }}
+                />
+              ) : (
+                <GradientButton
+                  title="Mark as Applied"
+                  color={colors.accent || colors.teal}
+                  onPress={handleMarkAsApplied}
+                  style={{ marginTop: spacing.lg }}
+                />
+              )}
+            </View>
+          ) : (
+            <View style={styles.actionContainer}>
+              <TouchableOpacity
+                style={styles.trackerBtn}
+                onPress={() =>
+                  navigation.navigate('MainTabs', { screen: 'Applications' })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="View in Application Tracker"
+              >
+                <Ionicons
+                  name="list-outline"
+                  size={16}
+                  color={colors.accentStrong || colors.tealDark}
+                  style={styles.trackerIcon}
+                />
+                <Text style={styles.trackerBtnText}>
+                  View in Application Tracker
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cardBg },
-  content: { padding: 20, paddingBottom: 40 },
-  backBtn: { marginBottom: 8 },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.textDark,
-    textAlign: 'center',
-    marginBottom: 10,
+  flex: {
+    flex: 1,
   },
-  roleHeader: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
   },
-  roleTitle: { fontSize: 15, fontWeight: '700', color: colors.textDark },
-  companyName: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl,
+  },
+  roleCard: {
+    marginBottom: spacing.md,
+  },
+  roleTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+  },
+  companyName: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xxs,
+  },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   statusHeading: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textMuted,
-    letterSpacing: 0.5,
-    marginRight: 8,
+    ...typography.eyebrow,
+    color: colors.textSecondary || colors.textMuted,
+    marginEnd: spacing.sm,
   },
   statusPill: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xxs + 1,
+    borderRadius: spacing.radii.sm,
   },
-  statusPillApplied: { backgroundColor: '#E0F2FE' },
-  statusPillInterviewing: { backgroundColor: '#FEF3C7' },
-  statusPillAccepted: { backgroundColor: '#DCFCE7' },
-  statusPillText: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
-  statusTextApplied: { color: '#0369A1' },
-  statusTextInterviewing: { color: '#B45309' },
-  statusTextAccepted: { color: '#15803D' },
+  statusPillApplied: {
+    backgroundColor: colors.infoSoft || '#E0F2FE',
+  },
+  statusPillInterviewing: {
+    backgroundColor: colors.warningSoft || '#FEF3C7',
+  },
+  statusPillAccepted: {
+    backgroundColor: colors.successSoft || '#DCFCE7',
+  },
+  statusPillText: {
+    ...typography.badge,
+    fontSize: 11,
+    color: colors.textSecondary || colors.textMuted,
+  },
+  statusTextApplied: {
+    color: colors.info || '#0369A1',
+  },
+  statusTextInterviewing: {
+    color: colors.warning || '#B45309',
+  },
+  statusTextAccepted: {
+    color: colors.success || '#15803D',
+  },
   noticeBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#E6F4F6',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    borderRadius: spacing.radii.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  noticeIcon: {
+    marginEnd: spacing.xs,
+    marginTop: spacing.xxs,
   },
   noticeText: {
     flex: 1,
-    fontSize: 12,
-    color: colors.tealDark,
-    lineHeight: 17,
+    ...typography.caption,
+    color: colors.accentStrong || colors.tealDark,
+    lineHeight: 18,
   },
-  draftBox: {
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.teal,
-    borderRadius: 14,
-    padding: 16,
+  draftCard: {
     minHeight: 260,
+    borderWidth: 1.5,
+    borderColor: colors.accent || colors.teal,
   },
   input: {
-    fontSize: 14,
-    color: colors.textDark,
+    ...typography.body,
+    color: colors.textPrimary || colors.textDark,
     lineHeight: 22,
     flex: 1,
   },
   errorBanner: {
-    fontSize: 12,
-    color: colors.red || '#EF4444',
+    ...typography.caption,
+    color: colors.danger || '#EF4444',
     textAlign: 'center',
-    marginTop: 10,
+    marginTop: spacing.sm,
   },
-  actionContainer: { marginTop: 10 },
+  actionContainer: {
+    marginTop: spacing.xs,
+  },
   trackerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#E6F4F6',
-    borderRadius: 10,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    borderRadius: spacing.radii.md,
+    minHeight: spacing.minimumTouchTarget,
   },
   trackerBtnText: {
+    ...typography.button,
+    color: colors.accentStrong || colors.tealDark,
     fontSize: 14,
-    color: colors.tealDark,
-    fontWeight: '600',
+  },
+  trackerIcon: {
+    marginEnd: spacing.xs,
   },
 });

@@ -11,6 +11,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import {
   getApplications,
@@ -19,11 +24,11 @@ import {
 } from '../services/api';
 
 const STATUS_CONFIG = {
-  saved: { bg: '#F1F5F9', fg: '#475569', label: 'Saved' },
-  applied: { bg: '#E0F2FE', fg: '#0284C7', label: 'Applied' },
-  interviewing: { bg: '#FEF3C7', fg: '#D97706', label: 'Interviewing' },
-  rejected: { bg: '#FEE2E2', fg: '#DC2626', label: 'Rejected' },
-  accepted: { bg: '#DCFCE7', fg: '#16A34A', label: 'Accepted' },
+  saved: { bg: colors.surfaceMuted || '#F1F5F9', fg: colors.textSecondary || '#475569', label: 'Saved' },
+  applied: { bg: colors.infoSoft || '#E0F2FE', fg: colors.info || '#0284C7', label: 'Applied' },
+  interviewing: { bg: colors.warningSoft || '#FEF3C7', fg: colors.warning || '#D97706', label: 'Interviewing' },
+  rejected: { bg: colors.dangerSoft || '#FEE2E2', fg: colors.danger || '#DC2626', label: 'Rejected' },
+  accepted: { bg: colors.successSoft || '#DCFCE7', fg: colors.success || '#16A34A', label: 'Accepted' },
 };
 
 function StatusPill({ status }) {
@@ -107,325 +112,404 @@ export default function ApplicationsScreen({ navigation }) {
     }
   };
 
+  const renderCountBadge = () => {
+    if (applications.length === 0 || loading) return null;
+    return (
+      <View style={styles.countBadge}>
+        <Text style={styles.countBadgeText}>{applications.length}</Text>
+      </View>
+    );
+  };
+
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={[colors.teal]}
-          tintColor={colors.teal}
-        />
-      }
-    >
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Application Tracker</Text>
-        {applications.length > 0 && !loading && (
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{applications.length}</Text>
+    <ScreenContainer edges={['top']}>
+      <ScreenHeader
+        title="Application Tracker"
+        alignment="start"
+        rightAction={renderCountBadge()}
+      />
+
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.accent || colors.teal]}
+            tintColor={colors.accent || colors.teal}
+          />
+        }
+      >
+        {/* Loading State */}
+        {loading && !refreshing && (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+            <Text style={styles.loadingText}>Loading applications...</Text>
           </View>
         )}
-      </View>
 
-      {/* Loading State */}
-      {loading && !refreshing && (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.teal} />
-          <Text style={styles.loadingText}>Loading applications...</Text>
-        </View>
-      )}
+        {/* Error State */}
+        {!loading && error && (
+          <Card style={styles.errorCard} padding="lg">
+            <Ionicons name="alert-circle-outline" size={40} color={colors.danger || '#EF4444'} />
+            <Text style={styles.errorTitle}>Could Not Load Tracker</Text>
+            <Text style={styles.errorSubtitle}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={fetchApplicationsData}
+              accessibilityRole="button"
+              accessibilityLabel="Try Again"
+            >
+              <Text style={styles.retryBtnText}>Try Again</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
 
-      {/* Error State */}
-      {!loading && error && (
-        <View style={styles.errorCard}>
-          <Ionicons name="alert-circle-outline" size={40} color={colors.red || '#EF4444'} />
-          <Text style={styles.errorTitle}>Could Not Load Tracker</Text>
-          <Text style={styles.errorSubtitle}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={fetchApplicationsData}>
-            <Text style={styles.retryBtnText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {/* Empty State */}
+        {!loading && !error && applications.length === 0 && (
+          <Card style={styles.emptyCard} padding="lg">
+            <Ionicons name="briefcase-outline" size={48} color={colors.accent || colors.teal} />
+            <Text style={styles.emptyTitle}>No Tracked Applications Yet</Text>
+            <Text style={styles.emptySubtitle}>
+              When you generate personalized cover letters for your matchups, they will appear here as saved applications.
+            </Text>
+            <GradientButton
+              title="Explore Matchups"
+              color={colors.accent || colors.teal}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+          </Card>
+        )}
 
-      {/* Empty State */}
-      {!loading && !error && applications.length === 0 && (
-        <View style={styles.emptyCard}>
-          <Ionicons name="briefcase-outline" size={48} color={colors.teal} />
-          <Text style={styles.emptyTitle}>No Tracked Applications Yet</Text>
-          <Text style={styles.emptySubtitle}>
-            When you generate personalized cover letters for your matchups, they will appear here as saved applications.
-          </Text>
-          <GradientButton
-            title="Explore Matchups"
-            color={colors.teal}
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
-            style={{ marginTop: 20, width: '100%' }}
-          />
-        </View>
-      )}
+        {/* Real Applications List */}
+        {!loading && !error && applications.length > 0 && (
+          <View style={styles.listContainer}>
+            {applications.map((app) => {
+              const hasCoverLetter = Boolean(app.generated_cover_letter);
+              const isUpdatingThis = statusUpdatingId === app.id;
 
-      {/* Real Applications List */}
-      {!loading && !error && applications.length > 0 && (
-        <View style={styles.listContainer}>
-          {applications.map((app) => {
-            const hasCoverLetter = Boolean(app.generated_cover_letter);
-            const isUpdatingThis = statusUpdatingId === app.id;
-
-            return (
-              <View key={app.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleWrap}>
-                    <Text style={styles.jobTitle}>
-                      {app.job_title || 'Internship Application'}
-                    </Text>
-                    {app.company_name ? (
-                      <Text style={styles.companyName}>{app.company_name}</Text>
-                    ) : null}
+              return (
+                <Card key={app.id} style={styles.appCard} padding="md">
+                  <View style={styles.cardHeader}>
+                    <View style={styles.cardTitleWrap}>
+                      <Text style={styles.jobTitle}>
+                        {app.job_title || 'Internship Application'}
+                      </Text>
+                      {app.company_name ? (
+                        <Text style={styles.companyName}>{app.company_name}</Text>
+                      ) : null}
+                    </View>
+                    <StatusPill status={app.status} />
                   </View>
-                  <StatusPill status={app.status} />
-                </View>
 
-                {/* Applied Date */}
-                {app.applied_date ? (
-                  <View style={styles.metaRow}>
-                    <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.metaText}>
-                      Applied on {formatDate(app.applied_date)}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {/* Notes */}
-                {app.notes ? (
-                  <View style={styles.notesBox}>
-                    <Text style={styles.notesText}>{app.notes}</Text>
-                  </View>
-                ) : null}
-
-                {/* Action Buttons */}
-                <View style={styles.cardActions}>
-                  {hasCoverLetter && (
-                    <TouchableOpacity
-                      style={styles.letterBtn}
-                      onPress={() =>
-                        navigation.navigate('CoverLetter', {
-                          applicationId: app.id,
-                          draft: app.generated_cover_letter,
-                          currentStatus: app.status,
-                          internshipId: app.internship_id,
-                          companyName: app.company_name,
-                          jobTitle: app.job_title,
-                        })
-                      }
-                    >
+                  {/* Applied Date */}
+                  {app.applied_date ? (
+                    <View style={styles.metaRow}>
                       <Ionicons
-                        name="document-text-outline"
-                        size={14}
-                        color={colors.tealDark}
-                        style={{ marginRight: 4 }}
+                        name="calendar-outline"
+                        size={13}
+                        color={colors.textSecondary || colors.textMuted}
+                        style={styles.metaIcon}
                       />
-                      <Text style={styles.letterBtnText}>Cover Letter</Text>
-                    </TouchableOpacity>
-                  )}
+                      <Text style={styles.metaText}>
+                        Applied on {formatDate(app.applied_date)}
+                      </Text>
+                    </View>
+                  ) : null}
 
-                  {app.internship_id && (
-                    <TouchableOpacity
-                      style={styles.detailBtn}
-                      onPress={() =>
-                        navigation.navigate('InternshipDetail', {
-                          internshipId: app.internship_id,
-                        })
-                      }
-                    >
-                      <Ionicons
-                        name="open-outline"
-                        size={14}
-                        color={colors.textDark}
-                        style={{ marginRight: 4 }}
-                      />
-                      <Text style={styles.detailBtnText}>Listing</Text>
-                    </TouchableOpacity>
-                  )}
+                  {/* Notes */}
+                  {app.notes ? (
+                    <View style={styles.notesBox}>
+                      <Text style={styles.notesText}>{app.notes}</Text>
+                    </View>
+                  ) : null}
 
-                  {app.status === 'saved' && (
-                    <TouchableOpacity
-                      style={styles.markAppliedBtn}
-                      onPress={() => handleQuickMarkApplied(app.id)}
-                      disabled={isUpdatingThis}
-                    >
-                      {isUpdatingThis ? (
-                        <ActivityIndicator size="small" color={colors.white} />
-                      ) : (
-                        <>
-                          <Ionicons
-                            name="checkmark"
-                            size={14}
-                            color={colors.white}
-                            style={{ marginRight: 4 }}
+                  {/* Action Buttons */}
+                  <View style={styles.cardActions}>
+                    {hasCoverLetter && (
+                      <TouchableOpacity
+                        style={styles.letterBtn}
+                        onPress={() =>
+                          navigation.navigate('CoverLetter', {
+                            applicationId: app.id,
+                            draft: app.generated_cover_letter,
+                            currentStatus: app.status,
+                            internshipId: app.internship_id,
+                            companyName: app.company_name,
+                            jobTitle: app.job_title,
+                          })
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel="View Cover Letter"
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                      >
+                        <Ionicons
+                          name="document-text-outline"
+                          size={14}
+                          color={colors.accentStrong || colors.tealDark}
+                          style={styles.actionIcon}
+                        />
+                        <Text style={styles.letterBtnText}>Cover Letter</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {app.internship_id && (
+                      <TouchableOpacity
+                        style={styles.detailBtn}
+                        onPress={() =>
+                          navigation.navigate('InternshipDetail', {
+                            internshipId: app.internship_id,
+                          })
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel="View Listing"
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                      >
+                        <Ionicons
+                          name="open-outline"
+                          size={14}
+                          color={colors.textPrimary || colors.textDark}
+                          style={styles.actionIcon}
+                        />
+                        <Text style={styles.detailBtnText}>Listing</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {app.status === 'saved' && (
+                      <TouchableOpacity
+                        style={styles.markAppliedBtn}
+                        onPress={() => handleQuickMarkApplied(app.id)}
+                        disabled={isUpdatingThis}
+                        accessibilityRole="button"
+                        accessibilityLabel="Mark as Applied"
+                        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                      >
+                        {isUpdatingThis ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.textInverse || colors.white}
                           />
-                          <Text style={styles.markAppliedBtnText}>
-                            Mark Applied
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-    </ScrollView>
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="checkmark"
+                              size={14}
+                              color={colors.textInverse || colors.white}
+                              style={styles.actionIcon}
+                            />
+                            <Text style={styles.markAppliedBtnText}>Mark Applied</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.screenBg },
-  content: { padding: 20, paddingBottom: 40 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
   },
-  title: { fontSize: 22, fontWeight: '700', color: colors.textDark },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl + spacing.xl,
+  },
   countBadge: {
-    backgroundColor: '#E6F4F6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xxs + 2,
+    borderRadius: spacing.radii.pill,
+    minHeight: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  countBadgeText: { fontSize: 13, fontWeight: '700', color: colors.tealDark },
+  countBadgeText: {
+    ...typography.badge,
+    color: colors.accentStrong || colors.tealDark,
+  },
   centerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: spacing.xxxl * 2,
   },
-  loadingText: { fontSize: 14, color: colors.textMuted, marginTop: 12 },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.md,
+  },
   errorCard: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 16,
-    padding: 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-    marginTop: 16,
+    marginTop: spacing.md,
+    borderColor: colors.dangerSoft || '#FEE2E2',
+    backgroundColor: '#FEF2F2',
   },
   errorTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.red || '#EF4444',
-    marginTop: 10,
+    ...typography.cardTitle,
+    color: colors.danger || '#EF4444',
+    marginTop: spacing.sm,
   },
   errorSubtitle: {
-    fontSize: 13,
-    color: colors.textMuted,
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
     textAlign: 'center',
-    marginTop: 6,
+    marginTop: spacing.xs,
     lineHeight: 18,
   },
   retryBtn: {
-    marginTop: 16,
-    backgroundColor: colors.teal,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 8,
+    marginTop: spacing.lg,
+    backgroundColor: colors.accent || colors.teal,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.radii.sm,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
   },
-  retryBtnText: { color: colors.white, fontSize: 13, fontWeight: '600' },
+  retryBtnText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+    fontSize: 13,
+  },
   emptyCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 32,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: 16,
+    marginTop: spacing.md,
   },
   emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.textDark,
-    marginTop: 14,
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.md,
   },
   emptySubtitle: {
-    fontSize: 13,
-    color: colors.textMuted,
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
     lineHeight: 18,
   },
-  listContainer: { marginTop: 4 },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+  listContainer: {
+    marginTop: spacing.xs,
+  },
+  appCard: {
+    marginBottom: spacing.md,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  cardTitleWrap: { flex: 1, marginRight: 10 },
-  jobTitle: { fontSize: 15, fontWeight: '700', color: colors.textDark },
-  companyName: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  pill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  pillText: { fontSize: 11, fontWeight: '700' },
+  cardTitleWrap: {
+    flex: 1,
+    marginEnd: spacing.md,
+  },
+  jobTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+  },
+  companyName: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xxs,
+  },
+  pill: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xxs + 1,
+    borderRadius: spacing.radii.sm,
+  },
+  pillText: {
+    ...typography.badge,
+    fontSize: 11,
+  },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  metaText: { fontSize: 12, color: colors.textMuted, marginLeft: 4 },
+  metaIcon: {
+    marginEnd: spacing.xs,
+  },
+  metaText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+  },
   notesBox: {
-    backgroundColor: colors.cardBg,
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
+    backgroundColor: colors.surfaceSubtle || colors.cardBg,
+    borderRadius: spacing.radii.sm,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle || colors.border,
   },
-  notesText: { fontSize: 12, color: colors.textDark, fontStyle: 'italic' },
+  notesText: {
+    ...typography.caption,
+    color: colors.textPrimary || colors.textDark,
+    fontStyle: 'italic',
+  },
   cardActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: 8,
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
+    gap: spacing.sm,
   },
   letterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E6F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.sm,
+    minHeight: 36,
   },
-  letterBtnText: { fontSize: 12, fontWeight: '600', color: colors.tealDark },
+  letterBtnText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.accentStrong || colors.tealDark,
+  },
   detailBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.cardBg,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: colors.surface || colors.cardBg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.sm,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle || colors.border,
+    minHeight: 36,
   },
-  detailBtnText: { fontSize: 12, fontWeight: '600', color: colors.textDark },
+  detailBtnText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textPrimary || colors.textDark,
+  },
   markAppliedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.teal,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginLeft: 'auto',
+    backgroundColor: colors.accent || colors.teal,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.sm,
+    marginStart: 'auto',
+    minHeight: 36,
   },
-  markAppliedBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  markAppliedBtnText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textInverse || colors.white,
+  },
+  actionIcon: {
+    marginEnd: spacing.xs,
+  },
 });

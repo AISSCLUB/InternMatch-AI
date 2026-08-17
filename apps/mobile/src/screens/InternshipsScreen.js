@@ -10,6 +10,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import Chip from '../components/Chip';
 import { getInternships } from '../services/api';
 
@@ -146,206 +151,343 @@ export default function InternshipsScreen({ navigation }) {
   const hasMore = items.length < total;
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={[colors.teal]}
-          tintColor={colors.teal}
-        />
-      }
-    >
-      <Text style={styles.title}>Internships</Text>
+    <ScreenContainer edges={['top']}>
+      <ScreenHeader
+        title="Internships"
+        alignment="start"
+      />
 
-      {/* Filter Chips */}
-      <View style={styles.filterRow}>
-        {WORK_TYPE_FILTERS.map((f) => (
-          <TouchableOpacity
-            key={f.label}
-            style={[styles.filterChip, selectedFilter === f.label && styles.filterChipActive]}
-            onPress={() => setSelectedFilter(f.label)}
-          >
-            <Text style={[styles.filterText, selectedFilter === f.label && styles.filterTextActive]}>
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Initial Loading State */}
-      {loading && !refreshing && (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.teal} />
-          <Text style={styles.loadingText}>Loading internships...</Text>
-        </View>
-      )}
-
-      {/* Error State */}
-      {!loading && error && (
-        <View style={styles.errorCard}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.red || '#EF4444'} />
-          <Text style={styles.errorTitle}>Could Not Load Internships</Text>
-          <Text style={styles.errorMessage}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchInitialInternships(selectedFilter)}>
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Empty State */}
-      {!loading && !error && items.length === 0 && (
-        <View style={styles.emptyCard}>
-          <Ionicons name="briefcase-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.emptyTitle}>No Internships Found</Text>
-          <Text style={styles.emptySubtitle}>
-            {selectedFilter !== 'All'
-              ? `There are currently no ${selectedFilter.toLowerCase()} internships available.`
-              : 'The internship catalog is currently empty. Check back soon!'}
-          </Text>
-          {selectedFilter !== 'All' && (
-            <TouchableOpacity style={styles.resetFilterButton} onPress={() => setSelectedFilter('All')}>
-              <Text style={styles.resetFilterText}>Show All Internships</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {/* Populated Listing */}
-      {!loading && !error && items.length > 0 && (
-        <>
-          {items.map((item) => (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.accent || colors.teal]}
+            tintColor={colors.accent || colors.teal}
+          />
+        }
+      >
+        {/* Filter Chips */}
+        <View style={styles.filterRow}>
+          {WORK_TYPE_FILTERS.map((f) => (
             <TouchableOpacity
-              key={item.id}
-              style={styles.card}
-              onPress={() => navigation.navigate('InternshipDetail', { internshipId: item.id })}
-              activeOpacity={0.7}
+              key={f.label}
+              style={[
+                styles.filterChip,
+                selectedFilter === f.label && styles.filterChipActive,
+              ]}
+              onPress={() => setSelectedFilter(f.label)}
+              accessibilityRole="button"
+              accessibilityLabel={`Filter by ${f.label}`}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
-              <View style={styles.cardTop}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                {item.work_type ? (
-                  <View style={styles.workTypeBadge}>
-                    <Text style={styles.workTypeText}>{formatWorkType(item.work_type)}</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <Text style={styles.cardMeta}>
-                {item.company} · {item.location}
+              <Text
+                style={[
+                  styles.filterText,
+                  selectedFilter === f.label && styles.filterTextActive,
+                ]}
+              >
+                {f.label}
               </Text>
-
-              {item.required_skills && item.required_skills.length > 0 && (
-                <View style={styles.skillsRow}>
-                  {item.required_skills.slice(0, 3).map((skill) => (
-                    <Chip key={skill} label={skill} variant="skill" />
-                  ))}
-                  {item.required_skills.length > 3 && (
-                    <Text style={styles.moreSkillsText}>+{item.required_skills.length - 3} more</Text>
-                  )}
-                </View>
-              )}
             </TouchableOpacity>
           ))}
+        </View>
 
-          {/* Pagination Controls */}
-          {hasMore && (
+        {/* Initial Loading State */}
+        {loading && !refreshing && (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+            <Text style={styles.loadingText}>Loading internships...</Text>
+          </View>
+        )}
+
+        {/* Error State */}
+        {!loading && error && (
+          <Card style={styles.errorCard} padding="lg">
+            <Ionicons name="alert-circle-outline" size={36} color={colors.danger || '#EF4444'} />
+            <Text style={styles.errorTitle}>Could Not Load Internships</Text>
+            <Text style={styles.errorMessage}>{error}</Text>
             <TouchableOpacity
-              style={styles.loadMoreButton}
-              onPress={handleLoadMore}
-              disabled={loadingMore}
+              style={styles.retryButton}
+              onPress={() => fetchInitialInternships(selectedFilter)}
+              accessibilityRole="button"
+              accessibilityLabel="Try Again"
             >
-              {loadingMore ? (
-                <ActivityIndicator size="small" color={colors.white} />
-              ) : (
-                <Text style={styles.loadMoreText}>Load More ({items.length} of {total})</Text>
-              )}
+              <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
-          )}
+          </Card>
+        )}
 
-          {!hasMore && total > 0 && (
-            <Text style={styles.exhaustedText}>Showing all {total} internships</Text>
-          )}
-        </>
-      )}
-    </ScrollView>
+        {/* Empty State */}
+        {!loading && !error && items.length === 0 && (
+          <Card style={styles.emptyCard} padding="lg">
+            <Ionicons name="briefcase-outline" size={48} color={colors.textTertiary || colors.textMuted} />
+            <Text style={styles.emptyTitle}>No Internships Found</Text>
+            <Text style={styles.emptySubtitle}>
+              {selectedFilter !== 'All'
+                ? `There are currently no ${selectedFilter.toLowerCase()} internships available.`
+                : 'The internship catalog is currently empty. Check back soon!'}
+            </Text>
+            {selectedFilter !== 'All' && (
+              <TouchableOpacity
+                style={styles.resetFilterButton}
+                onPress={() => setSelectedFilter('All')}
+                accessibilityRole="button"
+                accessibilityLabel="Show All Internships"
+              >
+                <Text style={styles.resetFilterText}>Show All Internships</Text>
+              </TouchableOpacity>
+            )}
+          </Card>
+        )}
+
+        {/* Populated Listing */}
+        {!loading && !error && items.length > 0 && (
+          <>
+            {items.map((item) => (
+              <Card key={item.id} style={styles.card} padding="md">
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate('InternshipDetail', { internshipId: item.id })
+                  }
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.title} at ${item.company}`}
+                >
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    {item.work_type ? (
+                      <View style={styles.workTypeBadge}>
+                        <Text style={styles.workTypeText}>{formatWorkType(item.work_type)}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.cardMeta}>
+                    {item.company} · {item.location}
+                  </Text>
+
+                  {item.required_skills && item.required_skills.length > 0 && (
+                    <View style={styles.skillsRow}>
+                      {item.required_skills.slice(0, 3).map((skill) => (
+                        <Chip key={skill} label={skill} variant="skill" />
+                      ))}
+                      {item.required_skills.length > 3 && (
+                        <Text style={styles.moreSkillsText}>
+                          +{item.required_skills.length - 3} more
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </Card>
+            ))}
+
+            {/* Pagination Controls */}
+            {hasMore && (
+              <TouchableOpacity
+                style={styles.loadMoreButton}
+                onPress={handleLoadMore}
+                disabled={loadingMore}
+                accessibilityRole="button"
+                accessibilityLabel={`Load more (${items.length} of ${total})`}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator size="small" color={colors.textInverse || colors.white} />
+                ) : (
+                  <Text style={styles.loadMoreText}>
+                    Load More ({items.length} of {total})
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {!hasMore && total > 0 && (
+              <Text style={styles.exhaustedText}>Showing all {total} internships</Text>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.screenBg },
-  content: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: '700', color: colors.textDark, marginBottom: 16 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl + spacing.xl,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    marginTop: spacing.xs,
+  },
   filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 18,
-    backgroundColor: '#DCE9EC',
-    marginRight: 8,
-  },
-  filterChipActive: { backgroundColor: colors.teal },
-  filterText: { color: colors.textMuted, fontWeight: '600', fontSize: 13 },
-  filterTextActive: { color: colors.white },
-  centerContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  loadingText: { marginTop: 12, color: colors.textMuted, fontSize: 14 },
-  card: { backgroundColor: colors.cardBg, borderRadius: 16, padding: 16, marginBottom: 14 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  cardTitle: { flex: 1, fontWeight: '700', fontSize: 15, color: colors.textDark, marginRight: 8 },
-  workTypeBadge: {
-    backgroundColor: '#E6F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  workTypeText: { fontSize: 11, fontWeight: '600', color: colors.tealDark },
-  cardMeta: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
-  skillsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 10 },
-  moreSkillsText: { fontSize: 11, color: colors.textMuted, marginLeft: 4, marginBottom: 8 },
-  errorCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginTop: 20,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.radii.pill,
+    backgroundColor: colors.surfaceSubtle || '#DCE9EC',
+    marginEnd: spacing.sm,
+    minHeight: 36,
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: colors.borderSubtle || colors.border,
   },
-  errorTitle: { fontSize: 16, fontWeight: '700', color: colors.textDark, marginTop: 8 },
-  errorMessage: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: 16 },
+  filterChipActive: {
+    backgroundColor: colors.accent || colors.teal,
+    borderColor: colors.accent || colors.teal,
+  },
+  filterText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
+  },
+  filterTextActive: {
+    color: colors.textInverse || colors.white,
+    fontWeight: '700',
+  },
+  centerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl * 2,
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.md,
+  },
+  card: {
+    marginBottom: spacing.md,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  cardTitle: {
+    flex: 1,
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginEnd: spacing.sm,
+  },
+  workTypeBadge: {
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs + 1,
+    borderRadius: spacing.radii.sm,
+  },
+  workTypeText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.accentStrong || colors.tealDark,
+  },
+  cardMeta: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  skillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  moreSkillsText: {
+    ...typography.caption,
+    color: colors.textTertiary || colors.textMuted,
+    marginStart: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  errorCard: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    borderColor: colors.dangerSoft || '#FEE2E2',
+    backgroundColor: '#FEF2F2',
+  },
+  errorTitle: {
+    ...typography.cardTitle,
+    color: colors.danger || '#EF4444',
+    marginTop: spacing.sm,
+  },
+  errorMessage: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
+  },
   retryButton: {
-    backgroundColor: colors.teal,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: colors.accent || colors.teal,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: spacing.radii.sm,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
   },
-  retryButtonText: { color: colors.white, fontWeight: '600', fontSize: 13 },
+  retryButtonText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+    fontSize: 13,
+  },
   emptyCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 32,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: spacing.lg,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.textDark, marginTop: 12 },
-  emptySubtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 18 },
+  emptyTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.md,
+  },
+  emptySubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
   resetFilterButton: {
-    marginTop: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#E6F4F6',
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.radii.sm,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
   },
-  resetFilterText: { color: colors.tealDark, fontWeight: '600', fontSize: 13 },
+  resetFilterText: {
+    ...typography.button,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 13,
+  },
   loadMoreButton: {
-    backgroundColor: colors.teal,
-    borderRadius: 12,
-    paddingVertical: 12,
+    backgroundColor: colors.accent || colors.teal,
+    borderRadius: spacing.radii.md,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
   },
-  loadMoreText: { color: colors.white, fontWeight: '600', fontSize: 14 },
-  exhaustedText: { textAlign: 'center', color: colors.textMuted, fontSize: 12, marginTop: 8, marginBottom: 16 },
+  loadMoreText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+    fontSize: 14,
+  },
+  exhaustedText: {
+    textAlign: 'center',
+    ...typography.caption,
+    color: colors.textTertiary || colors.textMuted,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
 });

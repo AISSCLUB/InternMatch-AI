@@ -10,6 +10,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import MatchBadge from '../components/MatchBadge';
 import { useProfile } from '../context/ProfileContext';
@@ -91,337 +95,590 @@ export default function HomeScreen({ navigation }) {
   const remainingMatches = topMatches.slice(1);
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={[colors.teal]}
-          tintColor={colors.teal}
-        />
-      }
-    >
-      <View style={styles.headerRow}>
-        <Text style={styles.brand}>InternMatch</Text>
-        <Ionicons name="locate" size={20} color={colors.teal} style={{ marginLeft: 4 }} />
-      </View>
-      <Text style={styles.hello}>Hello, {displayName} 👋</Text>
-
-      {!hasAnalyzedCV ? (
-        <>
-          <View style={styles.uploadCard}>
-            <View style={styles.uploadIconCircle}>
-              <Ionicons name="arrow-up" size={22} color={colors.teal} />
-            </View>
-            <Text style={styles.uploadTitle}>Upload your CV and let the matches begin.</Text>
-            <Text style={styles.uploadSubtitle}>
-              Drag and drop or select a PDF — AI analyzes your skills and matches you with internships.
-            </Text>
-            <GradientButton
-              title="Upload CV"
-              color={colors.teal}
-              onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}
-              style={{ marginTop: 16 }}
+    <ScreenContainer edges={['top']}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.accent || colors.teal]}
+            tintColor={colors.accent || colors.teal}
+          />
+        }
+      >
+        {/* Brand & Greeting Header */}
+        <View style={styles.headerBlock}>
+          <View style={styles.brandRow}>
+            <Text style={styles.brand}>InternMatch</Text>
+            <Ionicons
+              name="locate"
+              size={18}
+              color={colors.accentStrong || colors.tealDark}
+              style={styles.brandIcon}
             />
           </View>
+          <Text style={styles.hello} numberOfLines={2}>
+            Hello, {displayName} 👋
+          </Text>
+        </View>
 
-          <Text style={styles.sectionTitle}>Recommendations for You</Text>
-          <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>You can browse even without a CV.</Text>
-            <Text style={styles.infoSubtitle}>
-              Discover open internships across companies. Once you upload your CV, personalized compatibility fit scores will be calculated automatically.
-            </Text>
-            <TouchableOpacity
-              style={styles.browseButton}
-              onPress={() => navigation.navigate('MainTabs', { screen: 'Internships' })}
-            >
-              <Text style={styles.browseButtonText}>Explore Internship Catalog</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.tealDark} style={{ marginLeft: 6 }} />
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <>
-          {/* CV Analyzed Status Card */}
-          <View style={styles.statusCard}>
-            <Text style={styles.statusLabel}>CV STATUS</Text>
-            <Text style={styles.statusTitle}>Your profile has been analyzed.</Text>
-            <View style={styles.statusFileRow}>
-              <Text style={styles.statusFileName}>CV Document</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}>
-                <Text style={styles.reloadLink}>Reload</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Today's Matchups Header */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>TODAY'S MATCHUPS</Text>
-            {matches.length > 3 && (
-              <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}>
-                <Text style={styles.seeAllLink}>See all ({matches.length})</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Calculating State */}
-          {isCalculating && (
-            <View style={styles.calculatingCard}>
-              <ActivityIndicator size="small" color={colors.teal} />
-              <Text style={styles.calculatingTitle}>Finding Your Matches...</Text>
-              <Text style={styles.calculatingSubtitle}>Evaluating skills fit and semantic profile match ({progressPercent}%)</Text>
-              <View style={styles.progressTrack}>
-                <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+        {!hasAnalyzedCV ? (
+          <>
+            {/* Upload CV Prompt Card */}
+            <Card style={styles.uploadCard} padding="lg">
+              <View style={styles.uploadIconCircle}>
+                <Ionicons name="arrow-up" size={22} color={colors.accent || colors.teal} />
               </View>
-              <TouchableOpacity style={styles.cancelCalcBtn} onPress={cancelCalculation}>
-                <Text style={styles.cancelCalcText}>Stop Checking</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Calculation Error */}
-          {calculationError && (
-            <View style={styles.errorCard}>
-              <Ionicons name="alert-circle-outline" size={24} color={colors.red || '#EF4444'} />
-              <Text style={styles.errorText}>{calculationError}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={handleStartCalculation}>
-                <Text style={styles.retryBtnText}>Try Again</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Loading Matches */}
-          {matchesLoading && !isCalculating && (
-            <View style={styles.centerLoading}>
-              <ActivityIndicator size="small" color={colors.teal} />
-              <Text style={styles.loadingText}>Loading top matches...</Text>
-            </View>
-          )}
-
-          {/* Matches Error */}
-          {matchesError && !matchesLoading && !isCalculating && (
-            <View style={styles.errorCard}>
-              <Ionicons name="alert-circle-outline" size={24} color={colors.red || '#EF4444'} />
-              <Text style={styles.errorText}>{matchesError}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={fetchMatchesData}>
-                <Text style={styles.retryBtnText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Empty Matches State */}
-          {!matchesLoading && !isCalculating && !matchesError && matches.length === 0 && (
-            <View style={styles.emptyMatchesCard}>
-              <Ionicons name="sparkles-outline" size={36} color={colors.teal} />
-              <Text style={styles.emptyMatchesTitle}>No Calculated Matches Yet</Text>
-              <Text style={styles.emptyMatchesSubtitle}>
-                Run our AI matching algorithm to calculate your personalized fit scores against available internships.
+              <Text style={styles.uploadTitle}>Upload your CV and let the matches begin.</Text>
+              <Text style={styles.uploadSubtitle}>
+                Drag and drop or select a PDF — AI analyzes your skills and matches you with internships.
               </Text>
               <GradientButton
-                title="Find My Matches"
-                color={colors.teal}
-                onPress={handleStartCalculation}
-                style={{ marginTop: 16, width: '100%' }}
+                title="Upload CV"
+                color={colors.accent || colors.teal}
+                onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}
+                style={{ marginTop: spacing.lg, width: '100%' }}
               />
-            </View>
-          )}
+            </Card>
 
-          {/* Populated Top Matches */}
-          {!matchesLoading && !isCalculating && topMatches.length > 0 && (
-            <>
-              {/* Highlight First Match */}
-              {firstMatch && (
+            <Text style={styles.sectionEyebrow}>RECOMMENDATIONS FOR YOU</Text>
+            <Card style={styles.infoCard} padding="md">
+              <Text style={styles.infoTitle}>You can browse even without a CV.</Text>
+              <Text style={styles.infoSubtitle}>
+                Discover open internships across companies. Once you upload your CV, personalized compatibility fit scores will be calculated automatically.
+              </Text>
+              <TouchableOpacity
+                style={styles.browseButton}
+                onPress={() => navigation.navigate('MainTabs', { screen: 'Internships' })}
+                accessibilityRole="button"
+                accessibilityLabel="Explore Internship Catalog"
+              >
+                <Text style={styles.browseButtonText}>Explore Internship Catalog</Text>
+                <Ionicons
+                  name="arrow-forward"
+                  size={16}
+                  color={colors.accentStrong || colors.tealDark}
+                  style={styles.browseIcon}
+                />
+              </TouchableOpacity>
+            </Card>
+          </>
+        ) : (
+          <>
+            {/* CV Analyzed Status Card */}
+            <Card style={styles.statusCard} padding="md">
+              <Text style={styles.statusLabel}>CV STATUS</Text>
+              <Text style={styles.statusTitle}>Your profile has been analyzed.</Text>
+              <View style={styles.statusFileRow}>
+                <Text style={styles.statusFileName}>CV Document</Text>
                 <TouchableOpacity
-                  style={styles.highlightCard}
-                  onPress={() => navigation.navigate('InternshipDetail', { internshipId: firstMatch.internship.id })}
-                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reload CV Document"
                 >
-                  <View style={styles.highlightTop}>
-                    <Ionicons name="flame" size={16} color="#F2812B" />
-                    <Text style={styles.highlightTitle}>{firstMatch.internship.title}</Text>
-                    <MatchBadge score={firstMatch.overall_score} />
-                  </View>
-                  <Text style={styles.highlightMeta}>
-                    {firstMatch.internship.company} · {firstMatch.internship.location}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.whyLinkWrap}
-                    onPress={() =>
-                      navigation.navigate('WhyYouMatch', {
-                        matchId: firstMatch.match_id,
-                        internshipId: firstMatch.internship.id,
-                      })
-                    }
-                  >
-                    <Text style={styles.whyLink}>Why You Match</Text>
-                    <Ionicons name="chevron-forward" size={14} color={colors.primaryBlue} style={{ marginLeft: 2 }} />
-                  </TouchableOpacity>
+                  <Text style={styles.reloadLink}>Reload</Text>
                 </TouchableOpacity>
-              )}
+              </View>
+            </Card>
 
-              {/* Remaining Top Matches */}
-              {remainingMatches.map((item, index) => (
+            {/* Today's Matchups Header */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionEyebrow}>TODAY'S MATCHUPS</Text>
+              {matches.length > 3 ? (
                 <TouchableOpacity
-                  key={item.match_id}
-                  style={[
-                    styles.plainRow,
-                    index === remainingMatches.length - 1 && { borderBottomWidth: 0 },
-                  ]}
-                  onPress={() => navigation.navigate('InternshipDetail', { internshipId: item.internship.id })}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.plainRowMain}>
-                    <Text style={styles.plainTitle}>{item.internship.title}</Text>
-                    <Text style={styles.plainMeta}>
-                      {item.internship.company} · {item.internship.location}
-                    </Text>
-                  </View>
-                  <MatchBadge score={item.overall_score} />
-                </TouchableOpacity>
-              ))}
-
-              {matches.length > 3 && (
-                <TouchableOpacity
-                  style={styles.viewAllMatchupsBtn}
                   onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`See all ${matches.length} matches`}
                 >
-                  <Text style={styles.viewAllMatchupsText}>View all {matches.length} matches</Text>
-                  <Ionicons name="arrow-forward" size={16} color={colors.tealDark} style={{ marginLeft: 6 }} />
+                  <Text style={styles.seeAllLink}>See all ({matches.length})</Text>
                 </TouchableOpacity>
-              )}
-            </>
-          )}
-        </>
-      )}
-    </ScrollView>
+              ) : null}
+            </View>
+
+            {/* Calculating State */}
+            {isCalculating && (
+              <Card style={styles.calculatingCard} padding="md">
+                <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+                <Text style={styles.calculatingTitle}>Finding Your Matches...</Text>
+                <Text style={styles.calculatingSubtitle}>
+                  Evaluating skills fit and semantic profile match ({progressPercent}%)
+                </Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+                </View>
+                <TouchableOpacity
+                  style={styles.cancelCalcBtn}
+                  onPress={cancelCalculation}
+                  accessibilityRole="button"
+                  accessibilityLabel="Stop Checking"
+                >
+                  <Text style={styles.cancelCalcText}>Stop Checking</Text>
+                </TouchableOpacity>
+              </Card>
+            )}
+
+            {/* Calculation Error */}
+            {calculationError && (
+              <Card style={styles.errorCard} padding="md">
+                <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
+                <Text style={styles.errorText}>{calculationError}</Text>
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={handleStartCalculation}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try Again"
+                >
+                  <Text style={styles.retryBtnText}>Try Again</Text>
+                </TouchableOpacity>
+              </Card>
+            )}
+
+            {/* Loading Matches */}
+            {matchesLoading && !isCalculating && (
+              <View style={styles.centerLoading}>
+                <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+                <Text style={styles.loadingText}>Loading top matches...</Text>
+              </View>
+            )}
+
+            {/* Matches Error */}
+            {matchesError && !matchesLoading && !isCalculating && (
+              <Card style={styles.errorCard} padding="md">
+                <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
+                <Text style={styles.errorText}>{matchesError}</Text>
+                <TouchableOpacity
+                  style={styles.retryBtn}
+                  onPress={fetchMatchesData}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry"
+                >
+                  <Text style={styles.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </Card>
+            )}
+
+            {/* Empty Matches State */}
+            {!matchesLoading && !isCalculating && !matchesError && matches.length === 0 && (
+              <Card style={styles.emptyMatchesCard} padding="lg">
+                <Ionicons name="sparkles-outline" size={36} color={colors.accent || colors.teal} />
+                <Text style={styles.emptyMatchesTitle}>No Calculated Matches Yet</Text>
+                <Text style={styles.emptyMatchesSubtitle}>
+                  Run our AI matching algorithm to calculate your personalized fit scores against available internships.
+                </Text>
+                <GradientButton
+                  title="Find My Matches"
+                  color={colors.accent || colors.teal}
+                  onPress={handleStartCalculation}
+                  style={{ marginTop: spacing.lg, width: '100%' }}
+                />
+              </Card>
+            )}
+
+            {/* Populated Top Matches */}
+            {!matchesLoading && !isCalculating && topMatches.length > 0 && (
+              <>
+                {/* Highlight First Match */}
+                {firstMatch && (
+                  <Card variant="highlight" style={styles.highlightCard} padding="md">
+                    <TouchableOpacity
+                      onPress={() =>
+                        navigation.navigate('InternshipDetail', {
+                          internshipId: firstMatch.internship.id,
+                        })
+                      }
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${firstMatch.internship.title} at ${firstMatch.internship.company}`}
+                    >
+                      <View style={styles.highlightTop}>
+                        <Ionicons name="flame" size={16} color="#F2812B" style={styles.flameIcon} />
+                        <Text style={styles.highlightTitle}>{firstMatch.internship.title}</Text>
+                        <MatchBadge score={firstMatch.overall_score} />
+                      </View>
+                      <Text style={styles.highlightMeta}>
+                        {firstMatch.internship.company} · {firstMatch.internship.location}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.whyLinkWrap}
+                      onPress={() =>
+                        navigation.navigate('WhyYouMatch', {
+                          matchId: firstMatch.match_id,
+                          internshipId: firstMatch.internship.id,
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="Why You Match breakdown"
+                    >
+                      <Text style={styles.whyLink}>Why You Match</Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={14}
+                        color={colors.primaryBlue}
+                        style={styles.chevronIcon}
+                      />
+                    </TouchableOpacity>
+                  </Card>
+                )}
+
+                {/* Remaining Top Matches */}
+                {remainingMatches.map((item, index) => (
+                  <Card
+                    key={item.match_id}
+                    style={[
+                      styles.plainRowCard,
+                      index === remainingMatches.length - 1 && { marginBottom: spacing.md },
+                    ]}
+                    padding="sm"
+                  >
+                    <TouchableOpacity
+                      style={styles.plainRow}
+                      onPress={() =>
+                        navigation.navigate('InternshipDetail', {
+                          internshipId: item.internship.id,
+                        })
+                      }
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
+                    >
+                      <View style={styles.plainRowMain}>
+                        <Text style={styles.plainTitle}>{item.internship.title}</Text>
+                        <Text style={styles.plainMeta}>
+                          {item.internship.company} · {item.internship.location}
+                        </Text>
+                      </View>
+                      <MatchBadge score={item.overall_score} />
+                    </TouchableOpacity>
+                  </Card>
+                ))}
+
+                {matches.length > 3 && (
+                  <TouchableOpacity
+                    style={styles.viewAllMatchupsBtn}
+                    onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View all ${matches.length} matches`}
+                  >
+                    <Text style={styles.viewAllMatchupsText}>View all {matches.length} matches</Text>
+                    <Ionicons
+                      name="arrow-forward"
+                      size={16}
+                      color={colors.accentStrong || colors.tealDark}
+                      style={styles.arrowIcon}
+                    />
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.screenBg },
-  content: { padding: 20, paddingBottom: 40 },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
-  brand: { fontSize: 18, fontWeight: '700', color: colors.tealDark },
-  hello: { fontSize: 24, fontWeight: '700', color: colors.textDark, marginTop: 12, marginBottom: 20 },
-  uploadCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: 16,
-    padding: 20,
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl + spacing.xl,
+  },
+  headerBlock: {
+    marginBottom: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+  brandRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+  },
+  brand: {
+    ...typography.sectionTitle,
+    color: colors.accentStrong || colors.tealDark,
+    letterSpacing: 0.4,
+  },
+  brandIcon: {
+    marginStart: spacing.xxs + 2,
+  },
+  hello: {
+    ...typography.display,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.xs,
+  },
+  uploadCard: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
   },
   uploadIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.white,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
-  uploadTitle: { fontSize: 16, fontWeight: '700', color: colors.textDark, textAlign: 'center' },
-  uploadSubtitle: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 18 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.5 },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12 },
-  seeAllLink: { fontSize: 13, color: colors.tealDark, fontWeight: '600' },
-  infoCard: { backgroundColor: colors.white, borderRadius: 16, padding: 18, marginTop: 10, borderWidth: 1, borderColor: colors.border },
-  infoTitle: { fontSize: 14, fontWeight: '700', color: colors.textDark },
-  infoSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 6, lineHeight: 18 },
-  browseButton: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  browseButtonText: { fontSize: 13, color: colors.tealDark, fontWeight: '600' },
+  uploadTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    textAlign: 'center',
+  },
+  uploadSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
+  sectionEyebrow: {
+    ...typography.eyebrow,
+    color: colors.textSecondary || colors.textMuted,
+    letterSpacing: 0.6,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  seeAllLink: {
+    ...typography.caption,
+    color: colors.accentStrong || colors.tealDark,
+    fontWeight: '600',
+  },
+  infoCard: {
+    marginTop: spacing.sm,
+  },
+  infoTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+  },
+  infoSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
+  browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    minHeight: spacing.minimumTouchTarget,
+  },
+  browseButtonText: {
+    ...typography.button,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 14,
+  },
+  browseIcon: {
+    marginStart: spacing.xs,
+  },
   statusCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
-  statusLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.5 },
-  statusTitle: { fontSize: 15, fontWeight: '700', color: colors.textDark, marginTop: 4 },
+  statusLabel: {
+    ...typography.eyebrow,
+    color: colors.textSecondary || colors.textMuted,
+  },
+  statusTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.xxs,
+  },
   statusFileRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
   },
-  statusFileName: { fontSize: 13, color: colors.textDark, fontWeight: '600' },
-  reloadLink: { fontSize: 13, color: colors.primaryBlue, fontWeight: '600' },
-  centerLoading: { alignItems: 'center', paddingVertical: 24 },
-  loadingText: { fontSize: 13, color: colors.textMuted, marginTop: 8 },
+  statusFileName: {
+    ...typography.bodyEmphasis,
+    color: colors.textPrimary || colors.textDark,
+  },
+  reloadLink: {
+    ...typography.bodyEmphasis,
+    color: colors.info || colors.primaryBlue,
+  },
+  centerLoading: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.sm,
+  },
   calculatingCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 18,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginVertical: 10,
+    marginVertical: spacing.sm,
   },
-  calculatingTitle: { fontSize: 14, fontWeight: '700', color: colors.textDark, marginTop: 8 },
-  calculatingSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4, textAlign: 'center' },
-  progressTrack: { width: '100%', height: 6, borderRadius: 3, backgroundColor: '#E2E8F0', overflow: 'hidden', marginTop: 10 },
-  progressFill: { height: 6, backgroundColor: colors.teal },
-  cancelCalcBtn: { marginTop: 10, paddingVertical: 4 },
-  cancelCalcText: { fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' },
+  calculatingTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.sm,
+  },
+  calculatingSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  progressTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderSubtle || '#E2E8F0',
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  progressFill: {
+    height: 6,
+    backgroundColor: colors.accent || colors.teal,
+  },
+  cancelCalcBtn: {
+    marginTop: spacing.md,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
+  },
+  cancelCalcText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textDecorationLine: 'underline',
+  },
   errorCard: {
+    alignItems: 'center',
+    marginVertical: spacing.sm,
+    borderColor: colors.dangerSoft || '#FEE2E2',
     backgroundColor: '#FEF2F2',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginVertical: 10,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
   },
-  errorText: { fontSize: 13, color: colors.red || '#EF4444', textAlign: 'center', marginTop: 4 },
-  retryBtn: { marginTop: 10, backgroundColor: colors.teal, paddingHorizontal: 16, paddingVertical: 6, borderRadius: 6 },
-  retryBtnText: { color: colors.white, fontSize: 12, fontWeight: '600' },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger || '#EF4444',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  retryBtn: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.accent || colors.teal,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.sm,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
+  },
+  retryBtnText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+    fontSize: 13,
+  },
   emptyMatchesCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginVertical: 10,
+    marginVertical: spacing.sm,
   },
-  emptyMatchesTitle: { fontSize: 16, fontWeight: '700', color: colors.textDark, marginTop: 10 },
-  emptyMatchesSubtitle: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 18 },
+  emptyMatchesTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.md,
+  },
+  emptyMatchesSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
   highlightCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
+    marginBottom: spacing.md,
   },
-  highlightTop: { flexDirection: 'row', alignItems: 'center' },
-  highlightTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.textDark, marginLeft: 6, marginRight: 8 },
-  highlightMeta: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
-  whyLinkWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  whyLink: { fontSize: 12, color: colors.primaryBlue, fontWeight: '600', textDecorationLine: 'underline' },
+  highlightTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  flameIcon: {
+    marginEnd: spacing.xs,
+  },
+  highlightTitle: {
+    flex: 1,
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginEnd: spacing.sm,
+  },
+  highlightMeta: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  whyLinkWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
+    minHeight: spacing.minimumTouchTarget,
+  },
+  whyLink: {
+    ...typography.bodyEmphasis,
+    color: colors.info || colors.primaryBlue,
+    fontSize: 13,
+  },
+  chevronIcon: {
+    marginStart: spacing.xxs,
+  },
+  plainRowCard: {
+    marginBottom: spacing.sm,
+  },
   plainRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    padding: spacing.xs,
+    minHeight: spacing.minimumTouchTarget,
   },
-  plainRowMain: { flex: 1, marginRight: 12 },
-  plainTitle: { fontWeight: '600', fontSize: 14, color: colors.textDark },
-  plainMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  plainRowMain: {
+    flex: 1,
+    marginEnd: spacing.md,
+  },
+  plainTitle: {
+    ...typography.cardTitle,
+    fontSize: 14,
+    color: colors.textPrimary || colors.textDark,
+  },
+  plainMeta: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xxs,
+  },
   viewAllMatchupsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    marginTop: 10,
-    backgroundColor: '#E6F4F6',
-    borderRadius: 10,
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    borderRadius: spacing.radii.md,
+    minHeight: spacing.minimumTouchTarget,
   },
-  viewAllMatchupsText: { fontSize: 13, color: colors.tealDark, fontWeight: '600' },
+  viewAllMatchupsText: {
+    ...typography.button,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 13,
+  },
+  arrowIcon: {
+    marginStart: spacing.xs,
+  },
 });

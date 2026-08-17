@@ -1,8 +1,21 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { gradientColors, colors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 import GradientButton from '../components/GradientButton';
 import { signInWithGoogle } from '../services/googleAuth';
 import { signUpWithEmail } from '../services/auth';
@@ -10,6 +23,7 @@ import { syncAuthenticatedUser, upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 
 export default function SignUpScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [accountType, setAccountType] = useState('intern'); // 'intern' | 'employer'
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -92,12 +106,31 @@ export default function SignUpScreen({ navigation }) {
 
   return (
     <LinearGradient colors={gradientColors} style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + spacing.lg,
+              paddingBottom: insets.bottom + spacing.xl,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.title}>Sign Up</Text>
 
           <View style={styles.tabRow}>
-            <TouchableOpacity style={styles.tab} onPress={() => navigation.replace('SignIn')}>
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() => navigation.replace('SignIn')}
+              accessibilityRole="button"
+              accessibilityLabel="Switch to Sign In"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <Text style={styles.tabText}>Sign In</Text>
             </TouchableOpacity>
             <View style={[styles.tab, styles.tabActive]}>
@@ -110,20 +143,42 @@ export default function SignUpScreen({ navigation }) {
             <TouchableOpacity
               style={[styles.typeButton, accountType === 'intern' && styles.typeButtonActive]}
               onPress={() => setAccountType('intern')}
+              accessibilityRole="button"
+              accessibilityLabel="Account type: Intern"
             >
-              <Ionicons name="school" size={16} color={accountType === 'intern' ? colors.white : colors.textDark} />
-              <Text style={[styles.typeText, accountType === 'intern' && styles.typeTextActive]}>Intern</Text>
+              <Ionicons
+                name="school"
+                size={16}
+                color={accountType === 'intern' ? colors.white : colors.textDark}
+              />
+              <Text style={[styles.typeText, accountType === 'intern' && styles.typeTextActive]}>
+                Intern
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.typeButton, accountType === 'employer' && styles.typeButtonActive]}
               onPress={() => setAccountType('employer')}
+              accessibilityRole="button"
+              accessibilityLabel="Account type: Employer"
             >
-              <Ionicons name="briefcase" size={16} color={accountType === 'employer' ? colors.white : colors.textDark} />
-              <Text style={[styles.typeText, accountType === 'employer' && styles.typeTextActive]}>Employer</Text>
+              <Ionicons
+                name="briefcase"
+                size={16}
+                color={accountType === 'employer' ? colors.white : colors.textDark}
+              />
+              <Text style={[styles.typeText, accountType === 'employer' && styles.typeTextActive]}>
+                Employer
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <TextInput style={styles.input} placeholder="Full name" placeholderTextColor="#8A8A8A" value={fullName} onChangeText={setFullName} />
+          <TextInput
+            style={styles.input}
+            placeholder="Full name"
+            placeholderTextColor="#8A8A8A"
+            value={fullName}
+            onChangeText={setFullName}
+          />
           <TextInput
             style={styles.input}
             placeholder="E-Mail"
@@ -133,10 +188,28 @@ export default function SignUpScreen({ navigation }) {
             value={email}
             onChangeText={setEmail}
           />
-          <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#8A8A8A" secureTextEntry value={password} onChangeText={setPassword} />
-          <TextInput style={styles.input} placeholder="Department" placeholderTextColor="#8A8A8A" value={department} onChangeText={setDepartment} />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#8A8A8A"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Department"
+            placeholderTextColor="#8A8A8A"
+            value={department}
+            onChangeText={setDepartment}
+          />
 
-          <GradientButton title={loading ? "Creating account..." : "Create an account"} color={colors.primaryBlue} onPress={handleCreateAccount} style={{ marginTop: 20 }} />
+          <GradientButton
+            title={loading ? "Creating account..." : "Create an account"}
+            color={colors.primaryBlue}
+            onPress={handleCreateAccount}
+            style={{ marginTop: spacing.lg }}
+          />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
@@ -144,8 +217,19 @@ export default function SignUpScreen({ navigation }) {
             <View style={styles.divider} />
           </View>
 
-          <GradientButton title="by Google" color={colors.white} textColor={colors.textDark} onPress={handleGoogle} />
-          <GradientButton title="by Apple" color={colors.white} textColor={colors.textDark} onPress={() => {}} style={{ marginTop: 12 }} />
+          <GradientButton
+            title="by Google"
+            color={colors.white}
+            textColor={colors.textDark}
+            onPress={handleGoogle}
+          />
+          <GradientButton
+            title="by Apple"
+            color={colors.white}
+            textColor={colors.textDark}
+            onPress={() => {}}
+            style={{ marginTop: spacing.md }}
+          />
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -155,41 +239,96 @@ export default function SignUpScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  content: { paddingHorizontal: 24, paddingTop: 50, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: '700', color: colors.white, marginBottom: 20 },
-  tabRow: { flexDirection: 'row', marginBottom: 20 },
-  tab: {
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    marginRight: 10,
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
   },
-  tabActive: { backgroundColor: colors.primaryBlue },
-  tabActiveText: { color: colors.white, fontWeight: '700' },
-  tabText: { color: colors.textDark, fontWeight: '600' },
-  sectionLabel: { color: colors.white, fontWeight: '600', marginBottom: 8, fontSize: 12 },
-  typeRow: { flexDirection: 'row', marginBottom: 18 },
+  title: {
+    ...typography.display,
+    color: colors.white,
+    marginBottom: spacing.lg,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.lg,
+  },
+  tab: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: spacing.radii.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginEnd: spacing.sm,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  tabActive: {
+    backgroundColor: colors.primaryBlue,
+  },
+  tabActiveText: {
+    ...typography.button,
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  tabText: {
+    ...typography.button,
+    color: colors.textDark,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  sectionLabel: {
+    ...typography.caption,
+    color: colors.white,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.lg,
+  },
   typeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    marginRight: 10,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: spacing.radii.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginEnd: spacing.sm,
+    minHeight: 40,
   },
-  typeButtonActive: { backgroundColor: colors.primaryBlue },
-  typeText: { marginLeft: 6, color: colors.textDark, fontWeight: '600' },
-  typeTextActive: { color: colors.white },
+  typeButtonActive: {
+    backgroundColor: colors.primaryBlue,
+  },
+  typeText: {
+    marginStart: spacing.xs + 2,
+    color: colors.textDark,
+    ...typography.button,
+    fontSize: 13,
+  },
+  typeTextActive: {
+    color: colors.white,
+  },
   input: {
     backgroundColor: colors.inputBg,
-    borderRadius: 10,
-    height: 46,
-    paddingHorizontal: 14,
-    marginBottom: 12,
+    borderRadius: spacing.radii.md,
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    color: colors.textDark,
+    ...typography.body,
   },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
-  divider: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.6)' },
-  dividerText: { color: colors.white, marginHorizontal: 12 },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.xl,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  dividerText: {
+    ...typography.caption,
+    color: colors.white,
+    marginHorizontal: spacing.md,
+  },
 });

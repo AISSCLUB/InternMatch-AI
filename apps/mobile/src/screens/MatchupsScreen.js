@@ -10,6 +10,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import MatchBadge from '../components/MatchBadge';
 import GradientButton from '../components/GradientButton';
 import { getMatches } from '../services/api';
@@ -76,280 +81,470 @@ export default function MatchupsScreen({ navigation }) {
 
   const [top, ...rest] = matches;
 
-  return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={[colors.teal]}
-          tintColor={colors.teal}
+  const renderRecalculateAction = () => {
+    if (!hasAnalyzedCV || matches.length === 0 || isCalculating) return null;
+    return (
+      <TouchableOpacity
+        style={styles.recalculateHeaderBtn}
+        onPress={handleRecalculate}
+        disabled={isCalculating}
+        accessibilityRole="button"
+        accessibilityLabel="Recalculate matches"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons
+          name="refresh"
+          size={14}
+          color={colors.accentStrong || colors.tealDark}
+          style={styles.recalcIcon}
         />
-      }
-    >
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Matchups</Text>
-        {hasAnalyzedCV && matches.length > 0 && !isCalculating && (
-          <TouchableOpacity
-            style={styles.recalculateHeaderBtn}
-            onPress={handleRecalculate}
-            disabled={isCalculating}
-          >
-            <Ionicons name="refresh" size={14} color={colors.tealDark} style={{ marginRight: 4 }} />
-            <Text style={styles.recalculateHeaderText}>Recalculate</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+        <Text style={styles.recalculateHeaderText}>Recalculate</Text>
+      </TouchableOpacity>
+    );
+  };
 
-      {/* Calculating Status Banner */}
-      {isCalculating && (
-        <View style={styles.calculatingCard}>
-          <ActivityIndicator size="small" color={colors.teal} />
-          <Text style={styles.calculatingTitle}>Recalculating Matchups...</Text>
-          <Text style={styles.calculatingSubtitle}>
-            Comparing your profile against all internship listings ({progressPercent}%)
-          </Text>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-          </View>
-          <TouchableOpacity style={styles.cancelCalcBtn} onPress={cancelCalculation}>
-            <Text style={styles.cancelCalcText}>Stop Checking</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+  return (
+    <ScreenContainer edges={['top']}>
+      <ScreenHeader
+        title="Matchups"
+        alignment="start"
+        rightAction={renderRecalculateAction()}
+      />
 
-      {/* Calculation Error */}
-      {calculationError && (
-        <View style={styles.errorCard}>
-          <Ionicons name="alert-circle-outline" size={24} color={colors.red || '#EF4444'} />
-          <Text style={styles.errorText}>{calculationError}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={handleRecalculate}>
-            <Text style={styles.retryBtnText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Initial Loading */}
-      {loading && !refreshing && !isCalculating && (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.teal} />
-          <Text style={styles.loadingText}>Loading your matchups...</Text>
-        </View>
-      )}
-
-      {/* API / Network Error */}
-      {!loading && error && !isCalculating && (
-        <View style={styles.errorCard}>
-          <Ionicons name="alert-circle-outline" size={36} color={colors.red || '#EF4444'} />
-          <Text style={styles.errorTitle}>Could Not Load Matchups</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={fetchMatchesData}>
-            <Text style={styles.retryBtnText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Empty State: No CV Analyzed */}
-      {!loading && !error && !isCalculating && !hasAnalyzedCV && (
-        <View style={styles.emptyCard}>
-          <Ionicons name="document-text-outline" size={48} color={colors.teal} />
-          <Text style={styles.emptyTitle}>CV Required for Matchups</Text>
-          <Text style={styles.emptySubtitle}>
-            Upload and analyze your CV so our AI matching engine can compute compatibility scores for you.
-          </Text>
-          <GradientButton
-            title="Upload CV"
-            color={colors.teal}
-            onPress={() => navigation.navigate('CVUpload')}
-            style={{ marginTop: 20, width: '100%' }}
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.accent || colors.teal]}
+            tintColor={colors.accent || colors.teal}
           />
-        </View>
-      )}
-
-      {/* Empty State: CV Analyzed but No Matches Calculated */}
-      {!loading && !error && !isCalculating && hasAnalyzedCV && matches.length === 0 && (
-        <View style={styles.emptyCard}>
-          <Ionicons name="sparkles-outline" size={48} color={colors.teal} />
-          <Text style={styles.emptyTitle}>No Matches Calculated Yet</Text>
-          <Text style={styles.emptySubtitle}>
-            Ready to find your best matches? Run our matching calculation to score available internships against your verified skills and background.
-          </Text>
-          <GradientButton
-            title="Calculate My Matches"
-            color={colors.teal}
-            onPress={handleRecalculate}
-            style={{ marginTop: 20, width: '100%' }}
-          />
-        </View>
-      )}
-
-      {/* Populated Matchups List */}
-      {!loading && !error && !isCalculating && top && (
-        <>
-          {/* Top Highlight Card */}
-          <TouchableOpacity
-            style={styles.highlightCard}
-            onPress={() => navigation.navigate('InternshipDetail', { internshipId: top.internship.id })}
-            activeOpacity={0.7}
-          >
-            <View style={styles.highlightTop}>
-              <Ionicons name="flame" size={16} color="#F2812B" />
-              <Text style={styles.highlightLabel}>Highest Compatibility</Text>
-            </View>
-
-            <View style={styles.highlightTitleRow}>
-              <Text style={styles.highlightTitle}>{top.internship.title}</Text>
-              <MatchBadge score={top.overall_score} />
-            </View>
-
-            <Text style={styles.highlightMeta}>
-              {top.internship.company} · {top.internship.location}
+        }
+      >
+        {/* Calculating Status Banner */}
+        {isCalculating && (
+          <Card style={styles.calculatingCard} padding="md">
+            <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+            <Text style={styles.calculatingTitle}>Recalculating Matchups...</Text>
+            <Text style={styles.calculatingSubtitle}>
+              Comparing your profile against all internship listings ({progressPercent}%)
             </Text>
-
-            <View style={styles.scoresSubRow}>
-              <Text style={styles.scoresSubText}>
-                Skills: {top.skill_score}% · Vector: {top.vector_score}%
-              </Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
             </View>
-
             <TouchableOpacity
-              style={styles.whyLinkWrap}
-              onPress={() =>
-                navigation.navigate('WhyYouMatch', {
-                  matchId: top.match_id,
-                  internshipId: top.internship.id,
-                })
-              }
+              style={styles.cancelCalcBtn}
+              onPress={cancelCalculation}
+              accessibilityRole="button"
+              accessibilityLabel="Stop Checking"
             >
-              <Text style={styles.whyLink}>Why You Match</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.primaryBlue} style={{ marginLeft: 2 }} />
+              <Text style={styles.cancelCalcText}>Stop Checking</Text>
             </TouchableOpacity>
-          </TouchableOpacity>
+          </Card>
+        )}
 
-          {/* Remaining Matches */}
-          {rest.map((item, index) => (
+        {/* Calculation Error */}
+        {calculationError && (
+          <Card style={styles.errorCard} padding="md">
+            <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
+            <Text style={styles.errorText}>{calculationError}</Text>
             <TouchableOpacity
-              key={item.match_id}
-              style={[
-                styles.plainRow,
-                index === rest.length - 1 && { borderBottomWidth: 0 },
-              ]}
-              onPress={() => navigation.navigate('InternshipDetail', { internshipId: item.internship.id })}
-              activeOpacity={0.7}
+              style={styles.retryBtn}
+              onPress={handleRecalculate}
+              accessibilityRole="button"
+              accessibilityLabel="Try Again"
             >
-              <View style={styles.plainRowMain}>
-                <Text style={styles.plainTitle}>{item.internship.title}</Text>
-                <Text style={styles.plainMeta}>
-                  {item.internship.company} · {item.internship.location}
+              <Text style={styles.retryBtnText}>Try Again</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Initial Loading */}
+        {loading && !refreshing && !isCalculating && (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+            <Text style={styles.loadingText}>Loading your matchups...</Text>
+          </View>
+        )}
+
+        {/* API / Network Error */}
+        {!loading && error && !isCalculating && (
+          <Card style={styles.errorCard} padding="lg">
+            <Ionicons name="alert-circle-outline" size={36} color={colors.danger || '#EF4444'} />
+            <Text style={styles.errorTitle}>Could Not Load Matchups</Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={fetchMatchesData}
+              accessibilityRole="button"
+              accessibilityLabel="Retry"
+            >
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Empty State: No CV Analyzed */}
+        {!loading && !error && !isCalculating && !hasAnalyzedCV && (
+          <Card style={styles.emptyCard} padding="lg">
+            <Ionicons name="document-text-outline" size={48} color={colors.accent || colors.teal} />
+            <Text style={styles.emptyTitle}>CV Required for Matchups</Text>
+            <Text style={styles.emptySubtitle}>
+              Upload and analyze your CV so our AI matching engine can compute compatibility scores for you.
+            </Text>
+            <GradientButton
+              title="Upload CV"
+              color={colors.accent || colors.teal}
+              onPress={() => navigation.navigate('CVUpload')}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+          </Card>
+        )}
+
+        {/* Empty State: CV Analyzed but No Matches Calculated */}
+        {!loading && !error && !isCalculating && hasAnalyzedCV && matches.length === 0 && (
+          <Card style={styles.emptyCard} padding="lg">
+            <Ionicons name="sparkles-outline" size={48} color={colors.accent || colors.teal} />
+            <Text style={styles.emptyTitle}>No Matches Calculated Yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Ready to find your best matches? Run our matching calculation to score available internships against your verified skills and background.
+            </Text>
+            <GradientButton
+              title="Calculate My Matches"
+              color={colors.accent || colors.teal}
+              onPress={handleRecalculate}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+          </Card>
+        )}
+
+        {/* Populated Matchups List */}
+        {!loading && !error && !isCalculating && top && (
+          <>
+            {/* Top Highlight Card */}
+            <Card variant="highlight" style={styles.highlightCard} padding="md">
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate('InternshipDetail', {
+                    internshipId: top.internship.id,
+                  })
+                }
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${top.internship.title} at ${top.internship.company}`}
+              >
+                <View style={styles.highlightTop}>
+                  <Ionicons name="flame" size={16} color="#F2812B" style={styles.flameIcon} />
+                  <Text style={styles.highlightLabel}>Highest Compatibility</Text>
+                </View>
+
+                <View style={styles.highlightTitleRow}>
+                  <Text style={styles.highlightTitle}>{top.internship.title}</Text>
+                  <MatchBadge score={top.overall_score} />
+                </View>
+
+                <Text style={styles.highlightMeta}>
+                  {top.internship.company} · {top.internship.location}
                 </Text>
+
+                <View style={styles.scoresSubRow}>
+                  <Text style={styles.scoresSubText}>
+                    Skills: {top.skill_score}% · Vector: {top.vector_score}%
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.whyLinkWrap}
+                onPress={() =>
+                  navigation.navigate('WhyYouMatch', {
+                    matchId: top.match_id,
+                    internshipId: top.internship.id,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel="Why You Match breakdown"
+              >
+                <Text style={styles.whyLink}>Why You Match</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={colors.primaryBlue}
+                  style={styles.chevronIcon}
+                />
+              </TouchableOpacity>
+            </Card>
+
+            {/* Remaining Matches */}
+            {rest.map((item, index) => (
+              <Card
+                key={item.match_id}
+                style={[
+                  styles.plainRowCard,
+                  index === rest.length - 1 && { marginBottom: spacing.md },
+                ]}
+                padding="sm"
+              >
                 <TouchableOpacity
-                  style={styles.plainWhyWrap}
+                  style={styles.plainRow}
                   onPress={() =>
-                    navigation.navigate('WhyYouMatch', {
-                      matchId: item.match_id,
+                    navigation.navigate('InternshipDetail', {
                       internshipId: item.internship.id,
                     })
                   }
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
                 >
-                  <Text style={styles.plainWhyLink}>Why You Match</Text>
-                  <Ionicons name="chevron-forward" size={12} color={colors.primaryBlue} style={{ marginLeft: 2 }} />
+                  <View style={styles.plainRowMain}>
+                    <Text style={styles.plainTitle}>{item.internship.title}</Text>
+                    <Text style={styles.plainMeta}>
+                      {item.internship.company} · {item.internship.location}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.plainWhyWrap}
+                      onPress={() =>
+                        navigation.navigate('WhyYouMatch', {
+                          matchId: item.match_id,
+                          internshipId: item.internship.id,
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={`Why You Match breakdown for ${item.internship.title}`}
+                    >
+                      <Text style={styles.plainWhyLink}>Why You Match</Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={12}
+                        color={colors.primaryBlue}
+                        style={styles.chevronIcon}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <MatchBadge score={item.overall_score} />
                 </TouchableOpacity>
-              </View>
-              <MatchBadge score={item.overall_score} />
-            </TouchableOpacity>
-          ))}
-        </>
-      )}
-    </ScrollView>
+              </Card>
+            ))}
+          </>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.screenBg },
-  content: { padding: 20, paddingBottom: 40 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: '700', color: colors.textDark },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl + spacing.xl,
+  },
   recalculateHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E6F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.sm,
+    minHeight: 34,
   },
-  recalculateHeaderText: { fontSize: 12, fontWeight: '600', color: colors.tealDark },
-  centerContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 64 },
-  loadingText: { fontSize: 14, color: colors.textMuted, marginTop: 12 },
+  recalcIcon: {
+    marginEnd: spacing.xs,
+  },
+  recalculateHeaderText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.accentStrong || colors.tealDark,
+  },
+  centerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl * 2,
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.md,
+  },
   calculatingCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 18,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
-  calculatingTitle: { fontSize: 14, fontWeight: '700', color: colors.textDark, marginTop: 8 },
-  calculatingSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4, textAlign: 'center' },
-  progressTrack: { width: '100%', height: 6, borderRadius: 3, backgroundColor: '#E2E8F0', overflow: 'hidden', marginTop: 10 },
-  progressFill: { height: 6, backgroundColor: colors.teal },
-  cancelCalcBtn: { marginTop: 10, paddingVertical: 4 },
-  cancelCalcText: { fontSize: 12, color: colors.textMuted, textDecorationLine: 'underline' },
+  calculatingTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.sm,
+  },
+  calculatingSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  progressTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderSubtle || '#E2E8F0',
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  progressFill: {
+    height: 6,
+    backgroundColor: colors.accent || colors.teal,
+  },
+  cancelCalcBtn: {
+    marginTop: spacing.md,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
+  },
+  cancelCalcText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textDecorationLine: 'underline',
+  },
   errorCard: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    borderColor: colors.dangerSoft || '#FEE2E2',
     backgroundColor: '#FEF2F2',
-    borderRadius: 14,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
   },
-  errorTitle: { fontSize: 15, fontWeight: '700', color: colors.textDark, marginTop: 8 },
-  errorText: { fontSize: 13, color: colors.red || '#EF4444', textAlign: 'center', marginTop: 4 },
-  retryBtn: { marginTop: 12, backgroundColor: colors.teal, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 8 },
-  retryBtnText: { color: colors.white, fontSize: 13, fontWeight: '600' },
+  errorTitle: {
+    ...typography.cardTitle,
+    color: colors.danger || '#EF4444',
+    marginTop: spacing.sm,
+  },
+  errorText: {
+    ...typography.caption,
+    color: colors.danger || '#EF4444',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  retryBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.accent || colors.teal,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.radii.sm,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
+  },
+  retryBtnText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+    fontSize: 13,
+  },
   emptyCard: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 32,
     alignItems: 'center',
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginTop: spacing.md,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.textDark, marginTop: 14 },
-  emptySubtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 18 },
+  emptyTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.md,
+  },
+  emptySubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
   highlightCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
+    marginBottom: spacing.md,
   },
-  highlightTop: { flexDirection: 'row', alignItems: 'center' },
-  highlightLabel: { marginLeft: 6, color: '#D97706', fontWeight: '700', fontSize: 12 },
-  highlightTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 8 },
-  highlightTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: colors.textDark, marginRight: 8 },
-  highlightMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  scoresSubRow: { marginTop: 8 },
-  scoresSubText: { fontSize: 11, color: colors.textMuted, fontWeight: '500' },
-  whyLinkWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  whyLink: { color: colors.primaryBlue, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' },
+  highlightTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  flameIcon: {
+    marginEnd: spacing.xs,
+  },
+  highlightLabel: {
+    ...typography.eyebrow,
+    color: '#D97706',
+  },
+  highlightTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginTop: spacing.sm,
+  },
+  highlightTitle: {
+    flex: 1,
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginEnd: spacing.sm,
+  },
+  highlightMeta: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  scoresSubRow: {
+    marginTop: spacing.sm,
+  },
+  scoresSubText: {
+    ...typography.caption,
+    color: colors.textTertiary || colors.textMuted,
+    fontWeight: '500',
+  },
+  whyLinkWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
+    minHeight: spacing.minimumTouchTarget,
+  },
+  whyLink: {
+    ...typography.bodyEmphasis,
+    color: colors.info || colors.primaryBlue,
+    fontSize: 13,
+  },
+  chevronIcon: {
+    marginStart: spacing.xxs,
+  },
+  plainRowCard: {
+    marginBottom: spacing.sm,
+  },
   plainRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    padding: spacing.xs,
+    minHeight: spacing.minimumTouchTarget,
   },
-  plainRowMain: { flex: 1, marginRight: 12 },
-  plainTitle: { fontWeight: '600', fontSize: 14, color: colors.textDark },
-  plainMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  plainWhyWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  plainWhyLink: { fontSize: 12, color: colors.primaryBlue, fontWeight: '600', textDecorationLine: 'underline' },
+  plainRowMain: {
+    flex: 1,
+    marginEnd: spacing.md,
+  },
+  plainTitle: {
+    ...typography.cardTitle,
+    fontSize: 14,
+    color: colors.textPrimary || colors.textDark,
+  },
+  plainMeta: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xxs,
+  },
+  plainWhyWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.xs,
+    minHeight: 28,
+  },
+  plainWhyLink: {
+    ...typography.caption,
+    color: colors.info || colors.primaryBlue,
+    fontWeight: '600',
+  },
 });

@@ -12,21 +12,45 @@ export default function ScreenHeader({
   navigation,
   onBackPress,
   rightAction,
+  alignment = 'center', // 'center' | 'start'
   style,
   titleStyle,
+  bordered = false,
 }) {
-  return (
-    <View style={[styles.header, style]}>
-      <View style={styles.leftSlot}>
-        {showBack ? (
-          <BackButton navigation={navigation} onPress={onBackPress} />
-        ) : null}
-      </View>
+  const isStart = alignment === 'start';
 
-      <View style={styles.centerSlot}>
+  return (
+    <View
+      style={[
+        styles.header,
+        bordered && styles.bordered,
+        style,
+      ]}
+    >
+      {/* Left Slot: Back button or empty spacer */}
+      {showBack ? (
+        <View style={styles.leftSlot}>
+          <BackButton navigation={navigation} onPress={onBackPress} />
+        </View>
+      ) : isStart ? null : (
+        <View style={styles.leftSlot} />
+      )}
+
+      {/* Center/Title Slot */}
+      <View
+        style={[
+          styles.titleContainer,
+          isStart && styles.titleContainerStart,
+          !showBack && isStart && styles.titleContainerStartNoBack,
+        ]}
+      >
         {title ? (
           <Text
-            style={[styles.title, titleStyle]}
+            style={[
+              styles.title,
+              isStart && styles.titleStart,
+              titleStyle,
+            ]}
             numberOfLines={1}
             accessibilityRole="header"
           >
@@ -34,15 +58,24 @@ export default function ScreenHeader({
           </Text>
         ) : null}
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text
+            style={[
+              styles.subtitle,
+              isStart && styles.subtitleStart,
+            ]}
+            numberOfLines={1}
+          >
             {subtitle}
           </Text>
         ) : null}
       </View>
 
-      <View style={styles.rightSlot}>
-        {rightAction || null}
-      </View>
+      {/* Right Slot: Custom action or balancing spacer */}
+      {rightAction ? (
+        <View style={styles.rightSlot}>{rightAction}</View>
+      ) : isStart ? null : (
+        <View style={styles.rightSlotSpacer} />
+      )}
     </View>
   );
 }
@@ -53,34 +86,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     minHeight: spacing.headerContentHeight,
-    paddingHorizontal: spacing.sm,
-    backgroundColor: 'transparent',
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  bordered: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle || colors.border,
   },
   leftSlot: {
-    width: spacing.minimumTouchTarget,
+    minWidth: spacing.minimumTouchTarget,
+    minHeight: spacing.minimumTouchTarget,
     alignItems: 'flex-start',
     justifyContent: 'center',
+    marginEnd: spacing.xs,
   },
-  centerSlot: {
+  titleContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xs,
   },
+  titleContainerStart: {
+    alignItems: 'flex-start',
+    paddingHorizontal: 0,
+  },
+  titleContainerStartNoBack: {
+    paddingStart: 0,
+  },
   rightSlot: {
-    width: spacing.minimumTouchTarget,
+    minWidth: spacing.minimumTouchTarget,
+    minHeight: spacing.minimumTouchTarget,
     alignItems: 'flex-end',
     justifyContent: 'center',
+    marginStart: spacing.xs,
+  },
+  rightSlotSpacer: {
+    width: spacing.minimumTouchTarget,
+    height: spacing.minimumTouchTarget,
+    marginStart: spacing.xs,
   },
   title: {
     ...typography.screenTitle,
     color: colors.textPrimary || colors.textDark,
     textAlign: 'center',
   },
+  titleStart: {
+    textAlign: 'left',
+  },
   subtitle: {
     ...typography.caption,
     color: colors.textSecondary || colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.xxs,
+  },
+  subtitleStart: {
+    textAlign: 'left',
   },
 });

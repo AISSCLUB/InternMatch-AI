@@ -1,8 +1,21 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
@@ -20,121 +33,223 @@ export default function ProfileScreen({ navigation }) {
 
   const skills = profile?.skills || [];
   const education = profile?.education || [];
-  const primaryEducation = education.length > 0
-    ? `${education[0].institution}${education[0].degree ? ` · ${education[0].degree}` : ''}`
-    : null;
+  const primaryEducation =
+    education.length > 0
+      ? `${education[0].institution}${education[0].degree ? ` · ${education[0].degree}` : ''}`
+      : null;
+
+  const renderSettingsAction = () => (
+    <TouchableOpacity
+      style={styles.settingsBtn}
+      onPress={() => navigation.navigate('Settings')}
+      accessibilityRole="button"
+      accessibilityLabel="Settings"
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Ionicons
+        name="settings-outline"
+        size={22}
+        color={colors.textPrimary || colors.textDark}
+      />
+    </TouchableOpacity>
+  );
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={refreshProfile} tintColor={colors.teal} />
-      }
-    >
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Profile</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-          <Ionicons name="settings-outline" size={22} color={colors.textDark} />
-        </TouchableOpacity>
-      </View>
+    <ScreenContainer edges={['top']}>
+      <ScreenHeader
+        title="Profile"
+        alignment="start"
+        rightAction={renderSettingsAction()}
+      />
 
-      <View style={styles.avatarWrap}>
-        <View style={styles.avatarPlaceholder}>
-          <Ionicons name="person-outline" size={36} color={colors.textMuted} />
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={refreshProfile}
+            tintColor={colors.accent || colors.teal}
+          />
+        }
+      >
+        <View style={styles.avatarWrap}>
+          <View style={styles.avatarPlaceholder}>
+            <Ionicons
+              name="person-outline"
+              size={36}
+              color={colors.textSecondary || colors.textMuted}
+            />
+          </View>
         </View>
-      </View>
 
-      {loading && !profile ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.teal} />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      ) : profile ? (
-        <>
-          <Text style={styles.name}>{profile.full_name}</Text>
-          {profile.headline ? <Text style={styles.subtitle}>{profile.headline}</Text> : null}
-          {primaryEducation ? <Text style={styles.subtitle}>{primaryEducation}</Text> : null}
+        {loading && !profile ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+            <Text style={styles.loadingText}>Loading profile...</Text>
+          </View>
+        ) : profile ? (
+          <>
+            <Text style={styles.name} numberOfLines={2}>
+              {profile.full_name}
+            </Text>
+            {profile.headline ? (
+              <Text style={styles.subtitle}>{profile.headline}</Text>
+            ) : null}
+            {primaryEducation ? (
+              <Text style={styles.subtitle}>{primaryEducation}</Text>
+            ) : null}
 
-          {skills.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Skills</Text>
-              <View style={styles.chipRow}>
-                {skills.map((s) => (
-                  <Chip key={s} label={s} variant="skill" />
-                ))}
+            {skills.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Skills</Text>
+                <View style={styles.chipRow}>
+                  {skills.map((s) => (
+                    <Chip key={s} label={s} variant="skill" />
+                  ))}
+                </View>
+              </>
+            )}
+
+            <Text style={styles.sectionTitle}>Links</Text>
+            <Card style={styles.linkCard} padding="sm">
+              <View style={styles.linkRow}>
+                <Ionicons
+                  name="link-outline"
+                  size={16}
+                  color={colors.textSecondary || colors.textMuted}
+                  style={styles.linkIcon}
+                />
+                <Text style={styles.linkText}>LinkedIn</Text>
               </View>
-            </>
-          )}
+              <View style={[styles.linkRow, styles.linkRowBorder]}>
+                <Ionicons
+                  name="link-outline"
+                  size={16}
+                  color={colors.textSecondary || colors.textMuted}
+                  style={styles.linkIcon}
+                />
+                <Text style={styles.linkText}>GitHub</Text>
+              </View>
+            </Card>
 
-          <Text style={styles.sectionTitle}>Links</Text>
-          <View style={styles.linkRow}>
-            <Ionicons name="link-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.linkText}>LinkedIn</Text>
-          </View>
-          <View style={styles.linkRow}>
-            <Ionicons name="link-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.linkText}>GitHub</Text>
-          </View>
-
-          <GradientButton
-            title="Edit Profile"
-            color={colors.teal}
-            onPress={() => navigation.navigate('EditProfile')}
-            style={{ marginTop: 24 }}
-          />
-          <GradientButton
-            title="CV Upload"
-            color={colors.tealDark}
-            onPress={() => navigation.navigate('CVUpload')}
-            style={{ marginTop: 12 }}
-          />
-        </>
-      ) : (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.name}>No Profile Yet</Text>
-          <Text style={styles.subtitle}>Create your profile to start matching with internships.</Text>
-          <GradientButton
-            title="Create Profile"
-            color={colors.teal}
-            onPress={() => navigation.navigate('EditProfile')}
-            style={{ marginTop: 24 }}
-          />
-        </View>
-      )}
-    </ScrollView>
+            <GradientButton
+              title="Edit Profile"
+              color={colors.accent || colors.teal}
+              onPress={() => navigation.navigate('EditProfile')}
+              style={{ marginTop: spacing.xl }}
+            />
+            <GradientButton
+              title="CV Upload"
+              color={colors.accentStrong || colors.tealDark}
+              onPress={() => navigation.navigate('CVUpload')}
+              style={{ marginTop: spacing.md }}
+            />
+          </>
+        ) : (
+          <Card style={styles.emptyWrap} padding="lg">
+            <Text style={styles.name}>No Profile Yet</Text>
+            <Text style={styles.subtitle}>
+              Create your profile to start matching with internships.
+            </Text>
+            <GradientButton
+              title="Create Profile"
+              color={colors.accent || colors.teal}
+              onPress={() => navigation.navigate('EditProfile')}
+              style={{ marginTop: spacing.lg, width: '100%' }}
+            />
+          </Card>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.screenBg },
-  content: { padding: 20, paddingBottom: 40 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: '700', color: colors.textDark },
-  avatarWrap: { alignItems: 'center', marginTop: 16 },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl + spacing.xl,
+  },
+  settingsBtn: {
+    width: spacing.minimumTouchTarget,
+    height: spacing.minimumTouchTarget,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  avatarWrap: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
   avatarPlaceholder: {
     width: 84,
     height: 84,
     borderRadius: 42,
     borderWidth: 2,
-    borderColor: colors.textMuted,
+    borderColor: colors.borderSubtle || colors.border,
+    backgroundColor: colors.surface || colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginTop: 12, color: colors.textDark },
-  subtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: colors.textDark, marginTop: 20, marginBottom: 8 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  name: {
+    ...typography.cardTitle,
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    color: colors.textPrimary || colors.textDark,
+  },
+  subtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xxs,
+    lineHeight: 18,
+  },
+  sectionTitle: {
+    ...typography.sectionTitle,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  linkCard: {
+    marginTop: spacing.xs,
+  },
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.cardBg,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    paddingVertical: spacing.sm,
   },
-  linkText: { marginLeft: 8, color: colors.textMuted },
-  loadingWrap: { alignItems: 'center', marginTop: 30 },
-  loadingText: { marginTop: 10, fontSize: 14, color: colors.textMuted },
-  emptyWrap: { alignItems: 'center', marginTop: 16 },
+  linkRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
+  },
+  linkIcon: {
+    marginEnd: spacing.sm,
+  },
+  linkText: {
+    ...typography.body,
+    color: colors.textPrimary || colors.textDark,
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    marginTop: spacing.xl * 2,
+  },
+  loadingText: {
+    ...typography.caption,
+    marginTop: spacing.sm,
+    color: colors.textSecondary || colors.textMuted,
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+  },
 });

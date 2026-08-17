@@ -1,33 +1,55 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
 
 const ICONS = {
   Home: 'home',
   Internships: 'business',
-  Matchups: 'radio-button-on', // stand-in for the target/compass icon in the design
+  Matchups: 'radio-button-on',
   Applications: 'document-text',
   Profile: 'person-circle',
 };
 
 export default function CustomTabBar({ state, descriptors, navigation }) {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, spacing.xs);
+
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, { paddingBottom: bottomInset, height: 56 + bottomInset }]}>
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         const iconName = ICONS[route.name] ?? 'ellipse';
 
         const onPress = () => {
-          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
           if (!focused && !event.defaultPrevented) {
             navigation.navigate(route.name);
           }
         };
 
         return (
-          <TouchableOpacity key={route.key} style={styles.tabItem} onPress={onPress} activeOpacity={0.7}>
-            <Ionicons name={iconName} size={22} color={focused ? colors.tealDark : colors.textMuted} />
+          <TouchableOpacity
+            key={route.key}
+            style={styles.tabItem}
+            onPress={onPress}
+            activeOpacity={0.7}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: focused }}
+            accessibilityLabel={route.name}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={iconName}
+              size={22}
+              color={focused ? (colors.accent || colors.teal) : (colors.textTertiary || colors.textMuted)}
+            />
             {focused && <View style={styles.dot} />}
           </TouchableOpacity>
         );
@@ -39,12 +61,24 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    height: 60,
-    backgroundColor: colors.cardBg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    backgroundColor: colors.surface || colors.cardBg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
     alignItems: 'center',
+    justifyContent: 'space-around',
   },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.red, marginTop: 4 },
+  tabItem: {
+    flex: 1,
+    height: 48,
+    minWidth: spacing.minimumTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.accent || colors.teal,
+    marginTop: spacing.xxs + 1,
+  },
 });

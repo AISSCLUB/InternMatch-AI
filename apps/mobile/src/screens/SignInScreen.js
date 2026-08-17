@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { gradientColors, colors } from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
 import GradientButton from '../components/GradientButton';
 import { signInWithGoogle } from '../services/googleAuth';
 import { signInWithEmail } from '../services/auth';
@@ -9,6 +22,7 @@ import { syncAuthenticatedUser, upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 
 export default function SignInScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,15 +100,34 @@ export default function SignInScreen({ navigation }) {
 
   return (
     <LinearGradient colors={gradientColors} style={styles.container}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <View style={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: insets.top + spacing.lg,
+              paddingBottom: insets.bottom + spacing.xl,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.title}>Welcome</Text>
 
           <View style={styles.tabRow}>
             <View style={[styles.tab, styles.tabActive]}>
               <Text style={styles.tabActiveText}>Sign In</Text>
             </View>
-            <TouchableOpacity style={styles.tab} onPress={() => navigation.replace('SignUp')}>
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() => navigation.replace('SignUp')}
+              accessibilityRole="button"
+              accessibilityLabel="Switch to Sign Up"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <Text style={styles.tabText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
@@ -106,16 +139,33 @@ export default function SignInScreen({ navigation }) {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            placeholderTextColor="rgba(22, 35, 46, 0.5)"
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+          <TextInput
+            style={styles.input}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            placeholderTextColor="rgba(22, 35, 46, 0.5)"
+          />
 
-          <TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: 6 }}>
+          <TouchableOpacity
+            style={styles.forgotBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="I forgot my password"
+          >
             <Text style={styles.forgot}>I forgot my password</Text>
           </TouchableOpacity>
 
-          <GradientButton title={loading ? "Signing in..." : "Continue"} color={colors.primaryBlue} onPress={handleContinue} style={{ marginTop: 24 }} />
+          <GradientButton
+            title={loading ? "Signing in..." : "Continue"}
+            color={colors.primaryBlue}
+            onPress={handleContinue}
+            style={{ marginTop: spacing.xl }}
+          />
 
           <View style={styles.dividerRow}>
             <View style={styles.divider} />
@@ -123,9 +173,20 @@ export default function SignInScreen({ navigation }) {
             <View style={styles.divider} />
           </View>
 
-          <GradientButton title="by Google" color={colors.white} textColor={colors.textDark} onPress={handleGoogle} />
-          <GradientButton title="by Apple" color={colors.white} textColor={colors.textDark} onPress={() => {}} style={{ marginTop: 12 }} />
-        </View>
+          <GradientButton
+            title="by Google"
+            color={colors.white}
+            textColor={colors.textDark}
+            onPress={handleGoogle}
+          />
+          <GradientButton
+            title="by Apple"
+            color={colors.white}
+            textColor={colors.textDark}
+            onPress={() => {}}
+            style={{ marginTop: spacing.md }}
+          />
+        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -134,28 +195,81 @@ export default function SignInScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 24, paddingTop: 60 },
-  title: { fontSize: 26, fontWeight: '700', color: colors.white, marginBottom: 20 },
-  tabRow: { flexDirection: 'row', marginBottom: 20 },
-  tab: {
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    marginRight: 10,
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
   },
-  tabActive: { backgroundColor: colors.primaryBlue },
-  tabActiveText: { color: colors.white, fontWeight: '700' },
-  tabText: { color: colors.textDark, fontWeight: '600' },
-  label: { color: colors.white, fontWeight: '600', marginBottom: 6, marginTop: 10 },
+  title: {
+    ...typography.display,
+    color: colors.white,
+    marginBottom: spacing.lg,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.lg,
+  },
+  tab: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: spacing.radii.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginEnd: spacing.sm,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  tabActive: {
+    backgroundColor: colors.primaryBlue,
+  },
+  tabActiveText: {
+    ...typography.button,
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  tabText: {
+    ...typography.button,
+    color: colors.textDark,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  label: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.white,
+    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+  },
   input: {
     backgroundColor: colors.inputBg,
-    borderRadius: 10,
-    height: 46,
-    paddingHorizontal: 14,
+    borderRadius: spacing.radii.md,
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
+    color: colors.textDark,
+    ...typography.body,
   },
-  forgot: { color: colors.white, textDecorationLine: 'underline', fontSize: 12 },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
-  divider: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.6)' },
-  dividerText: { color: colors.white, marginHorizontal: 12 },
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+    minHeight: 32,
+  },
+  forgot: {
+    ...typography.caption,
+    color: colors.white,
+    textDecorationLine: 'underline',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.xl,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  dividerText: {
+    ...typography.caption,
+    color: colors.white,
+    marginHorizontal: spacing.md,
+  },
 });

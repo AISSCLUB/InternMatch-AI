@@ -10,6 +10,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import ScreenContainer from '../components/ScreenContainer';
+import ScreenHeader from '../components/ScreenHeader';
+import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadCV, getProcessingJob, ApiError } from '../services/api';
@@ -207,171 +212,308 @@ export default function CVUploadScreen({ route, navigation }) {
   const isWorking = status === 'uploading' || status === 'queued' || status === 'processing';
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-        <Ionicons name="arrow-back" size={22} color={colors.textDark} />
-      </TouchableOpacity>
+    <ScreenContainer edges={['top', 'bottom']}>
+      <ScreenHeader
+        title="CV Upload & Analysis"
+        showBack={true}
+        navigation={navigation}
+      />
 
-      <Text style={styles.title}>CV Upload & Analysis</Text>
-      <Text style={styles.subtitle}>
-        Upload your PDF or Word resume. Our AI extracts your skills, education, and experience to calculate personalized internship matches.
-      </Text>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.subtitle}>
+          Upload your PDF or Word resume. Our AI extracts your skills, education, and experience to calculate personalized internship matches.
+        </Text>
 
-      {/* Upload Drop Zone */}
-      {!isWorking && status !== 'completed' && (
-        <TouchableOpacity style={styles.dropZone} onPress={pickFileAndUpload}>
-          <Ionicons name="cloud-upload-outline" size={36} color={colors.teal} />
-          <Text style={styles.dropText}>
-            {selectedFile ? selectedFile.name : 'Tap to select PDF or DOCX (max 10MB)'}
-          </Text>
-          <Text style={styles.dropHint}>Supports .pdf and .docx documents</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* In-Progress State */}
-      {isWorking && (
-        <View style={styles.card}>
-          <View style={styles.iconCircle}>
-            <ActivityIndicator size="large" color={colors.teal} />
-          </View>
-          <Text style={styles.workingTitle}>
-            {status === 'uploading'
-              ? 'Uploading Document...'
-              : status === 'queued'
-              ? 'Queued for AI Processing...'
-              : 'Extracting Profile & Skills...'}
-          </Text>
-          <Text style={styles.workingFileName}>{selectedFile?.name}</Text>
-
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-          </View>
-          <Text style={styles.percentText}>{progressPercent}%</Text>
-
-          <Text style={styles.workingNotice}>
-            Gemini is validating and structuring your candidate profile. This typically takes 10-20 seconds.
-          </Text>
-
-          <TouchableOpacity style={styles.cancelBtn} onPress={handleStopPolling}>
-            <Text style={styles.cancelText}>Cancel Polling</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Completed Success State */}
-      {status === 'completed' && (
-        <View style={[styles.card, styles.successCard]}>
-          <Ionicons name="checkmark-circle" size={48} color={colors.green || '#10B981'} />
-          <Text style={styles.successTitle}>CV Analyzed Successfully!</Text>
-          <Text style={styles.successDescription}>
-            Your candidate profile, verified skills, and background have been extracted and embedded for matching.
-          </Text>
-
-          <GradientButton
-            title="View Updated Profile"
-            color={colors.teal}
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
-            style={{ marginTop: 20, width: '100%' }}
-          />
-
-          <TouchableOpacity style={styles.secondaryBtn} onPress={handleFinish}>
-            <Text style={styles.secondaryBtnText}>Back to Dashboard</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Failed / Error State */}
-      {status === 'failed' && (
-        <View style={[styles.card, styles.errorCard]}>
-          <Ionicons name="alert-circle" size={48} color={colors.red || '#EF4444'} />
-          <Text style={styles.errorTitle}>Analysis Could Not Complete</Text>
-          <Text style={styles.errorMessage}>{errorMessage || 'An error occurred during CV analysis.'}</Text>
-
-          <GradientButton
-            title="Choose Another Document"
-            color={colors.primaryBlue}
+        {/* Upload Drop Zone */}
+        {!isWorking && status !== 'completed' && (
+          <TouchableOpacity
+            style={styles.dropZone}
             onPress={pickFileAndUpload}
-            style={{ marginTop: 20, width: '100%' }}
-          />
-        </View>
-      )}
-
-      {/* Timeout State */}
-      {status === 'timeout' && (
-        <View style={[styles.card, styles.errorCard]}>
-          <Ionicons name="time-outline" size={48} color={colors.orange || '#F59E0B'} />
-          <Text style={styles.errorTitle}>Processing Still in Progress</Text>
-          <Text style={styles.errorMessage}>{errorMessage}</Text>
-
-          <GradientButton
-            title="Check Profile"
-            color={colors.teal}
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
-            style={{ marginTop: 20, width: '100%' }}
-          />
-
-          <TouchableOpacity style={styles.secondaryBtn} onPress={pickFileAndUpload}>
-            <Text style={styles.secondaryBtnText}>Upload Again</Text>
+            accessibilityRole="button"
+            accessibilityLabel="Select document to upload"
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="cloud-upload-outline"
+              size={36}
+              color={colors.accent || colors.teal}
+            />
+            <Text style={styles.dropText}>
+              {selectedFile ? selectedFile.name : 'Tap to select PDF or DOCX (max 10MB)'}
+            </Text>
+            <Text style={styles.dropHint}>Supports .pdf and .docx documents</Text>
           </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
+        )}
+
+        {/* In-Progress State */}
+        {isWorking && (
+          <Card style={styles.workingCard} padding="lg">
+            <View style={styles.iconCircle}>
+              <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+            </View>
+            <Text style={styles.workingTitle}>
+              {status === 'uploading'
+                ? 'Uploading Document...'
+                : status === 'queued'
+                ? 'Queued for AI Processing...'
+                : 'Extracting Profile & Skills...'}
+            </Text>
+            <Text style={styles.workingFileName}>{selectedFile?.name}</Text>
+
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+            </View>
+            <Text style={styles.percentText}>{progressPercent}%</Text>
+
+            <Text style={styles.workingNotice}>
+              Gemini is validating and structuring your candidate profile. This typically takes 10-20 seconds.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={handleStopPolling}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel Polling"
+            >
+              <Text style={styles.cancelText}>Cancel Polling</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Completed Success State */}
+        {status === 'completed' && (
+          <Card variant="highlight" style={styles.successCard} padding="lg">
+            <Ionicons
+              name="checkmark-circle"
+              size={48}
+              color={colors.success || '#10B981'}
+            />
+            <Text style={styles.successTitle}>CV Analyzed Successfully!</Text>
+            <Text style={styles.successDescription}>
+              Your candidate profile, verified skills, and background have been extracted and embedded for matching.
+            </Text>
+
+            <GradientButton
+              title="View Updated Profile"
+              color={colors.accent || colors.teal}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={handleFinish}
+              accessibilityRole="button"
+              accessibilityLabel="Back to Dashboard"
+            >
+              <Text style={styles.secondaryBtnText}>Back to Dashboard</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        {/* Failed / Error State */}
+        {status === 'failed' && (
+          <Card style={styles.errorCard} padding="lg">
+            <Ionicons
+              name="alert-circle"
+              size={48}
+              color={colors.danger || '#EF4444'}
+            />
+            <Text style={styles.errorTitle}>Analysis Could Not Complete</Text>
+            <Text style={styles.errorMessage}>
+              {errorMessage || 'An error occurred during CV analysis.'}
+            </Text>
+
+            <GradientButton
+              title="Choose Another Document"
+              color={colors.primaryBlue}
+              onPress={pickFileAndUpload}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+          </Card>
+        )}
+
+        {/* Timeout State */}
+        {status === 'timeout' && (
+          <Card style={styles.errorCard} padding="lg">
+            <Ionicons
+              name="time-outline"
+              size={48}
+              color={colors.warning || '#F59E0B'}
+            />
+            <Text style={styles.errorTitle}>Processing Still in Progress</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
+
+            <GradientButton
+              title="Check Profile"
+              color={colors.accent || colors.teal}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={pickFileAndUpload}
+              accessibilityRole="button"
+              accessibilityLabel="Upload Again"
+            >
+              <Text style={styles.secondaryBtnText}>Upload Again</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+      </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.cardBg },
-  content: { padding: 20, paddingBottom: 40 },
-  backBtn: { marginBottom: 12 },
-  title: { fontSize: 22, fontWeight: '700', color: colors.textDark, textAlign: 'center', marginBottom: 6 },
-  subtitle: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginBottom: 24, lineHeight: 18 },
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background || colors.screenBg,
+  },
+  content: {
+    paddingHorizontal: spacing.screenHorizontalPadding,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl,
+  },
+  subtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 18,
+  },
   dropZone: {
     borderWidth: 2,
-    borderColor: colors.teal,
+    borderColor: colors.accent || colors.teal,
     borderStyle: 'dashed',
-    borderRadius: 16,
-    paddingVertical: 36,
-    paddingHorizontal: 20,
+    borderRadius: spacing.radii.lg,
+    paddingVertical: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.6)',
   },
-  dropText: { marginTop: 12, color: colors.textDark, fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  dropHint: { marginTop: 6, color: colors.textMuted, fontSize: 12 },
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+  dropText: {
+    marginTop: spacing.md,
+    color: colors.textPrimary || colors.textDark,
+    ...typography.bodyEmphasis,
+    textAlign: 'center',
   },
-  successCard: { borderColor: colors.green || '#10B981', borderWidth: 1.5 },
-  errorCard: { borderColor: colors.red || '#EF4444', borderWidth: 1.5 },
+  dropHint: {
+    marginTop: spacing.xs,
+    color: colors.textSecondary || colors.textMuted,
+    ...typography.caption,
+  },
+  workingCard: {
+    alignItems: 'center',
+  },
   iconCircle: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#E6F4F6',
+    backgroundColor: colors.accentSoft || '#E6F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
-  workingTitle: { fontSize: 16, fontWeight: '700', color: colors.textDark, textAlign: 'center' },
-  workingFileName: { fontSize: 13, color: colors.textMuted, marginTop: 4, marginBottom: 16, textAlign: 'center' },
-  progressTrack: { width: '100%', height: 8, borderRadius: 4, backgroundColor: '#E2E8F0', overflow: 'hidden' },
-  progressFill: { height: 8, backgroundColor: colors.teal },
-  percentText: { fontSize: 12, fontWeight: '600', color: colors.teal, alignSelf: 'flex-end', marginTop: 4 },
-  workingNotice: { fontSize: 12, color: colors.textMuted, marginTop: 16, textAlign: 'center', lineHeight: 16 },
-  cancelBtn: { marginTop: 20, paddingVertical: 8, paddingHorizontal: 16 },
-  cancelText: { color: colors.textMuted, fontSize: 13, textDecorationLine: 'underline' },
-  successTitle: { fontSize: 18, fontWeight: '700', color: colors.textDark, marginTop: 12 },
-  successDescription: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 8, lineHeight: 18 },
-  errorTitle: { fontSize: 18, fontWeight: '700', color: colors.textDark, marginTop: 12 },
-  errorMessage: { fontSize: 13, color: colors.red || '#EF4444', textAlign: 'center', marginTop: 8, lineHeight: 18 },
-  secondaryBtn: { marginTop: 14, paddingVertical: 10, alignItems: 'center' },
-  secondaryBtnText: { color: colors.textDark, fontWeight: '600', fontSize: 14 },
+  workingTitle: {
+    ...typography.cardTitle,
+    color: colors.textPrimary || colors.textDark,
+    textAlign: 'center',
+  },
+  workingFileName: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  progressTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderSubtle || '#E2E8F0',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 6,
+    backgroundColor: colors.accent || colors.teal,
+  },
+  percentText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.accent || colors.teal,
+    alignSelf: 'flex-end',
+    marginTop: spacing.xs,
+  },
+  workingNotice: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.md,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  cancelBtn: {
+    marginTop: spacing.lg,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
+  },
+  cancelText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textDecorationLine: 'underline',
+  },
+  successCard: {
+    alignItems: 'center',
+    borderColor: colors.success || '#10B981',
+  },
+  successTitle: {
+    ...typography.cardTitle,
+    fontSize: 18,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.md,
+  },
+  successDescription: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
+  errorCard: {
+    alignItems: 'center',
+    borderColor: colors.dangerSoft || '#FEE2E2',
+    backgroundColor: '#FEF2F2',
+  },
+  errorTitle: {
+    ...typography.cardTitle,
+    fontSize: 18,
+    color: colors.danger || '#EF4444',
+    marginTop: spacing.md,
+  },
+  errorMessage: {
+    ...typography.caption,
+    color: colors.danger || '#EF4444',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    lineHeight: 18,
+  },
+  secondaryBtn: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    minHeight: spacing.minimumTouchTarget,
+    justifyContent: 'center',
+  },
+  secondaryBtnText: {
+    ...typography.button,
+    color: colors.textPrimary || colors.textDark,
+  },
 });
