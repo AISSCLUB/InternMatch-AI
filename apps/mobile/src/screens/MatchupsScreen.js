@@ -217,7 +217,12 @@ export default function MatchupsScreen({ navigation }) {
 
             <TouchableOpacity
               style={styles.whyLinkWrap}
-              onPress={() => navigation.navigate('WhyYouMatch', { matchId: top.match_id })}
+              onPress={() =>
+                navigation.navigate('WhyYouMatch', {
+                  matchId: top.match_id,
+                  internshipId: top.internship.id,
+                })
+              }
             >
               <Text style={styles.whyLink}>Why You Match</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.primaryBlue} style={{ marginLeft: 2 }} />
@@ -242,7 +247,12 @@ export default function MatchupsScreen({ navigation }) {
                 </Text>
                 <TouchableOpacity
                   style={styles.plainWhyWrap}
-                  onPress={() => navigation.navigate('WhyYouMatch', { matchId: item.match_id })}
+                  onPress={() =>
+                    navigation.navigate('WhyYouMatch', {
+                      matchId: item.match_id,
+                      internshipId: item.internship.id,
+                    })
+                  }
                 >
                   <Text style={styles.plainWhyLink}>Why You Match</Text>
                   <Ionicons name="chevron-forward" size={12} color={colors.primaryBlue} style={{ marginLeft: 2 }} />

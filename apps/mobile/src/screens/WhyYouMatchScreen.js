@@ -44,6 +44,7 @@ function ScoreRing({ score, size = 140, strokeWidth = 12 }) {
 
 export default function WhyYouMatchScreen({ route, navigation }) {
   const matchId = route?.params?.matchId;
+  const internshipId = route?.params?.internshipId;
 
   const [explanation, setExplanation] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -195,12 +196,27 @@ export default function WhyYouMatchScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* Application Workflow Banner (Gate 2.37B boundary) */}
-          <View style={styles.applicationNoticeCard}>
-            <Ionicons name="document-text-outline" size={20} color={colors.textMuted} />
-            <Text style={styles.applicationNoticeText}>
-              Personalized application & cover letter generation will be available in the Application Tracker.
+          {/* Personalized Cover Letter Generation CTA */}
+          <View style={styles.generateCtaCard}>
+            <View style={styles.generateCtaHeader}>
+              <Ionicons name="document-text-outline" size={20} color={colors.teal} style={{ marginRight: 8 }} />
+              <Text style={styles.generateCtaTitle}>Personalized Application</Text>
+            </View>
+            <Text style={styles.generateCtaSubtitle}>
+              Generate a tailored, grounded cover letter crafted from your verified profile and this match breakdown.
             </Text>
+            <TouchableOpacity
+              style={styles.generateButton}
+              onPress={() =>
+                navigation.navigate('CoverLetterDraft', {
+                  matchId,
+                  internshipId,
+                })
+              }
+            >
+              <Ionicons name="sparkles" size={16} color={colors.white} style={{ marginRight: 6 }} />
+              <Text style={styles.generateButtonText}>Generate Cover Letter</Text>
+            </TouchableOpacity>
           </View>
         </>
       )}
@@ -267,15 +283,42 @@ const styles = StyleSheet.create({
   recItemRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 6 },
   recIcon: { marginRight: 8, marginTop: 2 },
   recItemText: { flex: 1, fontSize: 12, color: '#78350F', lineHeight: 18 },
-  applicationNoticeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  generateCtaCard: {
     backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 14,
+    padding: 18,
     marginTop: 24,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  applicationNoticeText: { flex: 1, fontSize: 12, color: colors.textMuted, marginLeft: 10, lineHeight: 16 },
+  generateCtaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  generateCtaTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textDark,
+  },
+  generateCtaSubtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  generateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.teal,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  generateButtonText: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
 });

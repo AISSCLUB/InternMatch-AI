@@ -248,7 +248,12 @@ export default function HomeScreen({ navigation }) {
                   </Text>
                   <TouchableOpacity
                     style={styles.whyLinkWrap}
-                    onPress={() => navigation.navigate('WhyYouMatch', { matchId: firstMatch.match_id })}
+                    onPress={() =>
+                      navigation.navigate('WhyYouMatch', {
+                        matchId: firstMatch.match_id,
+                        internshipId: firstMatch.internship.id,
+                      })
+                    }
                   >
                     <Text style={styles.whyLink}>Why You Match</Text>
                     <Ionicons name="chevron-forward" size={14} color={colors.primaryBlue} style={{ marginLeft: 2 }} />

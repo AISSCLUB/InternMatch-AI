@@ -164,7 +164,7 @@ def generate_grounded_cover_letter(
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=LLMCoverLetter,
+            response_json_schema=LLMCoverLetter.model_json_schema(),
         ),
     )
 

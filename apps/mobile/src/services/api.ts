@@ -346,3 +346,70 @@ export async function getMatchExplanation(
     }
   );
 }
+
+export type ApplicationStatus =
+  | 'saved'
+  | 'applied'
+  | 'interviewing'
+  | 'rejected'
+  | 'accepted';
+
+export type ApplicationTrackerItem = {
+  id: string;
+  internship_id: string | null;
+  company_name: string | null;
+  job_title: string | null;
+  status: ApplicationStatus;
+  generated_cover_letter: string | null;
+  applied_date: string | null;
+  notes: string | null;
+};
+
+export type ApplicationListResponse = {
+  applications: ApplicationTrackerItem[];
+};
+
+export type ApplicationGenerateAcceptedResponse = {
+  job_id: string;
+  status: 'queued';
+  message: string;
+};
+
+export type GenerateApplicationParams = {
+  match_id: string;
+  tone: string;
+  content_locale?: 'en' | 'tr' | 'ar';
+};
+
+export type UpdateApplicationStatusPayload = {
+  status: ApplicationStatus;
+  notes?: string | null;
+};
+
+export async function getApplications(): Promise<ApplicationListResponse> {
+  return apiRequest<ApplicationListResponse>('/applications', {
+    method: 'GET',
+  });
+}
+
+export async function generateApplication(
+  payload: GenerateApplicationParams
+): Promise<ApplicationGenerateAcceptedResponse> {
+  return apiRequest<ApplicationGenerateAcceptedResponse>('/applications/generate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateApplicationStatus(
+  applicationId: string,
+  payload: UpdateApplicationStatusPayload
+): Promise<ApplicationTrackerItem> {
+  return apiRequest<ApplicationTrackerItem>(
+    `/applications/${encodeURIComponent(applicationId)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }
+  );
+}
