@@ -2,14 +2,18 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
+import { spacing } from '../theme/spacing';
+import { typography } from '../theme/typography';
+import motionTokens from '../motion/motionTokens';
+import PressableScale from './PressableScale';
 
-// variant: 'skill' (mint green, used on profile/edit-profile) | 'gap' (orange outline, used on Why-You-Match) | 'neutral'
+// variant: 'skill' (mint green) | 'gap' (orange outline) | 'neutral'
 export default function Chip({ label, variant = 'skill', onRemove, selected, onPress }) {
   const palette = {
     skill: { bg: colors.greenBg, fg: '#0F8A5F' },
     gap: { bg: colors.white, fg: colors.orange, border: colors.orange },
     neutral: { bg: '#EDEDED', fg: colors.textMuted },
-  }[variant];
+  }[variant] || { bg: '#EDEDED', fg: colors.textMuted };
 
   const content = (
     <View
@@ -19,10 +23,17 @@ export default function Chip({ label, variant = 'skill', onRemove, selected, onP
         palette.border ? { borderWidth: 1, borderColor: palette.border } : null,
       ]}
     >
-      <Text style={[styles.label, { color: selected ? colors.white : palette.fg }]}>{label}</Text>
+      <Text style={[styles.label, { color: selected ? colors.white : palette.fg }]}>
+        {label}
+      </Text>
       {onRemove ? (
-        <TouchableOpacity onPress={onRemove} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="close" size={14} color={palette.fg} style={{ marginLeft: 4 }} />
+        <TouchableOpacity
+          onPress={onRemove}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${label}`}
+        >
+          <Ionicons name="close" size={14} color={palette.fg} style={styles.removeIcon} />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -30,11 +41,19 @@ export default function Chip({ label, variant = 'skill', onRemove, selected, onP
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <PressableScale
+        onPress={onPress}
+        scaleTo={motionTokens.scales.chipPressed}
+        activeOpacity={motionTokens.opacities.subtlePressed}
+        haptic="selection"
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
         {content}
-      </TouchableOpacity>
+      </PressableScale>
     );
   }
+
   return content;
 }
 
@@ -42,14 +61,17 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.pill,
+    marginEnd: spacing.sm,
+    marginBottom: spacing.sm,
   },
   label: {
+    ...typography.badge,
     fontSize: 13,
-    fontWeight: '600',
+  },
+  removeIcon: {
+    marginStart: spacing.xs,
   },
 });

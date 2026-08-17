@@ -15,8 +15,10 @@ import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
+import PressableCard from '../components/PressableCard';
 import Chip from '../components/Chip';
 import { getInternships } from '../services/api';
+import haptics from '../services/haptics';
 
 const PAGE_SIZE = 20;
 
@@ -143,9 +145,16 @@ export default function InternshipsScreen({ navigation }) {
     }
   };
 
-  const formatWorkType = (workType) => {
-    if (!workType) return '';
-    return workType.charAt(0).toUpperCase() + workType.slice(1).toLowerCase();
+  const handleFilterSelect = (label) => {
+    if (selectedFilter !== label) {
+      haptics.selection();
+      setSelectedFilter(label);
+    }
+  };
+
+  const formatWorkType = (wt) => {
+    if (!wt) return null;
+    return wt.charAt(0).toUpperCase() + wt.slice(1);
   };
 
   const hasMore = items.length < total;
@@ -170,7 +179,7 @@ export default function InternshipsScreen({ navigation }) {
           />
         }
       >
-        {/* Filter Chips */}
+        {/* Work Type Filter Chips */}
         <View style={styles.filterRow}>
           {WORK_TYPE_FILTERS.map((f) => (
             <TouchableOpacity
@@ -179,9 +188,10 @@ export default function InternshipsScreen({ navigation }) {
                 styles.filterChip,
                 selectedFilter === f.label && styles.filterChipActive,
               ]}
-              onPress={() => setSelectedFilter(f.label)}
+              onPress={() => handleFilterSelect(f.label)}
               accessibilityRole="button"
-              accessibilityLabel={`Filter by ${f.label}`}
+              accessibilityLabel={`Filter ${f.label}`}
+              accessibilityState={{ selected: selectedFilter === f.label }}
               hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
               <Text
@@ -248,42 +258,41 @@ export default function InternshipsScreen({ navigation }) {
         {!loading && !error && items.length > 0 && (
           <>
             {items.map((item) => (
-              <Card key={item.id} style={styles.card} padding="md">
-                <TouchableOpacity
-                  onPress={() =>
-                    navigation.navigate('InternshipDetail', { internshipId: item.id })
-                  }
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.title} at ${item.company}`}
-                >
-                  <View style={styles.cardTop}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    {item.work_type ? (
-                      <View style={styles.workTypeBadge}>
-                        <Text style={styles.workTypeText}>{formatWorkType(item.work_type)}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  <Text style={styles.cardMeta}>
-                    {item.company} · {item.location}
-                  </Text>
-
-                  {item.required_skills && item.required_skills.length > 0 && (
-                    <View style={styles.skillsRow}>
-                      {item.required_skills.slice(0, 3).map((skill) => (
-                        <Chip key={skill} label={skill} variant="skill" />
-                      ))}
-                      {item.required_skills.length > 3 && (
-                        <Text style={styles.moreSkillsText}>
-                          +{item.required_skills.length - 3} more
-                        </Text>
-                      )}
+              <PressableCard
+                key={item.id}
+                style={styles.card}
+                padding="md"
+                onPress={() =>
+                  navigation.navigate('InternshipDetail', { internshipId: item.id })
+                }
+                accessibilityLabel={`${item.title} at ${item.company}`}
+              >
+                <View style={styles.cardTop}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  {item.work_type ? (
+                    <View style={styles.workTypeBadge}>
+                      <Text style={styles.workTypeText}>{formatWorkType(item.work_type)}</Text>
                     </View>
-                  )}
-                </TouchableOpacity>
-              </Card>
+                  ) : null}
+                </View>
+
+                <Text style={styles.cardMeta}>
+                  {item.company} · {item.location}
+                </Text>
+
+                {item.required_skills && item.required_skills.length > 0 && (
+                  <View style={styles.skillsRow}>
+                    {item.required_skills.slice(0, 3).map((skill) => (
+                      <Chip key={skill} label={skill} variant="skill" />
+                    ))}
+                    {item.required_skills.length > 3 && (
+                      <Text style={styles.moreSkillsText}>
+                        +{item.required_skills.length - 3} more
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </PressableCard>
             ))}
 
             {/* Pagination Controls */}

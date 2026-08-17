@@ -18,6 +18,7 @@ import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import { useApplicationGeneration } from '../hooks/useApplicationGeneration';
 import { getApplications } from '../services/api';
+import haptics from '../services/haptics';
 
 const TONE_PRESETS = ['Professional', 'Concise', 'Enthusiastic'];
 const LOCALES = [
@@ -87,6 +88,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
         content_locale: contentLocale,
       },
       async (jobResult) => {
+        haptics.success();
         try {
           const listRes = await getApplications();
           let resolvedApp = null;

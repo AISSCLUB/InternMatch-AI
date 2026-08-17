@@ -20,6 +20,7 @@ import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
 import { upsertProfile } from '../services/api';
+import haptics from '../services/haptics';
 
 export default function EditProfileScreen({ navigation }) {
   const { profile, setProfile } = useProfile();
@@ -36,6 +37,7 @@ export default function EditProfileScreen({ navigation }) {
   const handleSave = async () => {
     const trimmedName = fullName.trim();
     if (!trimmedName) {
+      haptics.error();
       Alert.alert('Edit Profile', 'Please enter your full name.');
       return;
     }

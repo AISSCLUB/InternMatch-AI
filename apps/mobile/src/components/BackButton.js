@@ -1,8 +1,10 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
+import motionTokens from '../motion/motionTokens';
+import PressableScale from './PressableScale';
 
 export default function BackButton({
   navigation,
@@ -21,17 +23,19 @@ export default function BackButton({
   };
 
   return (
-    <TouchableOpacity
+    <PressableScale
       style={[styles.button, style]}
       onPress={handlePress}
+      scaleTo={motionTokens.scales.iconPressed}
+      activeOpacity={0.7}
+      haptic="none"
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      activeOpacity={0.7}
     >
       <Ionicons name="arrow-back" size={22} color={color} />
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 

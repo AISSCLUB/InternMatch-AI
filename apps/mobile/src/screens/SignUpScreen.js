@@ -21,6 +21,7 @@ import { signInWithGoogle } from '../services/googleAuth';
 import { signUpWithEmail } from '../services/auth';
 import { syncAuthenticatedUser, upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
+import haptics from '../services/haptics';
 
 export default function SignUpScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -38,11 +39,13 @@ export default function SignUpScreen({ navigation }) {
     const normalizedDepartment = department.trim();
 
     if (!normalizedName || !normalizedEmail || !password) {
+      haptics.error();
       Alert.alert('Create account', 'Please enter your full name, email, and password.');
       return;
     }
 
     if (password.length < 6) {
+      haptics.error();
       Alert.alert('Create account', 'Password must contain at least 6 characters.');
       return;
     }

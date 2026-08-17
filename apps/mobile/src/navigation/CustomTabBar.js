@@ -1,9 +1,12 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
+import motionTokens from '../motion/motionTokens';
+import haptics from '../services/haptics';
+import PressableScale from '../components/PressableScale';
 
 const ICONS = {
   Home: 'home',
@@ -29,17 +32,21 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
             target: route.key,
             canPreventDefault: true,
           });
+
           if (!focused && !event.defaultPrevented) {
+            haptics.selection();
             navigation.navigate(route.name);
           }
         };
 
         return (
-          <TouchableOpacity
+          <PressableScale
             key={route.key}
             style={styles.tabItem}
             onPress={onPress}
-            activeOpacity={0.7}
+            scaleTo={motionTokens.scales.iconPressed}
+            activeOpacity={0.8}
+            haptic="none"
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
             accessibilityLabel={route.name}
@@ -51,7 +58,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
               color={focused ? (colors.accent || colors.teal) : (colors.textTertiary || colors.textMuted)}
             />
             {focused && <View style={styles.dot} />}
-          </TouchableOpacity>
+          </PressableScale>
         );
       })}
     </View>

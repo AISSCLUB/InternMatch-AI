@@ -19,6 +19,7 @@ import { typography } from '../theme/typography';
 import GradientButton from '../components/GradientButton';
 import { upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
+import haptics from '../services/haptics';
 
 export default function OnboardingProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -39,6 +40,7 @@ export default function OnboardingProfileScreen({ navigation, route }) {
     const trimmedHeadline = headline.trim() || null;
 
     if (!trimmedName) {
+      haptics.error();
       Alert.alert('Profile Setup', 'Please enter your full name.');
       return;
     }

@@ -20,6 +20,7 @@ import { signInWithGoogle } from '../services/googleAuth';
 import { signInWithEmail } from '../services/auth';
 import { syncAuthenticatedUser, upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
+import haptics from '../services/haptics';
 
 export default function SignInScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -32,6 +33,7 @@ export default function SignInScreen({ navigation }) {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail || !password) {
+      haptics.error();
       Alert.alert('Sign in', 'Please enter your email and password.');
       return;
     }

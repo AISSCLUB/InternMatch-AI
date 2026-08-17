@@ -22,6 +22,7 @@ import {
   updateApplicationStatus,
   ApiError,
 } from '../services/api';
+import haptics from '../services/haptics';
 
 const STATUS_CONFIG = {
   saved: { bg: colors.surfaceMuted || '#F1F5F9', fg: colors.textSecondary || '#475569', label: 'Saved' },
@@ -87,6 +88,7 @@ export default function ApplicationsScreen({ navigation }) {
     setStatusUpdatingId(applicationId);
     try {
       await updateApplicationStatus(applicationId, { status: 'applied' });
+      haptics.success();
       await fetchApplicationsData();
       Alert.alert('Updated', 'Application marked as applied in your tracker.');
     } catch (err) {

@@ -14,6 +14,8 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import Card from '../components/Card';
+import PressableCard from '../components/PressableCard';
+import PressableScale from '../components/PressableScale';
 import GradientButton from '../components/GradientButton';
 import MatchBadge from '../components/MatchBadge';
 import { useProfile } from '../context/ProfileContext';
@@ -285,13 +287,14 @@ export default function HomeScreen({ navigation }) {
                 {/* Highlight First Match */}
                 {firstMatch && (
                   <Card variant="highlight" style={styles.highlightCard} padding="md">
-                    <TouchableOpacity
+                    <PressableScale
                       onPress={() =>
                         navigation.navigate('InternshipDetail', {
                           internshipId: firstMatch.internship.id,
                         })
                       }
-                      activeOpacity={0.7}
+                      scaleTo={0.985}
+                      activeOpacity={0.85}
                       accessibilityRole="button"
                       accessibilityLabel={`${firstMatch.internship.title} at ${firstMatch.internship.company}`}
                     >
@@ -303,9 +306,9 @@ export default function HomeScreen({ navigation }) {
                       <Text style={styles.highlightMeta}>
                         {firstMatch.internship.company} · {firstMatch.internship.location}
                       </Text>
-                    </TouchableOpacity>
+                    </PressableScale>
 
-                    <TouchableOpacity
+                    <PressableScale
                       style={styles.whyLinkWrap}
                       onPress={() =>
                         navigation.navigate('WhyYouMatch', {
@@ -313,6 +316,8 @@ export default function HomeScreen({ navigation }) {
                           internshipId: firstMatch.internship.id,
                         })
                       }
+                      scaleTo={0.98}
+                      activeOpacity={0.8}
                       accessibilityRole="button"
                       accessibilityLabel="Why You Match breakdown"
                     >
@@ -323,31 +328,27 @@ export default function HomeScreen({ navigation }) {
                         color={colors.primaryBlue}
                         style={styles.chevronIcon}
                       />
-                    </TouchableOpacity>
+                    </PressableScale>
                   </Card>
                 )}
 
                 {/* Remaining Top Matches */}
                 {remainingMatches.map((item, index) => (
-                  <Card
+                  <PressableCard
                     key={item.match_id}
                     style={[
                       styles.plainRowCard,
                       index === remainingMatches.length - 1 && { marginBottom: spacing.md },
                     ]}
                     padding="sm"
+                    onPress={() =>
+                      navigation.navigate('InternshipDetail', {
+                        internshipId: item.internship.id,
+                      })
+                    }
+                    accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
                   >
-                    <TouchableOpacity
-                      style={styles.plainRow}
-                      onPress={() =>
-                        navigation.navigate('InternshipDetail', {
-                          internshipId: item.internship.id,
-                        })
-                      }
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
-                    >
+                    <View style={styles.plainRow}>
                       <View style={styles.plainRowMain}>
                         <Text style={styles.plainTitle}>{item.internship.title}</Text>
                         <Text style={styles.plainMeta}>
@@ -355,8 +356,8 @@ export default function HomeScreen({ navigation }) {
                         </Text>
                       </View>
                       <MatchBadge score={item.overall_score} />
-                    </TouchableOpacity>
-                  </Card>
+                    </View>
+                  </PressableCard>
                 ))}
 
                 {matches.length > 3 && (

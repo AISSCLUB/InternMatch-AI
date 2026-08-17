@@ -20,6 +20,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import { updateApplicationStatus, ApiError } from '../services/api';
+import haptics from '../services/haptics';
 
 const STATUS_LABELS = {
   saved: 'Saved',
@@ -58,6 +59,7 @@ export default function CoverLetterScreen({ route, navigation }) {
         status: 'applied',
       });
 
+      haptics.success();
       setCurrentStatus(updated.status);
 
       Alert.alert(

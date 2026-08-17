@@ -15,6 +15,8 @@ import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
+import PressableCard from '../components/PressableCard';
+import PressableScale from '../components/PressableScale';
 import MatchBadge from '../components/MatchBadge';
 import GradientButton from '../components/GradientButton';
 import { getMatches } from '../services/api';
@@ -84,10 +86,11 @@ export default function MatchupsScreen({ navigation }) {
   const renderRecalculateAction = () => {
     if (!hasAnalyzedCV || matches.length === 0 || isCalculating) return null;
     return (
-      <TouchableOpacity
+      <PressableScale
         style={styles.recalculateHeaderBtn}
         onPress={handleRecalculate}
         disabled={isCalculating}
+        haptic="light"
         accessibilityRole="button"
         accessibilityLabel="Recalculate matches"
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -99,7 +102,7 @@ export default function MatchupsScreen({ navigation }) {
           style={styles.recalcIcon}
         />
         <Text style={styles.recalculateHeaderText}>Recalculate</Text>
-      </TouchableOpacity>
+      </PressableScale>
     );
   };
 
@@ -226,13 +229,14 @@ export default function MatchupsScreen({ navigation }) {
           <>
             {/* Top Highlight Card */}
             <Card variant="highlight" style={styles.highlightCard} padding="md">
-              <TouchableOpacity
+              <PressableScale
                 onPress={() =>
                   navigation.navigate('InternshipDetail', {
                     internshipId: top.internship.id,
                   })
                 }
-                activeOpacity={0.7}
+                scaleTo={0.985}
+                activeOpacity={0.85}
                 accessibilityRole="button"
                 accessibilityLabel={`${top.internship.title} at ${top.internship.company}`}
               >
@@ -255,9 +259,9 @@ export default function MatchupsScreen({ navigation }) {
                     Skills: {top.skill_score}% · Vector: {top.vector_score}%
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </PressableScale>
 
-              <TouchableOpacity
+              <PressableScale
                 style={styles.whyLinkWrap}
                 onPress={() =>
                   navigation.navigate('WhyYouMatch', {
@@ -265,6 +269,8 @@ export default function MatchupsScreen({ navigation }) {
                     internshipId: top.internship.id,
                   })
                 }
+                scaleTo={0.98}
+                activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel="Why You Match breakdown"
               >
@@ -275,7 +281,7 @@ export default function MatchupsScreen({ navigation }) {
                   color={colors.primaryBlue}
                   style={styles.chevronIcon}
                 />
-              </TouchableOpacity>
+              </PressableScale>
             </Card>
 
             {/* Remaining Matches */}
@@ -288,14 +294,15 @@ export default function MatchupsScreen({ navigation }) {
                 ]}
                 padding="sm"
               >
-                <TouchableOpacity
+                <PressableScale
                   style={styles.plainRow}
                   onPress={() =>
                     navigation.navigate('InternshipDetail', {
                       internshipId: item.internship.id,
                     })
                   }
-                  activeOpacity={0.7}
+                  scaleTo={0.985}
+                  activeOpacity={0.85}
                   accessibilityRole="button"
                   accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
                 >
@@ -304,7 +311,7 @@ export default function MatchupsScreen({ navigation }) {
                     <Text style={styles.plainMeta}>
                       {item.internship.company} · {item.internship.location}
                     </Text>
-                    <TouchableOpacity
+                    <PressableScale
                       style={styles.plainWhyWrap}
                       onPress={() =>
                         navigation.navigate('WhyYouMatch', {
@@ -312,6 +319,8 @@ export default function MatchupsScreen({ navigation }) {
                           internshipId: item.internship.id,
                         })
                       }
+                      scaleTo={0.98}
+                      activeOpacity={0.8}
                       accessibilityRole="button"
                       accessibilityLabel={`Why You Match breakdown for ${item.internship.title}`}
                     >
@@ -322,10 +331,10 @@ export default function MatchupsScreen({ navigation }) {
                         color={colors.primaryBlue}
                         style={styles.chevronIcon}
                       />
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
                   <MatchBadge score={item.overall_score} />
-                </TouchableOpacity>
+                </PressableScale>
               </Card>
             ))}
           </>

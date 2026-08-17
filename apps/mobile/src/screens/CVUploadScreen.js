@@ -19,6 +19,7 @@ import GradientButton from '../components/GradientButton';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadCV, getProcessingJob, ApiError } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
+import haptics from '../services/haptics';
 
 const MAX_POLL_DURATION_MS = 60000;
 const POLL_INTERVAL_MS = 1500;
@@ -86,6 +87,7 @@ export default function CVUploadScreen({ route, navigation }) {
       const msg = err instanceof Error ? err.message : 'Unable to select document.';
       setErrorMessage(msg);
       setStatus('failed');
+      haptics.error();
     }
   };
 
@@ -115,6 +117,7 @@ export default function CVUploadScreen({ route, navigation }) {
       const msg = err instanceof Error ? err.message : 'CV upload failed. Please check connection.';
       setErrorMessage(msg);
       setStatus('failed');
+      haptics.error();
     }
   };
 
@@ -165,12 +168,14 @@ export default function CVUploadScreen({ route, navigation }) {
           if (isMountedRef.current) {
             setStatus('failed');
             setErrorMessage('CV processing completed, but the updated profile could not be loaded. Please try again.');
+            haptics.error();
           }
           return;
         }
 
         if (isMountedRef.current) {
           setStatus('completed');
+          haptics.success();
         }
       } else if (job.status === 'failed') {
         clearPolling();
@@ -178,6 +183,7 @@ export default function CVUploadScreen({ route, navigation }) {
         setProgressPercent(100);
         const serverError = job.error || 'CV processing failed on the server.';
         setErrorMessage(serverError);
+        haptics.error();
       }
     } catch (err) {
       if (!isMountedRef.current) return;
@@ -187,6 +193,7 @@ export default function CVUploadScreen({ route, navigation }) {
       if (err instanceof ApiError && err.status === 401) {
         setStatus('failed');
         setErrorMessage('Session expired. Please sign in again.');
+        haptics.error();
       } else {
         // Transient network failure; schedule retry
         scheduleNextPoll(activeJobId);
