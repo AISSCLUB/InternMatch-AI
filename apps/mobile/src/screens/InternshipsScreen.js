@@ -9,16 +9,19 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
+import AppChromeHeader from '../components/AppChromeHeader';
 import Card from '../components/Card';
 import PressableCard from '../components/PressableCard';
 import Chip from '../components/Chip';
 import { getInternships } from '../services/api';
 import haptics from '../services/haptics';
+import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 
 const PAGE_SIZE = 20;
 
@@ -30,6 +33,11 @@ const WORK_TYPE_FILTERS = [
 ];
 
 export default function InternshipsScreen({ navigation }) {
+  const scrollViewRef = useRef(null);
+  useTabScroll('Internships', scrollViewRef);
+  useScrollToTop(scrollViewRef);
+  const onScroll = useTabScrollReporter(20);
+
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -161,15 +169,19 @@ export default function InternshipsScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
+      <AppChromeHeader />
       <ScreenHeader
         title="Internships"
         alignment="start"
       />
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -332,7 +344,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxxl + spacing.xl,
+    paddingBottom: 104,
   },
   filterRow: {
     flexDirection: 'row',

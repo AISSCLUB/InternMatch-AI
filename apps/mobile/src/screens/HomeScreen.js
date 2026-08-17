@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -22,13 +23,20 @@ import MatchBadge from '../components/MatchBadge';
 import Reveal from '../components/motion/Reveal';
 import MatchIntelligenceOrb from '../components/motion/MatchIntelligenceOrb';
 import AIPulse from '../components/motion/AIPulse';
+import AppChromeHeader from '../components/AppChromeHeader';
 import { useProfile } from '../context/ProfileContext';
+import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 import { getMatches } from '../services/api';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
 
 export default function HomeScreen({ navigation }) {
   const { profile, refreshProfile } = useProfile();
   const displayName = profile?.full_name?.trim() || 'Student';
+
+  const scrollViewRef = useRef(null);
+  useTabScroll('Home', scrollViewRef);
+  useScrollToTop(scrollViewRef);
+  const onScroll = useTabScrollReporter(20);
 
   const [matches, setMatches] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
@@ -102,10 +110,15 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
+      <AppChromeHeader />
+
       <ScrollView
+        ref={scrollViewRef}
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -115,18 +128,9 @@ export default function HomeScreen({ navigation }) {
           />
         }
       >
-        {/* Sequence 1: Brand & Greeting Header */}
+        {/* Sequence 1: Greeting */}
         <Reveal delay={0}>
           <View style={styles.headerBlock}>
-            <View style={styles.brandRow}>
-              <Text style={styles.brand}>InternMatch</Text>
-              <Ionicons
-                name="locate"
-                size={18}
-                color={colors.accentStrong || colors.tealDark}
-                style={styles.brandIcon}
-              />
-            </View>
             <Text style={styles.hello} numberOfLines={2}>
               Hello, {displayName} 👋
             </Text>
@@ -421,28 +425,15 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxxl + spacing.xl,
+    paddingBottom: 104,
   },
   headerBlock: {
     marginBottom: spacing.md,
-    paddingTop: spacing.xs,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brand: {
-    ...typography.sectionTitle,
-    color: colors.accentStrong || colors.tealDark,
-    letterSpacing: 0.4,
-  },
-  brandIcon: {
-    marginStart: spacing.xxs + 2,
+    paddingTop: spacing.sm,
   },
   hello: {
     ...typography.display,
     color: colors.textPrimary || colors.textDark,
-    marginTop: spacing.xs,
   },
   uploadCard: {
     alignItems: 'center',

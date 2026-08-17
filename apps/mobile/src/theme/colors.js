@@ -59,6 +59,16 @@ export const colors = {
   dangerSoft: '#FEE2E2',
   info: '#0284C7',
   infoSoft: '#E0F2FE',
+
+  // Glass & Material Tokens (Gate 2.38F-A)
+  glass: {
+    bgLight: 'rgba(255, 255, 255, 0.72)',
+    bgFallback: 'rgba(255, 255, 255, 0.95)',
+    borderLight: 'rgba(255, 255, 255, 0.65)',
+    borderHairline: 'rgba(14, 116, 144, 0.12)',
+    activePill: 'rgba(14, 116, 144, 0.08)',
+    shadow: 'rgba(15, 23, 42, 0.06)',
+  },
 };
 
 export const gradientColors = [colors.gradientStart, colors.gradientMid, colors.gradientEnd];

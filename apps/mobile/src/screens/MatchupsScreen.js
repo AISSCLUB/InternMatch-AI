@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,14 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import motionTokens from '../motion/motionTokens';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
+import AppChromeHeader from '../components/AppChromeHeader';
 import Card from '../components/Card';
 import PressableCard from '../components/PressableCard';
 import PressableScale from '../components/PressableScale';
@@ -26,8 +28,14 @@ import BrandedAILoader from '../components/motion/BrandedAILoader';
 import { getMatches } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
+import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 
 export default function MatchupsScreen({ navigation }) {
+  const scrollViewRef = useRef(null);
+  useTabScroll('Matchups', scrollViewRef);
+  useScrollToTop(scrollViewRef);
+  const onScroll = useTabScrollReporter(20);
+
   const { profile } = useProfile();
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +120,7 @@ export default function MatchupsScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
+      <AppChromeHeader />
       <ScreenHeader
         title="Matchups"
         alignment="start"
@@ -119,9 +128,12 @@ export default function MatchupsScreen({ navigation }) {
       />
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -370,7 +382,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxxl + spacing.xl,
+    paddingBottom: 104,
   },
   recalculateHeaderBtn: {
     flexDirection: 'row',

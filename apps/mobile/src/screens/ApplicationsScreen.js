@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
+import AppChromeHeader from '../components/AppChromeHeader';
 import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import {
@@ -23,6 +25,7 @@ import {
   ApiError,
 } from '../services/api';
 import haptics from '../services/haptics';
+import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 
 const STATUS_CONFIG = {
   saved: { bg: colors.surfaceMuted || '#F1F5F9', fg: colors.textSecondary || '#475569', label: 'Saved' },
@@ -42,6 +45,11 @@ function StatusPill({ status }) {
 }
 
 export default function ApplicationsScreen({ navigation }) {
+  const scrollViewRef = useRef(null);
+  useTabScroll('Applications', scrollViewRef);
+  useScrollToTop(scrollViewRef);
+  const onScroll = useTabScrollReporter(20);
+
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -125,6 +133,7 @@ export default function ApplicationsScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
+      <AppChromeHeader />
       <ScreenHeader
         title="Application Tracker"
         alignment="start"
@@ -132,9 +141,12 @@ export default function ApplicationsScreen({ navigation }) {
       />
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -326,7 +338,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxxl + spacing.xl,
+    paddingBottom: 104,
   },
   countBadge: {
     backgroundColor: colors.accentSoft || '#E6F4F6',

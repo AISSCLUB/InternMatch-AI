@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,18 +9,25 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
+import AppChromeHeader from '../components/AppChromeHeader';
 import Card from '../components/Card';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
+import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 
 export default function ProfileScreen({ navigation }) {
+  const scrollViewRef = useRef(null);
+  useTabScroll('Profile', scrollViewRef);
+  useScrollToTop(scrollViewRef);
+  const onScroll = useTabScrollReporter(20);
+
   const { profile, loading, refreshProfile } = useProfile();
 
   useFocusEffect(
@@ -56,6 +63,7 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
+      <AppChromeHeader />
       <ScreenHeader
         title="Profile"
         alignment="start"
@@ -63,9 +71,12 @@ export default function ProfileScreen({ navigation }) {
       />
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.screen}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -174,7 +185,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xxxl + spacing.xl,
+    paddingBottom: 104,
   },
   settingsBtn: {
     width: spacing.minimumTouchTarget,

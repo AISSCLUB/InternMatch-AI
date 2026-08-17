@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   },
   bordered: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle || colors.border,
+    borderBottomColor: colors.glass?.borderHairline || colors.borderSubtle || colors.border,
   },
   leftSlot: {
     minWidth: spacing.minimumTouchTarget,
