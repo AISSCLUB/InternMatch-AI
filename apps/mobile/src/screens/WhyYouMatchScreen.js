@@ -8,51 +8,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import motionTokens from '../motion/motionTokens';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import Chip from '../components/Chip';
+import AnimatedScoreRing from '../components/motion/AnimatedScoreRing';
+import Reveal from '../components/motion/Reveal';
 import { getMatchExplanation, ApiError } from '../services/api';
-
-function ScoreRing({ score, size = 140, strokeWidth = 12 }) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const validScore = Math.max(0, Math.min(100, typeof score === 'number' ? score : 0));
-  const progress = circumference - (validScore / 100) * circumference;
-
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Svg width={size} height={size}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke="#E1EEF0"
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={colors.accentStrong || colors.tealDark}
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={progress}
-          strokeLinecap="round"
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
-        />
-      </Svg>
-      <Text style={styles.scoreText}>%{validScore}</Text>
-    </View>
-  );
-}
 
 export default function WhyYouMatchScreen({ route, navigation }) {
   const matchId = route?.params?.matchId;
@@ -155,128 +121,137 @@ export default function WhyYouMatchScreen({ route, navigation }) {
           </Card>
         )}
 
-        {/* Populated Match Breakdown */}
+        {/* Populated Match Breakdown with Staggered Editorial Reveal */}
         {!loading && !isNotFound && !error && explanation && (
           <>
-            {/* Compatibility Score Hero */}
-            <View style={styles.ringWrap}>
-              <ScoreRing score={explanation.overall_score} />
-              <Text style={styles.scoreLabel}>Overall Compatibility Fit</Text>
-            </View>
+            {/* Sequence 1: Animated Compatibility Score Hero */}
+            <Reveal delay={0}>
+              <View style={styles.ringWrap}>
+                <AnimatedScoreRing score={explanation.overall_score} />
+                <Text style={styles.scoreLabel}>Overall Compatibility Fit</Text>
+              </View>
+            </Reveal>
 
-            {/* AI Narrative Fit Assessment */}
+            {/* Sequence 2: AI Narrative Fit Assessment */}
             {explanation.why_you_match ? (
-              <Card style={styles.narrativeCard} padding="md">
-                <View style={styles.narrativeHeader}>
+              <Reveal delay={motionTokens.stagger.fast}>
+                <Card style={styles.narrativeCard} padding="md">
+                  <View style={styles.narrativeHeader}>
+                    <Ionicons
+                      name="sparkles"
+                      size={16}
+                      color={colors.accentStrong || colors.tealDark}
+                      style={styles.headerIcon}
+                    />
+                    <Text style={styles.narrativeTitle}>AI Fit Assessment</Text>
+                  </View>
+                  <Text style={styles.narrativeBody}>{explanation.why_you_match}</Text>
+                </Card>
+              </Reveal>
+            ) : null}
+
+            {/* Sequence 3: Competencies & Skill Gaps */}
+            <Reveal delay={motionTokens.stagger.normal}>
+              {/* Matching Competencies */}
+              <Text style={styles.sectionTitle}>Matching Competencies</Text>
+              {explanation.matching_skills && explanation.matching_skills.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {explanation.matching_skills.map((skill) => (
+                    <Chip key={skill} label={skill} variant="skill" />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptySkillsNotice}>No direct skill overlaps identified.</Text>
+              )}
+
+              {/* Identified Skill Gaps */}
+              <Text style={styles.sectionTitle}>Identified Skill Gaps</Text>
+              {explanation.missing_skills && explanation.missing_skills.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {explanation.missing_skills.map((skill) => (
+                    <Chip key={skill} label={skill} variant="gap" />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptySkillsNotice}>No major skill gaps identified for this role.</Text>
+              )}
+
+              {/* Skill Gap Analysis & Recommendations */}
+              {explanation.skill_gap_analysis ? (
+                <View style={styles.recommendationsBox}>
+                  <View style={styles.recHeaderRow}>
+                    <Ionicons
+                      name="bulb-outline"
+                      size={18}
+                      color="#B45309"
+                      style={styles.headerIcon}
+                    />
+                    <Text style={styles.recBoxTitle}>Skill Gap Analysis & Recommendations</Text>
+                  </View>
+
+                  {explanation.skill_gap_analysis.summary ? (
+                    <Text style={styles.recSummaryText}>
+                      {explanation.skill_gap_analysis.summary}
+                    </Text>
+                  ) : null}
+
+                  {explanation.skill_gap_analysis.recommendations &&
+                  explanation.skill_gap_analysis.recommendations.length > 0 ? (
+                    <View style={styles.recommendationsList}>
+                      {explanation.skill_gap_analysis.recommendations.map((rec, idx) => (
+                        <View key={idx} style={styles.recItemRow}>
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={16}
+                            color={colors.accent || colors.teal}
+                            style={styles.recIcon}
+                          />
+                          <Text style={styles.recItemText}>{rec}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </Reveal>
+
+            {/* Sequence 4: Personalized Cover Letter Generation CTA */}
+            <Reveal delay={motionTokens.stagger.slow}>
+              <Card variant="highlight" style={styles.generateCtaCard} padding="lg">
+                <View style={styles.generateCtaHeader}>
+                  <Ionicons
+                    name="document-text-outline"
+                    size={20}
+                    color={colors.accent || colors.teal}
+                    style={styles.headerIcon}
+                  />
+                  <Text style={styles.generateCtaTitle}>Personalized Application</Text>
+                </View>
+                <Text style={styles.generateCtaSubtitle}>
+                  Generate a tailored, grounded cover letter crafted from your verified profile and this match breakdown.
+                </Text>
+                <TouchableOpacity
+                  style={styles.generateButton}
+                  onPress={() =>
+                    navigation.navigate('CoverLetterDraft', {
+                      matchId,
+                      internshipId,
+                    })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel="Generate Cover Letter"
+                  activeOpacity={0.85}
+                >
                   <Ionicons
                     name="sparkles"
                     size={16}
-                    color={colors.accentStrong || colors.tealDark}
-                    style={styles.headerIcon}
+                    color={colors.textInverse || colors.white}
+                    style={styles.buttonIcon}
                   />
-                  <Text style={styles.narrativeTitle}>AI Fit Assessment</Text>
-                </View>
-                <Text style={styles.narrativeBody}>{explanation.why_you_match}</Text>
+                  <Text style={styles.generateButtonText}>Generate Cover Letter</Text>
+                </TouchableOpacity>
               </Card>
-            ) : null}
-
-            {/* Matching Competencies */}
-            <Text style={styles.sectionTitle}>Matching Competencies</Text>
-            {explanation.matching_skills && explanation.matching_skills.length > 0 ? (
-              <View style={styles.chipRow}>
-                {explanation.matching_skills.map((skill) => (
-                  <Chip key={skill} label={skill} variant="skill" />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.emptySkillsNotice}>No direct skill overlaps identified.</Text>
-            )}
-
-            {/* Identified Skill Gaps */}
-            <Text style={styles.sectionTitle}>Identified Skill Gaps</Text>
-            {explanation.missing_skills && explanation.missing_skills.length > 0 ? (
-              <View style={styles.chipRow}>
-                {explanation.missing_skills.map((skill) => (
-                  <Chip key={skill} label={skill} variant="gap" />
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.emptySkillsNotice}>No major skill gaps identified for this role.</Text>
-            )}
-
-            {/* Skill Gap Analysis & Recommendations */}
-            {explanation.skill_gap_analysis ? (
-              <View style={styles.recommendationsBox}>
-                <View style={styles.recHeaderRow}>
-                  <Ionicons
-                    name="bulb-outline"
-                    size={18}
-                    color="#B45309"
-                    style={styles.headerIcon}
-                  />
-                  <Text style={styles.recBoxTitle}>Skill Gap Analysis & Recommendations</Text>
-                </View>
-
-                {explanation.skill_gap_analysis.summary ? (
-                  <Text style={styles.recSummaryText}>
-                    {explanation.skill_gap_analysis.summary}
-                  </Text>
-                ) : null}
-
-                {explanation.skill_gap_analysis.recommendations &&
-                explanation.skill_gap_analysis.recommendations.length > 0 ? (
-                  <View style={styles.recommendationsList}>
-                    {explanation.skill_gap_analysis.recommendations.map((rec, idx) => (
-                      <View key={idx} style={styles.recItemRow}>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={16}
-                          color={colors.accent || colors.teal}
-                          style={styles.recIcon}
-                        />
-                        <Text style={styles.recItemText}>{rec}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            {/* Personalized Cover Letter Generation CTA */}
-            <Card variant="highlight" style={styles.generateCtaCard} padding="lg">
-              <View style={styles.generateCtaHeader}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={20}
-                  color={colors.accent || colors.teal}
-                  style={styles.headerIcon}
-                />
-                <Text style={styles.generateCtaTitle}>Personalized Application</Text>
-              </View>
-              <Text style={styles.generateCtaSubtitle}>
-                Generate a tailored, grounded cover letter crafted from your verified profile and this match breakdown.
-              </Text>
-              <TouchableOpacity
-                style={styles.generateButton}
-                onPress={() =>
-                  navigation.navigate('CoverLetterDraft', {
-                    matchId,
-                    internshipId,
-                  })
-                }
-                accessibilityRole="button"
-                accessibilityLabel="Generate Cover Letter"
-                activeOpacity={0.85}
-              >
-                <Ionicons
-                  name="sparkles"
-                  size={16}
-                  color={colors.textInverse || colors.white}
-                  style={styles.buttonIcon}
-                />
-                <Text style={styles.generateButtonText}>Generate Cover Letter</Text>
-              </TouchableOpacity>
-            </Card>
+            </Reveal>
           </>
         )}
       </ScrollView>
@@ -336,24 +311,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     backgroundColor: colors.accent || colors.teal,
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm + spacing.xxs,
+    paddingVertical: spacing.sm,
     borderRadius: spacing.radii.sm,
     minHeight: spacing.minimumTouchTarget,
-    alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonText: {
     ...typography.button,
     color: colors.textInverse || colors.white,
+    fontSize: 14,
   },
   ringWrap: {
     alignItems: 'center',
     marginVertical: spacing.lg,
-  },
-  scoreText: {
-    position: 'absolute',
-    ...typography.display,
-    color: colors.accentStrong || colors.tealDark,
   },
   scoreLabel: {
     ...typography.caption,
@@ -367,73 +337,73 @@ const styles = StyleSheet.create({
   narrativeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   headerIcon: {
-    marginEnd: spacing.xs + spacing.xxs,
-  },
-  buttonIcon: {
-    marginEnd: spacing.xs + spacing.xxs,
+    marginEnd: spacing.xs,
   },
   narrativeTitle: {
-    ...typography.sectionTitle,
-    color: colors.accentStrong || colors.tealDark,
+    ...typography.cardTitle,
+    fontSize: 15,
+    color: colors.textPrimary || colors.textDark,
   },
   narrativeBody: {
     ...typography.body,
-    color: colors.textPrimary || colors.textDark,
+    color: colors.textSecondary || colors.textDark,
     lineHeight: 22,
   },
   sectionTitle: {
     ...typography.sectionTitle,
     color: colors.textPrimary || colors.textDark,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginBottom: spacing.sm,
   },
   emptySkillsNotice: {
     ...typography.caption,
-    color: colors.textSecondary || colors.textMuted,
+    color: colors.textTertiary || colors.textMuted,
     fontStyle: 'italic',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   recommendationsBox: {
     backgroundColor: '#FFFBEB',
-    borderRadius: spacing.radii.lg,
-    padding: spacing.lg,
-    marginTop: spacing.lg,
+    borderRadius: spacing.radii.md,
+    padding: spacing.md,
+    marginVertical: spacing.md,
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   recHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   recBoxTitle: {
-    ...typography.sectionTitle,
+    ...typography.bodyEmphasis,
     color: '#92400E',
+    fontSize: 13,
   },
   recSummaryText: {
-    ...typography.body,
+    ...typography.caption,
     color: '#78350F',
-    lineHeight: 20,
-    marginBottom: spacing.md,
+    lineHeight: 18,
+    marginTop: spacing.xxs,
   },
   recommendationsList: {
-    marginTop: spacing.xxs,
+    marginTop: spacing.sm,
+    gap: spacing.xs,
   },
   recItemRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginTop: spacing.xs + spacing.xxs,
   },
   recIcon: {
-    marginEnd: spacing.sm,
-    marginTop: spacing.xxs,
+    marginEnd: spacing.xs,
+    marginTop: 2,
   },
   recItemText: {
     flex: 1,
@@ -442,8 +412,8 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   generateCtaCard: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xl,
   },
   generateCtaHeader: {
     flexDirection: 'row',
@@ -451,27 +421,31 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   generateCtaTitle: {
-    ...typography.sectionTitle,
+    ...typography.cardTitle,
     color: colors.textPrimary || colors.textDark,
   },
   generateCtaSubtitle: {
     ...typography.caption,
     color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xxs,
     lineHeight: 18,
-    marginBottom: spacing.lg,
   },
   generateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accent || colors.teal,
-    borderRadius: spacing.radii.md,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
+    borderRadius: spacing.radii.md,
+    marginTop: spacing.lg,
     minHeight: spacing.minimumTouchTarget,
   },
   generateButtonText: {
     ...typography.button,
     color: colors.textInverse || colors.white,
+    fontSize: 14,
+  },
+  buttonIcon: {
+    marginEnd: spacing.xs,
   },
 });

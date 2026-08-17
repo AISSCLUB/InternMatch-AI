@@ -16,6 +16,8 @@ import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
+import AIPulse from '../components/motion/AIPulse';
+import Reveal from '../components/motion/Reveal';
 import { useApplicationGeneration } from '../hooks/useApplicationGeneration';
 import { getApplications } from '../services/api';
 import haptics from '../services/haptics';
@@ -252,29 +254,31 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
           </Card>
         )}
 
-        {/* In-Progress Generating State */}
+        {/* In-Progress Generating State with Ambient AIPulse */}
         {isGenerating && (
-          <Card style={styles.generatingCard} padding="lg">
-            <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.generatingTitle}>Generating Cover Letter...</Text>
-            <Text style={styles.generatingSubtitle}>
-              Gemini is grounding your skills and experience against the internship description ({progressPercent}%)
-            </Text>
+          <AIPulse active={isGenerating} style={styles.generatingPulseWrap}>
+            <Card style={styles.generatingCard} padding="lg">
+              <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+              <Text style={styles.generatingTitle}>Generating Cover Letter...</Text>
+              <Text style={styles.generatingSubtitle}>
+                Gemini is grounding your skills and experience against the internship description ({progressPercent}%)
+              </Text>
 
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-            </View>
-            <Text style={styles.percentText}>{progressPercent}%</Text>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+              </View>
+              <Text style={styles.percentText}>{progressPercent}%</Text>
 
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={cancelGeneration}
-              accessibilityRole="button"
-              accessibilityLabel="Stop Checking"
-            >
-              <Text style={styles.cancelBtnText}>Stop Checking</Text>
-            </TouchableOpacity>
-          </Card>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={cancelGeneration}
+                accessibilityRole="button"
+                accessibilityLabel="Stop Checking"
+              >
+                <Text style={styles.cancelBtnText}>Stop Checking</Text>
+              </TouchableOpacity>
+            </Card>
+          </AIPulse>
         )}
 
         {/* Generation Error State */}
@@ -311,48 +315,50 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
           </Card>
         )}
 
-        {/* Display Generated Cover Letter */}
+        {/* Display Generated Cover Letter with Reveal */}
         {!loadingExisting && !isGenerating && application && application.generated_cover_letter ? (
-          <View style={styles.resultSection}>
-            <View style={styles.resultHeaderRow}>
-              <Text style={styles.resultLabel}>GENERATED DRAFT</Text>
-              <View style={styles.savedBadge}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={12}
-                  color={colors.accent || colors.teal}
-                  style={styles.savedIcon}
-                />
-                <Text style={styles.savedBadgeText}>Saved in Tracker</Text>
+          <Reveal delay={0}>
+            <View style={styles.resultSection}>
+              <View style={styles.resultHeaderRow}>
+                <Text style={styles.resultLabel}>GENERATED DRAFT</Text>
+                <View style={styles.savedBadge}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={12}
+                    color={colors.accent || colors.teal}
+                    style={styles.savedIcon}
+                  />
+                  <Text style={styles.savedBadgeText}>Saved in Tracker</Text>
+                </View>
               </View>
-            </View>
 
-            <Card style={styles.draftCard} padding="md">
-              <Text style={styles.draftText}>{application.generated_cover_letter}</Text>
-            </Card>
+              <Card style={styles.draftCard} padding="md">
+                <Text style={styles.draftText}>{application.generated_cover_letter}</Text>
+              </Card>
 
-            <GradientButton
-              title="Review & Edit"
-              color={colors.accentStrong || colors.tealDark}
-              onPress={handleProceedToEdit}
-              style={{ marginTop: spacing.lg }}
-            />
-
-            <TouchableOpacity
-              style={styles.recreateBtn}
-              onPress={handleGenerate}
-              accessibilityRole="button"
-              accessibilityLabel="Regenerate with New Options"
-            >
-              <Ionicons
-                name="refresh-outline"
-                size={16}
+              <GradientButton
+                title="Review & Edit"
                 color={colors.accentStrong || colors.tealDark}
-                style={styles.recreateIcon}
+                onPress={handleProceedToEdit}
+                style={{ marginTop: spacing.lg }}
               />
-              <Text style={styles.recreateBtnText}>Regenerate with New Options</Text>
-            </TouchableOpacity>
-          </View>
+
+              <TouchableOpacity
+                style={styles.recreateBtn}
+                onPress={handleGenerate}
+                accessibilityRole="button"
+                accessibilityLabel="Regenerate with New Options"
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={16}
+                  color={colors.accentStrong || colors.tealDark}
+                  style={styles.recreateIcon}
+                />
+                <Text style={styles.recreateBtnText}>Regenerate with New Options</Text>
+              </TouchableOpacity>
+            </View>
+          </Reveal>
         ) : null}
 
         {/* Initial Generate Action (When no draft exists yet) */}
@@ -479,9 +485,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface || colors.white,
     minHeight: 40,
   },
+  generatingPulseWrap: {
+    marginVertical: spacing.md,
+  },
   generatingCard: {
     alignItems: 'center',
-    marginVertical: spacing.md,
   },
   generatingTitle: {
     ...typography.cardTitle,

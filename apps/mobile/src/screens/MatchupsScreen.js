@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import motionTokens from '../motion/motionTokens';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
@@ -19,6 +20,8 @@ import PressableCard from '../components/PressableCard';
 import PressableScale from '../components/PressableScale';
 import MatchBadge from '../components/MatchBadge';
 import GradientButton from '../components/GradientButton';
+import Reveal from '../components/motion/Reveal';
+import AIPulse from '../components/motion/AIPulse';
 import { getMatches } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
@@ -127,26 +130,28 @@ export default function MatchupsScreen({ navigation }) {
           />
         }
       >
-        {/* Calculating Status Banner */}
+        {/* Calculating Status Banner with Ambient AIPulse */}
         {isCalculating && (
-          <Card style={styles.calculatingCard} padding="md">
-            <ActivityIndicator size="small" color={colors.accent || colors.teal} />
-            <Text style={styles.calculatingTitle}>Recalculating Matchups...</Text>
-            <Text style={styles.calculatingSubtitle}>
-              Comparing your profile against all internship listings ({progressPercent}%)
-            </Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-            </View>
-            <TouchableOpacity
-              style={styles.cancelCalcBtn}
-              onPress={cancelCalculation}
-              accessibilityRole="button"
-              accessibilityLabel="Stop Checking"
-            >
-              <Text style={styles.cancelCalcText}>Stop Checking</Text>
-            </TouchableOpacity>
-          </Card>
+          <AIPulse active={isCalculating} style={styles.calculatingPulseWrap}>
+            <Card style={styles.calculatingCard} padding="md">
+              <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+              <Text style={styles.calculatingTitle}>Recalculating Matchups...</Text>
+              <Text style={styles.calculatingSubtitle}>
+                Comparing your profile against all internship listings ({progressPercent}%)
+              </Text>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+              </View>
+              <TouchableOpacity
+                style={styles.cancelCalcBtn}
+                onPress={cancelCalculation}
+                accessibilityRole="button"
+                accessibilityLabel="Stop Checking"
+              >
+                <Text style={styles.cancelCalcText}>Stop Checking</Text>
+              </TouchableOpacity>
+            </Card>
+          </AIPulse>
         )}
 
         {/* Calculation Error */}
@@ -192,150 +197,157 @@ export default function MatchupsScreen({ navigation }) {
 
         {/* Empty State: No CV Analyzed */}
         {!loading && !error && !isCalculating && !hasAnalyzedCV && (
-          <Card style={styles.emptyCard} padding="lg">
-            <Ionicons name="document-text-outline" size={48} color={colors.accent || colors.teal} />
-            <Text style={styles.emptyTitle}>CV Required for Matchups</Text>
-            <Text style={styles.emptySubtitle}>
-              Upload and analyze your CV so our AI matching engine can compute compatibility scores for you.
-            </Text>
-            <GradientButton
-              title="Upload CV"
-              color={colors.accent || colors.teal}
-              onPress={() => navigation.navigate('CVUpload')}
-              style={{ marginTop: spacing.xl, width: '100%' }}
-            />
-          </Card>
+          <Reveal delay={0}>
+            <Card style={styles.emptyCard} padding="lg">
+              <Ionicons name="document-text-outline" size={48} color={colors.accent || colors.teal} />
+              <Text style={styles.emptyTitle}>CV Required for Matchups</Text>
+              <Text style={styles.emptySubtitle}>
+                Upload and analyze your CV so our AI matching engine can compute compatibility scores for you.
+              </Text>
+              <GradientButton
+                title="Upload CV"
+                color={colors.accent || colors.teal}
+                onPress={() => navigation.navigate('CVUpload')}
+                style={{ marginTop: spacing.xl, width: '100%' }}
+              />
+            </Card>
+          </Reveal>
         )}
 
         {/* Empty State: CV Analyzed but No Matches Calculated */}
         {!loading && !error && !isCalculating && hasAnalyzedCV && matches.length === 0 && (
-          <Card style={styles.emptyCard} padding="lg">
-            <Ionicons name="sparkles-outline" size={48} color={colors.accent || colors.teal} />
-            <Text style={styles.emptyTitle}>No Matches Calculated Yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Ready to find your best matches? Run our matching calculation to score available internships against your verified skills and background.
-            </Text>
-            <GradientButton
-              title="Calculate My Matches"
-              color={colors.accent || colors.teal}
-              onPress={handleRecalculate}
-              style={{ marginTop: spacing.xl, width: '100%' }}
-            />
-          </Card>
+          <Reveal delay={0}>
+            <Card style={styles.emptyCard} padding="lg">
+              <Ionicons name="sparkles-outline" size={48} color={colors.accent || colors.teal} />
+              <Text style={styles.emptyTitle}>No Matches Calculated Yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Ready to find your best matches? Run our matching calculation to score available internships against your verified skills and background.
+              </Text>
+              <GradientButton
+                title="Calculate My Matches"
+                color={colors.accent || colors.teal}
+                onPress={handleRecalculate}
+                style={{ marginTop: spacing.xl, width: '100%' }}
+              />
+            </Card>
+          </Reveal>
         )}
 
-        {/* Populated Matchups List */}
+        {/* Populated Matchups List with Staggered Reveal */}
         {!loading && !error && !isCalculating && top && (
           <>
             {/* Top Highlight Card */}
-            <Card variant="highlight" style={styles.highlightCard} padding="md">
-              <PressableScale
-                onPress={() =>
-                  navigation.navigate('InternshipDetail', {
-                    internshipId: top.internship.id,
-                  })
-                }
-                scaleTo={0.985}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={`${top.internship.title} at ${top.internship.company}`}
-              >
-                <View style={styles.highlightTop}>
-                  <Ionicons name="flame" size={16} color="#F2812B" style={styles.flameIcon} />
-                  <Text style={styles.highlightLabel}>Highest Compatibility</Text>
-                </View>
-
-                <View style={styles.highlightTitleRow}>
-                  <Text style={styles.highlightTitle}>{top.internship.title}</Text>
-                  <MatchBadge score={top.overall_score} />
-                </View>
-
-                <Text style={styles.highlightMeta}>
-                  {top.internship.company} · {top.internship.location}
-                </Text>
-
-                <View style={styles.scoresSubRow}>
-                  <Text style={styles.scoresSubText}>
-                    Skills: {top.skill_score}% · Vector: {top.vector_score}%
-                  </Text>
-                </View>
-              </PressableScale>
-
-              <PressableScale
-                style={styles.whyLinkWrap}
-                onPress={() =>
-                  navigation.navigate('WhyYouMatch', {
-                    matchId: top.match_id,
-                    internshipId: top.internship.id,
-                  })
-                }
-                scaleTo={0.98}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="Why You Match breakdown"
-              >
-                <Text style={styles.whyLink}>Why You Match</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={14}
-                  color={colors.primaryBlue}
-                  style={styles.chevronIcon}
-                />
-              </PressableScale>
-            </Card>
-
-            {/* Remaining Matches */}
-            {rest.map((item, index) => (
-              <Card
-                key={item.match_id}
-                style={[
-                  styles.plainRowCard,
-                  index === rest.length - 1 && { marginBottom: spacing.md },
-                ]}
-                padding="sm"
-              >
+            <Reveal delay={0}>
+              <Card variant="highlight" style={styles.highlightCard} padding="md">
                 <PressableScale
-                  style={styles.plainRow}
                   onPress={() =>
                     navigation.navigate('InternshipDetail', {
-                      internshipId: item.internship.id,
+                      internshipId: top.internship.id,
                     })
                   }
                   scaleTo={0.985}
                   activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
+                  accessibilityLabel={`${top.internship.title} at ${top.internship.company}`}
                 >
-                  <View style={styles.plainRowMain}>
-                    <Text style={styles.plainTitle}>{item.internship.title}</Text>
-                    <Text style={styles.plainMeta}>
-                      {item.internship.company} · {item.internship.location}
-                    </Text>
-                    <PressableScale
-                      style={styles.plainWhyWrap}
-                      onPress={() =>
-                        navigation.navigate('WhyYouMatch', {
-                          matchId: item.match_id,
-                          internshipId: item.internship.id,
-                        })
-                      }
-                      scaleTo={0.98}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Why You Match breakdown for ${item.internship.title}`}
-                    >
-                      <Text style={styles.plainWhyLink}>Why You Match</Text>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={12}
-                        color={colors.primaryBlue}
-                        style={styles.chevronIcon}
-                      />
-                    </PressableScale>
+                  <View style={styles.highlightTop}>
+                    <Ionicons name="flame" size={16} color="#F2812B" style={styles.flameIcon} />
+                    <Text style={styles.highlightLabel}>Highest Compatibility</Text>
                   </View>
-                  <MatchBadge score={item.overall_score} />
+
+                  <View style={styles.highlightTitleRow}>
+                    <Text style={styles.highlightTitle}>{top.internship.title}</Text>
+                    <MatchBadge score={top.overall_score} />
+                  </View>
+
+                  <Text style={styles.highlightMeta}>
+                    {top.internship.company} · {top.internship.location}
+                  </Text>
+
+                  <View style={styles.scoresSubRow}>
+                    <Text style={styles.scoresSubText}>
+                      Skills: {top.skill_score}% · Vector: {top.vector_score}%
+                    </Text>
+                  </View>
+                </PressableScale>
+
+                <PressableScale
+                  style={styles.whyLinkWrap}
+                  onPress={() =>
+                    navigation.navigate('WhyYouMatch', {
+                      matchId: top.match_id,
+                      internshipId: top.internship.id,
+                    })
+                  }
+                  scaleTo={0.98}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Why You Match breakdown"
+                >
+                  <Text style={styles.whyLink}>Why You Match</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={14}
+                    color={colors.primaryBlue}
+                    style={styles.chevronIcon}
+                  />
                 </PressableScale>
               </Card>
+            </Reveal>
+
+            {/* Remaining Matches */}
+            {rest.map((item, index) => (
+              <Reveal key={item.match_id} delay={motionTokens.stagger.fast * (index + 1)}>
+                <Card
+                  style={[
+                    styles.plainRowCard,
+                    index === rest.length - 1 && { marginBottom: spacing.md },
+                  ]}
+                  padding="sm"
+                >
+                  <PressableScale
+                    style={styles.plainRow}
+                    onPress={() =>
+                      navigation.navigate('InternshipDetail', {
+                        internshipId: item.internship.id,
+                      })
+                    }
+                    scaleTo={0.985}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
+                  >
+                    <View style={styles.plainRowMain}>
+                      <Text style={styles.plainTitle}>{item.internship.title}</Text>
+                      <Text style={styles.plainMeta}>
+                        {item.internship.company} · {item.internship.location}
+                      </Text>
+                      <PressableScale
+                        style={styles.plainWhyWrap}
+                        onPress={() =>
+                          navigation.navigate('WhyYouMatch', {
+                            matchId: item.match_id,
+                            internshipId: item.internship.id,
+                          })
+                        }
+                        scaleTo={0.98}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Why You Match breakdown for ${item.internship.title}`}
+                      >
+                        <Text style={styles.plainWhyLink}>Why You Match</Text>
+                        <Ionicons
+                          name="chevron-forward"
+                          size={12}
+                          color={colors.primaryBlue}
+                          style={styles.chevronIcon}
+                        />
+                      </PressableScale>
+                    </View>
+                    <MatchBadge score={item.overall_score} />
+                  </PressableScale>
+                </Card>
+              </Reveal>
             ))}
           </>
         )}
@@ -381,9 +393,11 @@ const styles = StyleSheet.create({
     color: colors.textSecondary || colors.textMuted,
     marginTop: spacing.md,
   },
+  calculatingPulseWrap: {
+    marginBottom: spacing.md,
+  },
   calculatingCard: {
     alignItems: 'center',
-    marginBottom: spacing.md,
   },
   calculatingTitle: {
     ...typography.cardTitle,
