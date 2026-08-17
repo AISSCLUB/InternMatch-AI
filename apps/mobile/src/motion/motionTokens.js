@@ -7,6 +7,7 @@ export const motionTokens = {
     reveal: 320,
     scoreRing: 850,
     pulse: 1800,
+    loaderRotation: 2400,
   },
 
   // Stagger Sequencing (ms)

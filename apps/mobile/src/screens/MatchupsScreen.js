@@ -22,6 +22,7 @@ import MatchBadge from '../components/MatchBadge';
 import GradientButton from '../components/GradientButton';
 import Reveal from '../components/motion/Reveal';
 import AIPulse from '../components/motion/AIPulse';
+import BrandedAILoader from '../components/motion/BrandedAILoader';
 import { getMatches } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
@@ -134,7 +135,12 @@ export default function MatchupsScreen({ navigation }) {
         {isCalculating && (
           <AIPulse active={isCalculating} style={styles.calculatingPulseWrap}>
             <Card style={styles.calculatingCard} padding="md">
-              <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+              <BrandedAILoader
+                size={28}
+                color={colors.accent || colors.teal}
+                active={isCalculating}
+                style={{ marginBottom: spacing.xs }}
+              />
               <Text style={styles.calculatingTitle}>Recalculating Matchups...</Text>
               <Text style={styles.calculatingSubtitle}>
                 Comparing your profile against all internship listings ({progressPercent}%)

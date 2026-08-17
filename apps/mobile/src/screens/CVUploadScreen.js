@@ -16,6 +16,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
+import BrandedAILoader from '../components/motion/BrandedAILoader';
 import * as DocumentPicker from 'expo-document-picker';
 import { uploadCV, getProcessingJob, ApiError } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
@@ -217,6 +218,7 @@ export default function CVUploadScreen({ route, navigation }) {
   };
 
   const isWorking = status === 'uploading' || status === 'queued' || status === 'processing';
+  const isAIProcessing = status === 'queued' || status === 'processing';
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
@@ -260,7 +262,11 @@ export default function CVUploadScreen({ route, navigation }) {
         {isWorking && (
           <Card style={styles.workingCard} padding="lg">
             <View style={styles.iconCircle}>
-              <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+              <BrandedAILoader
+                size={32}
+                color={colors.accent || colors.teal}
+                active={isAIProcessing}
+              />
             </View>
             <Text style={styles.workingTitle}>
               {status === 'uploading'

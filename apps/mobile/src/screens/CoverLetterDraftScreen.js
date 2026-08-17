@@ -18,6 +18,7 @@ import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import AIPulse from '../components/motion/AIPulse';
 import Reveal from '../components/motion/Reveal';
+import BrandedAILoader from '../components/motion/BrandedAILoader';
 import { useApplicationGeneration } from '../hooks/useApplicationGeneration';
 import { getApplications } from '../services/api';
 import haptics from '../services/haptics';
@@ -258,7 +259,12 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
         {isGenerating && (
           <AIPulse active={isGenerating} style={styles.generatingPulseWrap}>
             <Card style={styles.generatingCard} padding="lg">
-              <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+              <BrandedAILoader
+                size={32}
+                color={colors.accent || colors.teal}
+                active={isGenerating}
+                style={{ marginBottom: spacing.xs }}
+              />
               <Text style={styles.generatingTitle}>Generating Cover Letter...</Text>
               <Text style={styles.generatingSubtitle}>
                 Gemini is grounding your skills and experience against the internship description ({progressPercent}%)
