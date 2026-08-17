@@ -36,26 +36,25 @@ class StudentProfileRepository:
         """
         Create or update a student profile for the authenticated user_id.
         Ownership is strictly governed by the passed user_id.
-        Invalidates cached summary_embedding if stored profile inputs actually change.
+        Invalidates cached summary_embedding if embedding-relevant profile inputs change.
         Flushes session state; does not commit transaction (owned by endpoint layer).
         """
         profile = StudentProfileRepository.get_by_user_id(db, user_id=user_id)
         now = datetime.now(timezone.utc)
 
         if profile:
-            changed = (
-                profile.full_name != full_name
-                or profile.headline != headline
-                or profile.cv_storage_path != cv_storage_path
+            embedding_inputs_changed = (
+                profile.headline != headline
                 or (preferences is not None and profile.preferences != preferences)
             )
 
-            if changed:
+            if embedding_inputs_changed:
                 profile.summary_embedding = None
 
             profile.full_name = full_name
             profile.headline = headline
-            profile.cv_storage_path = cv_storage_path
+            if cv_storage_path is not None:
+                profile.cv_storage_path = cv_storage_path
             if preferences is not None:
                 profile.preferences = preferences
             profile.updated_at = now
