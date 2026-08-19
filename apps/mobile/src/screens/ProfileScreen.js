@@ -22,6 +22,8 @@ import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 
+const appVersion = require('../../app.json').expo.version || '1.0.0';
+
 export default function ProfileScreen({ navigation }) {
   const scrollViewRef = useRef(null);
   useTabScroll('Profile', scrollViewRef);
@@ -42,7 +44,7 @@ export default function ProfileScreen({ navigation }) {
   const education = profile?.education || [];
   const primaryEducation =
     education.length > 0
-      ? `${education[0].institution}${education[0].degree ? ` · ${education[0].degree}` : ''}`
+      ? `${education[0].institution}${education[0].degree ? ` Â· ${education[0].degree}` : ''}`
       : null;
 
   const renderSettingsAction = () => (
@@ -157,6 +159,69 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => navigation.navigate('CVUpload')}
               style={{ marginTop: spacing.md }}
             />
+
+            {/* Legal & About Section */}
+            <Text style={styles.sectionTitle}>Legal & About</Text>
+            <Card style={styles.linkCard} padding="sm">
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => navigation.navigate('PrivacyPolicy')}
+                accessibilityRole="button"
+                accessibilityLabel="Privacy Policy"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <View style={styles.legalRowLeft}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={18}
+                    color={colors.accent || colors.teal}
+                    style={styles.linkIcon}
+                  />
+                  <Text style={styles.linkText}>Privacy Policy</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={colors.textTertiary || colors.textMuted}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.legalRow, styles.linkRowBorder]}
+                onPress={() => navigation.navigate('TermsOfUse')}
+                accessibilityRole="button"
+                accessibilityLabel="Terms of Use"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <View style={styles.legalRowLeft}>
+                  <Ionicons
+                    name="document-text-outline"
+                    size={18}
+                    color={colors.accent || colors.teal}
+                    style={styles.linkIcon}
+                  />
+                  <Text style={styles.linkText}>Terms of Use</Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={colors.textTertiary || colors.textMuted}
+                />
+              </TouchableOpacity>
+
+              <View style={[styles.legalRow, styles.linkRowBorder]}>
+                <View style={styles.legalRowLeft}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color={colors.textSecondary || colors.textMuted}
+                    style={styles.linkIcon}
+                  />
+                  <Text style={styles.linkText}>App Version</Text>
+                </View>
+                <Text style={styles.versionText}>{appVersion}</Text>
+              </View>
+            </Card>
           </>
         ) : (
           <Card style={styles.emptyWrap} padding="lg">
@@ -249,6 +314,22 @@ const styles = StyleSheet.create({
   linkText: {
     ...typography.body,
     color: colors.textPrimary || colors.textDark,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm + 2,
+    minHeight: spacing.minimumTouchTarget,
+  },
+  legalRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  versionText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textTertiary || colors.textMuted,
   },
   loadingWrap: {
     alignItems: 'center',

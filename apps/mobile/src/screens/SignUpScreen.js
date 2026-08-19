@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,10 +12,16 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { gradientColors, colors } from '../theme/colors';
+import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import InternMatchLogo from '../components/InternMatchLogo';
+import AuthGlassPanel from '../components/AuthGlassPanel';
+import AuthSegmentedControl from '../components/AuthSegmentedControl';
+import SocialAuthButton from '../components/SocialAuthButton';
 import GradientButton from '../components/GradientButton';
+import PressableScale from '../components/PressableScale';
+import motionTokens from '../motion/motionTokens';
 import { signInWithGoogle } from '../services/googleAuth';
 import { signUpWithEmail } from '../services/auth';
 import { syncAuthenticatedUser, upsertProfile } from '../services/api';
@@ -30,6 +35,7 @@ export default function SignUpScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [department, setDepartment] = useState('');
+  const [focusedField, setFocusedField] = useState(null);
   const [loading, setLoading] = useState(false);
   const { setProfile } = useProfile();
 
@@ -40,13 +46,13 @@ export default function SignUpScreen({ navigation }) {
 
     if (!normalizedName || !normalizedEmail || !password) {
       haptics.error();
-      Alert.alert('Create account', 'Please enter your full name, email, and password.');
+      Alert.alert('Create Account', 'Please enter your full name, email, and password.');
       return;
     }
 
     if (password.length < 6) {
       haptics.error();
-      Alert.alert('Create account', 'Password must contain at least 6 characters.');
+      Alert.alert('Create Account', 'Password must contain at least 6 characters.');
       return;
     }
 
@@ -104,135 +110,265 @@ export default function SignUpScreen({ navigation }) {
       Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
     } catch (e) {
       console.warn('Google sign-in failed', e);
+      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
     }
   };
 
+  const handleApple = () => {
+    Alert.alert('Apple Sign-In', 'Apple Sign-In is not available in this build yet.');
+  };
+
   return (
-    <LinearGradient colors={gradientColors} style={styles.container}>
+    <LinearGradient
+      colors={['#DBF1F5', '#EAF6F8', '#E3F4F6']}
+      style={styles.container}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
         <ScrollView
           contentContainerStyle={[
-            styles.content,
+            styles.scrollContent,
             {
-              paddingTop: insets.top + spacing.lg,
-              paddingBottom: insets.bottom + spacing.xl,
+              paddingTop: Math.max(insets.top, 16) + spacing.md,
+              paddingBottom: Math.max(insets.bottom, 20) + spacing.xl,
             },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>Sign Up</Text>
+          {/* Brand Logo Zone */}
+          <View style={styles.brandZone}>
+            <InternMatchLogo style={styles.brandLogo} />
+          </View>
 
-          <View style={styles.tabRow}>
-            <TouchableOpacity
-              style={styles.tab}
-              onPress={() => navigation.replace('SignIn')}
-              accessibilityRole="button"
-              accessibilityLabel="Switch to Sign In"
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Text style={styles.tabText}>Sign In</Text>
-            </TouchableOpacity>
-            <View style={[styles.tab, styles.tabActive]}>
-              <Text style={styles.tabActiveText}>Sign Up</Text>
+          {/* Heading Zone */}
+          <View style={styles.headingZone}>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>
+              Join InternMatch to discover your ideal internship
+            </Text>
+          </View>
+
+          {/* Glass Authentication Panel */}
+          <AuthGlassPanel style={styles.authPanel}>
+            {/* Segmented Control */}
+            <AuthSegmentedControl
+              activeTab="signUp"
+              onTabChange={(tab) => {
+                if (tab === 'signIn') {
+                  navigation.replace('SignIn');
+                }
+              }}
+            />
+
+            {/* Role / Account Type Selector */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Account Type</Text>
+              <View style={styles.typeRow} accessibilityRole="radiogroup">
+                {/* Intern Option */}
+                <PressableScale
+                  style={[
+                    styles.typeCard,
+                    accountType === 'intern' ? styles.typeCardActive : styles.typeCardInactive,
+                  ]}
+                  onPress={() => setAccountType('intern')}
+                  scaleTo={motionTokens.scales.chipPressed}
+                  activeOpacity={motionTokens.opacities.pressed}
+                  haptic="selection"
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: accountType === 'intern' }}
+                  accessibilityLabel="Account type: Intern"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons
+                    name="school-outline"
+                    size={18}
+                    color={
+                      accountType === 'intern'
+                        ? colors.accentStrong || colors.tealDark
+                        : colors.textSecondary || colors.textMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.typeText,
+                      accountType === 'intern' ? styles.typeTextActive : styles.typeTextInactive,
+                    ]}
+                  >
+                    Intern
+                  </Text>
+                </PressableScale>
+
+                {/* Employer Option */}
+                <PressableScale
+                  style={[
+                    styles.typeCard,
+                    accountType === 'employer' ? styles.typeCardActive : styles.typeCardInactive,
+                  ]}
+                  onPress={() => setAccountType('employer')}
+                  scaleTo={motionTokens.scales.chipPressed}
+                  activeOpacity={motionTokens.opacities.pressed}
+                  haptic="selection"
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: accountType === 'employer' }}
+                  accessibilityLabel="Account type: Employer"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons
+                    name="briefcase-outline"
+                    size={18}
+                    color={
+                      accountType === 'employer'
+                        ? colors.accentStrong || colors.tealDark
+                        : colors.textSecondary || colors.textMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.typeText,
+                      accountType === 'employer' ? styles.typeTextActive : styles.typeTextInactive,
+                    ]}
+                  >
+                    Employer
+                  </Text>
+                </PressableScale>
+              </View>
             </View>
-          </View>
 
-          <Text style={styles.sectionLabel}>Account type</Text>
-          <View style={styles.typeRow}>
-            <TouchableOpacity
-              style={[styles.typeButton, accountType === 'intern' && styles.typeButtonActive]}
-              onPress={() => setAccountType('intern')}
-              accessibilityRole="button"
-              accessibilityLabel="Account type: Intern"
-            >
-              <Ionicons
-                name="school"
-                size={16}
-                color={accountType === 'intern' ? colors.white : colors.textDark}
+            {/* Full Name */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Full Name</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  focusedField === 'fullName' && styles.inputFocused,
+                ]}
+                placeholder="Jane Doe"
+                placeholderTextColor="rgba(22, 35, 46, 0.40)"
+                value={fullName}
+                onChangeText={setFullName}
+                onFocus={() => setFocusedField('fullName')}
+                onBlur={() => setFocusedField(null)}
+                accessibilityLabel="Full name input"
               />
-              <Text style={[styles.typeText, accountType === 'intern' && styles.typeTextActive]}>
-                Intern
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.typeButton, accountType === 'employer' && styles.typeButtonActive]}
-              onPress={() => setAccountType('employer')}
-              accessibilityRole="button"
-              accessibilityLabel="Account type: Employer"
-            >
-              <Ionicons
-                name="briefcase"
-                size={16}
-                color={accountType === 'employer' ? colors.white : colors.textDark}
+            </View>
+
+            {/* Email Field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>E-Mail</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  focusedField === 'email' && styles.inputFocused,
+                ]}
+                placeholder="name@example.com"
+                placeholderTextColor="rgba(22, 35, 46, 0.40)"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+                accessibilityLabel="Email address input"
               />
-              <Text style={[styles.typeText, accountType === 'employer' && styles.typeTextActive]}>
-                Employer
-              </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Full name"
-            placeholderTextColor="#8A8A8A"
-            value={fullName}
-            onChangeText={setFullName}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="E-Mail"
-            placeholderTextColor="#8A8A8A"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#8A8A8A"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Department"
-            placeholderTextColor="#8A8A8A"
-            value={department}
-            onChangeText={setDepartment}
-          />
+            {/* Password Field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Password</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  focusedField === 'password' && styles.inputFocused,
+                ]}
+                placeholder="At least 6 characters"
+                placeholderTextColor="rgba(22, 35, 46, 0.40)"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                accessibilityLabel="Password input"
+              />
+            </View>
 
-          <GradientButton
-            title={loading ? "Creating account..." : "Create an account"}
-            color={colors.primaryBlue}
-            onPress={handleCreateAccount}
-            style={{ marginTop: spacing.lg }}
-          />
+            {/* Department Field */}
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Department / Field</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  focusedField === 'department' && styles.inputFocused,
+                ]}
+                placeholder="e.g. Computer Science, Marketing"
+                placeholderTextColor="rgba(22, 35, 46, 0.40)"
+                value={department}
+                onChangeText={setDepartment}
+                onFocus={() => setFocusedField('department')}
+                onBlur={() => setFocusedField(null)}
+                accessibilityLabel="Department input"
+              />
+            </View>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.divider} />
-          </View>
+            {/* Primary CTA */}
+            <GradientButton
+              title={loading ? 'Creating account...' : 'Create Account'}
+              color={colors.accent || colors.teal}
+              onPress={handleCreateAccount}
+              disabled={loading}
+              style={styles.primaryCta}
+            />
 
-          <GradientButton
-            title="by Google"
-            color={colors.white}
-            textColor={colors.textDark}
-            onPress={handleGoogle}
-          />
-          <GradientButton
-            title="by Apple"
-            color={colors.white}
-            textColor={colors.textDark}
-            onPress={() => {}}
-            style={{ marginTop: spacing.md }}
-          />
+            {/* Divider */}
+            <View style={styles.dividerRow}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.divider} />
+            </View>
+
+            {/* Social Providers */}
+            <SocialAuthButton
+              provider="google"
+              onPress={handleGoogle}
+            />
+            <SocialAuthButton
+              provider="apple"
+              onPress={handleApple}
+              style={{ marginTop: spacing.md }}
+            />
+
+            {/* Legal Footer inside Panel */}
+            <View style={styles.legalFooter}>
+              <PressableScale
+                onPress={() => navigation.navigate('PrivacyPolicy')}
+                scaleTo={motionTokens.scales.chipPressed}
+                activeOpacity={motionTokens.opacities.pressed}
+                haptic="none"
+                accessibilityRole="button"
+                accessibilityLabel="Privacy Policy"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.legalLink}>Privacy Policy</Text>
+              </PressableScale>
+
+              <Text style={styles.legalDot}>·</Text>
+
+              <PressableScale
+                onPress={() => navigation.navigate('TermsOfUse')}
+                scaleTo={motionTokens.scales.chipPressed}
+                activeOpacity={motionTokens.opacities.pressed}
+                haptic="none"
+                accessibilityRole="button"
+                accessibilityLabel="Terms of Use"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.legalLink}>Terms of Use</Text>
+              </PressableScale>
+            </View>
+          </AuthGlassPanel>
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -240,98 +376,150 @@ export default function SignUpScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  flex: { flex: 1 },
-  content: {
+  container: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: spacing.screenHorizontalPadding,
+    alignItems: 'center',
+  },
+  brandZone: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  brandLogo: {
+    alignSelf: 'center',
+  },
+  headingZone: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.sm,
   },
   title: {
     ...typography.display,
-    color: colors.white,
-    marginBottom: spacing.lg,
+    fontSize: 24,
+    lineHeight: 30,
+    color: colors.textPrimary || colors.textDark,
+    textAlign: 'center',
+    fontWeight: '800',
   },
-  tabRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.lg,
-  },
-  tab: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: spacing.radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    marginEnd: spacing.sm,
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  tabActive: {
-    backgroundColor: colors.primaryBlue,
-  },
-  tabActiveText: {
-    ...typography.button,
-    color: colors.white,
-    fontWeight: '700',
+  subtitle: {
+    ...typography.body,
     fontSize: 14,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xxs,
   },
-  tabText: {
-    ...typography.button,
-    color: colors.textDark,
-    fontWeight: '600',
-    fontSize: 14,
+  authPanel: {
+    width: '100%',
   },
-  sectionLabel: {
+  fieldGroup: {
+    marginBottom: spacing.md,
+  },
+  fieldLabel: {
     ...typography.caption,
-    color: colors.white,
     fontWeight: '600',
-    marginBottom: spacing.sm,
+    color: colors.textPrimary || colors.textDark,
+    marginBottom: spacing.xs,
   },
   typeRow: {
     flexDirection: 'row',
-    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
-  typeButton: {
+  typeCard: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: spacing.radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    marginEnd: spacing.sm,
-    minHeight: 40,
+    justifyContent: 'center',
+    minHeight: 44,
+    borderRadius: spacing.radii.md,
+    borderWidth: 1.5,
+    paddingHorizontal: spacing.md,
   },
-  typeButtonActive: {
-    backgroundColor: colors.primaryBlue,
+  typeCardActive: {
+    backgroundColor: 'rgba(14, 116, 144, 0.12)',
+    borderColor: colors.accent || colors.teal,
+    shadowColor: colors.accent || colors.teal,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  typeCardInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.70)',
+    borderColor: 'rgba(14, 116, 144, 0.14)',
   },
   typeText: {
     marginStart: spacing.xs + 2,
-    color: colors.textDark,
     ...typography.button,
     fontSize: 13,
   },
   typeTextActive: {
-    color: colors.white,
+    color: colors.accentStrong || colors.tealDark,
+    fontWeight: '700',
+  },
+  typeTextInactive: {
+    color: colors.textSecondary || colors.textMuted,
+    fontWeight: '500',
   },
   input: {
-    backgroundColor: colors.inputBg,
+    backgroundColor: '#FFFFFF',
     borderRadius: spacing.radii.md,
-    minHeight: 46,
+    minHeight: 48,
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: 'rgba(14, 116, 144, 0.16)',
     color: colors.textDark,
     ...typography.body,
+  },
+  inputFocused: {
+    borderColor: colors.accent || colors.teal,
+    backgroundColor: '#FFFFFF',
+    shadowColor: colors.accent || colors.teal,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  primaryCta: {
+    marginTop: spacing.sm,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.xl,
+    marginVertical: spacing.lg,
   },
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(14, 116, 144, 0.15)',
   },
   dividerText: {
     ...typography.caption,
-    color: colors.white,
+    color: colors.textTertiary || colors.textMuted,
     marginHorizontal: spacing.md,
+    fontWeight: '600',
+  },
+  legalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xl,
+    paddingTop: spacing.sm,
+  },
+  legalLink: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    fontWeight: '500',
+  },
+  legalDot: {
+    marginHorizontal: spacing.sm,
+    color: colors.textTertiary || colors.textMuted,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
