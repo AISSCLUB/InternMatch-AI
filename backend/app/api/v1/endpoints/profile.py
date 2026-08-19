@@ -13,6 +13,13 @@ from app.db.session import get_db
 from app.repositories.matching_data import MatchingDataRepository
 from app.repositories.processing_job import ProcessingJobRepository
 from app.repositories.student_profile import StudentProfileRepository
+from app.services.avatar_storage import (
+    MAX_AVATAR_SIZE_BYTES,
+    AvatarStorageValidationError,
+    delete_candidate_avatar,
+    generate_avatar_signed_url,
+    store_candidate_avatar,
+)
 from app.services.cv_enqueue import enqueue_cv_extraction
 from app.services.cv_storage import (
     MAX_CV_SIZE_BYTES,
@@ -84,8 +91,23 @@ class StudentProfileResponse(BaseModel):
     projects: List[ProjectResponse] = Field(default_factory=list)
     preferences: Optional[Dict[str, Any]] = Field(default_factory=dict)
     cv_url: Optional[str] = None
+    avatar_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AvatarUploadResponse(BaseModel):
+    """Response schema for profile avatar upload."""
+
+    avatar_url: str
+    message: str = "Avatar uploaded successfully."
+
+
+class AvatarDeleteResponse(BaseModel):
+    """Response schema for profile avatar deletion."""
+
+    avatar_url: Optional[str] = None
+    message: str = "Avatar removed successfully."
 
 
 class CVProcessingResponse(BaseModel):
@@ -135,6 +157,11 @@ def get_my_profile(
     experience = MatchingDataRepository.get_experience_for_student(db, student_id=profile.id)
     projects = MatchingDataRepository.get_projects_for_student(db, student_id=profile.id)
 
+    avatar_url = generate_avatar_signed_url(
+        user_id=current_user.user_id,
+        storage_path=profile.avatar_storage_path,
+    )
+
     return StudentProfileResponse(
         id=profile.id,
         user_id=profile.user_id,
@@ -145,6 +172,7 @@ def get_my_profile(
         experience=[ExperienceResponse.model_validate(e) for e in experience],
         projects=[ProjectResponse.model_validate(p) for p in projects],
         preferences=profile.preferences or {},
+        avatar_url=avatar_url,
     )
 
 
@@ -177,6 +205,11 @@ def upsert_my_profile(
         experience = MatchingDataRepository.get_experience_for_student(db, student_id=profile.id)
         projects = MatchingDataRepository.get_projects_for_student(db, student_id=profile.id)
 
+        avatar_url = generate_avatar_signed_url(
+            user_id=current_user.user_id,
+            storage_path=profile.avatar_storage_path,
+        )
+
         return StudentProfileResponse(
             id=profile.id,
             user_id=profile.user_id,
@@ -187,6 +220,7 @@ def upsert_my_profile(
             experience=[ExperienceResponse.model_validate(e) for e in experience],
             projects=[ProjectResponse.model_validate(p) for p in projects],
             preferences=profile.preferences or {},
+            avatar_url=avatar_url,
         )
     except Exception:
         db.rollback()
@@ -288,4 +322,150 @@ async def upload_candidate_cv(
         status="queued",
         message="CV processing enqueued successfully.",
         estimated_seconds=15,
+    )
+
+
+@router.post("/avatar", response_model=AvatarUploadResponse, status_code=status.HTTP_200_OK)
+async def upload_profile_avatar(
+    file: UploadFile = File(...),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload candidate profile avatar image (JPEG, PNG, WebP <= 5 MB).
+    Uploads new object to private Supabase Storage, updates avatar_storage_path on StudentProfile,
+    commits transaction, generates signed avatar_url, and best-effort removes previous object.
+    """
+    # 1. Enforce rate limiting before reading content
+    enforce_rate_limit(user_id=current_user.user_id, scope="avatar_upload")
+
+    # 2. Read content up to max size + 1 to guard against oversized payloads
+    max_read_bytes = MAX_AVATAR_SIZE_BYTES + 1
+    content = await file.read(max_read_bytes)
+
+    if len(content) > MAX_AVATAR_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail=format_error_payload(
+                "PAYLOAD_TOO_LARGE",
+                "Avatar file exceeds maximum limit of 5 MB.",
+            ),
+        )
+
+    # 3. Validate profile exists for authenticated user
+    profile = StudentProfileRepository.get_by_user_id(db, user_id=current_user.user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=format_error_payload(
+                "NOT_FOUND", "Student profile not found for authenticated user."
+            ),
+        )
+
+    old_storage_path = profile.avatar_storage_path
+
+    # 4. Validate image binary and upload new object to private Supabase Storage
+    try:
+        stored_avatar = store_candidate_avatar(
+            user_id=current_user.user_id,
+            content_type=file.content_type,
+            content=content,
+        )
+    except AvatarStorageValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_error_payload("BAD_REQUEST", str(exc)),
+        )
+
+    # 5. Persist new avatar_storage_path in DB
+    try:
+        StudentProfileRepository.update_avatar_storage_path(
+            db=db,
+            user_id=current_user.user_id,
+            avatar_storage_path=stored_avatar.storage_path,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Best-effort cleanup of newly uploaded object if DB update fails
+        try:
+            delete_candidate_avatar(
+                user_id=current_user.user_id,
+                storage_path=stored_avatar.storage_path,
+            )
+        except Exception:
+            pass
+        raise
+
+    # 6. Generate signed URL for immediate presentation
+    signed_url = generate_avatar_signed_url(
+        user_id=current_user.user_id,
+        storage_path=stored_avatar.storage_path,
+    )
+
+    # 7. Best-effort delete old avatar object after successful persistence
+    if old_storage_path and old_storage_path != stored_avatar.storage_path:
+        try:
+            delete_candidate_avatar(
+                user_id=current_user.user_id,
+                storage_path=old_storage_path,
+            )
+        except Exception:
+            pass
+
+    return AvatarUploadResponse(
+        avatar_url=signed_url or "",
+        message="Avatar uploaded successfully.",
+    )
+
+
+@router.delete("/avatar", response_model=AvatarDeleteResponse, status_code=status.HTTP_200_OK)
+def delete_profile_avatar(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete candidate profile avatar image.
+    Safely clears avatar_storage_path on StudentProfile, commits transaction,
+    and removes object from Supabase Storage.
+    """
+    profile = StudentProfileRepository.get_by_user_id(db, user_id=current_user.user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=format_error_payload(
+                "NOT_FOUND", "Student profile not found for authenticated user."
+            ),
+        )
+
+    old_storage_path = profile.avatar_storage_path
+
+    if not old_storage_path:
+        return AvatarDeleteResponse(
+            avatar_url=None,
+            message="No profile avatar was set.",
+        )
+
+    try:
+        StudentProfileRepository.clear_avatar_storage_path(
+            db=db,
+            user_id=current_user.user_id,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    # Delete old storage object after DB commit
+    try:
+        delete_candidate_avatar(
+            user_id=current_user.user_id,
+            storage_path=old_storage_path,
+        )
+    except Exception:
+        pass
+
+    return AvatarDeleteResponse(
+        avatar_url=None,
+        message="Avatar removed successfully.",
     )

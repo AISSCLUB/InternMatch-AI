@@ -102,3 +102,40 @@ class StudentProfileRepository:
             profile.updated_at = datetime.now(timezone.utc)
             db.flush()
         return profile
+
+    @staticmethod
+    def update_avatar_storage_path(
+        db: Session,
+        user_id: UUID,
+        avatar_storage_path: str,
+    ) -> Optional[StudentProfile]:
+        """
+        Persist candidate avatar storage path on StudentProfile without modifying summary_embedding.
+        Flushes session state; does not commit transaction.
+        """
+        profile = StudentProfileRepository.get_by_user_id(db, user_id=user_id)
+        if not profile:
+            return None
+
+        profile.avatar_storage_path = avatar_storage_path
+        profile.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        return profile
+
+    @staticmethod
+    def clear_avatar_storage_path(
+        db: Session,
+        user_id: UUID,
+    ) -> Optional[StudentProfile]:
+        """
+        Clear candidate avatar storage path on StudentProfile without modifying summary_embedding.
+        Flushes session state; does not commit transaction.
+        """
+        profile = StudentProfileRepository.get_by_user_id(db, user_id=user_id)
+        if not profile:
+            return None
+
+        profile.avatar_storage_path = None
+        profile.updated_at = datetime.now(timezone.utc)
+        db.flush()
+        return profile

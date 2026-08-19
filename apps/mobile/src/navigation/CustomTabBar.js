@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, Platform, useWindowDimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import {
@@ -23,6 +23,7 @@ import {
   useTabScrollResetTrigger,
   useTabScrolledState,
 } from '../context/TabScrollContext';
+import { useProfile } from '../context/ProfileContext';
 
 const ICONS = {
   Home: 'home',
@@ -38,10 +39,17 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
   const { isScrolled } = useTabScrolledState();
   const isReducedMotion = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
+  const { profile } = useProfile();
+
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
+
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [profile?.avatar_url]);
 
   const isLiquidSupported =
     Platform.OS === 'ios' &&
-    ((typeof isLiquidGlassAvailable === 'function' && isLiquidGlassAvailable()) ||
+    ((typeof isLiquidGlassAvailable === 'function' && isLiquidGlassAvailable()) &&
       (typeof isGlassEffectAPIAvailable === 'function' && isGlassEffectAPIAvailable()));
 
   const bottomOffset = Math.max(insets.bottom, 12);
@@ -165,6 +173,8 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
         {state.routes.map((route, index) => {
           const focused = state.index === index;
           const iconName = ICONS[route.name] ?? 'ellipse';
+          const isProfileRoute = route.name === 'Profile';
+          const hasAvatar = isProfileRoute && Boolean(profile?.avatar_url) && !avatarLoadError;
 
           const onPress = () => {
             const event = navigation.emit({
@@ -197,11 +207,26 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <View style={styles.tabContent}>
-                <Ionicons
-                  name={iconName}
-                  size={22}
-                  color={focused ? '#FFFFFF' : 'rgba(255, 255, 255, 0.65)'}
-                />
+                {hasAvatar ? (
+                  <View
+                    style={[
+                      styles.avatarRing,
+                      focused ? styles.avatarRingActive : styles.avatarRingInactive,
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: profile.avatar_url }}
+                      style={styles.tabAvatar}
+                      onError={() => setAvatarLoadError(true)}
+                    />
+                  </View>
+                ) : (
+                  <Ionicons
+                    name={iconName}
+                    size={22}
+                    color={focused ? '#FFFFFF' : 'rgba(255, 255, 255, 0.65)'}
+                  />
+                )}
                 {focused && <View style={styles.dot} />}
               </View>
             </PressableScale>
@@ -265,6 +290,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs + 1,
+  },
+  avatarRing: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarRingActive: {
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  avatarRingInactive: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.45)',
+  },
+  tabAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
   },
   dot: {
     width: 4,

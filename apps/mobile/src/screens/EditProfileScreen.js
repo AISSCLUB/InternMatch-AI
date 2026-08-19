@@ -9,8 +9,11 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -19,20 +22,111 @@ import ScreenHeader from '../components/ScreenHeader';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
-import { upsertProfile } from '../services/api';
+import { upsertProfile, uploadAvatar, deleteAvatar } from '../services/api';
 import haptics from '../services/haptics';
 
+function getInitials(name) {
+  if (!name || typeof name !== 'string') return '';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export default function EditProfileScreen({ navigation }) {
-  const { profile, setProfile } = useProfile();
+  const { profile, setProfile, refreshProfile } = useProfile();
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
   const [headline, setHeadline] = useState(profile?.headline ?? '');
   const [department, setDepartment] = useState(
     typeof profile?.preferences?.department === 'string' ? profile.preferences.department : ''
   );
+  const [avatarUri, setAvatarUri] = useState(profile?.avatar_url ?? null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const skills = profile?.skills || [];
+  const currentAvatar = avatarUri || profile?.avatar_url || null;
+  const initials = getInitials(fullName || profile?.full_name);
+
+  const handlePickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Permission Required',
+          'Please allow photo library access to choose a profile picture.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const asset = result.assets[0];
+      setAvatarUri(asset.uri);
+      setUploadingAvatar(true);
+
+      try {
+        const uploadRes = await uploadAvatar({
+          uri: asset.uri,
+          name: asset.fileName || 'avatar.jpg',
+          type: asset.mimeType || 'image/jpeg',
+        });
+        setAvatarUri(uploadRes.avatar_url);
+        await refreshProfile();
+        haptics.success();
+      } catch (err) {
+        setAvatarUri(profile?.avatar_url || null);
+        const msg = err instanceof Error ? err.message : 'Failed to upload profile picture.';
+        Alert.alert('Upload Failed', msg);
+        haptics.error();
+      } finally {
+        setUploadingAvatar(false);
+      }
+    } catch (err) {
+      console.warn('Image picker error:', err);
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setUploadingAvatar(true);
+    try {
+      await deleteAvatar();
+      setAvatarUri(null);
+      await refreshProfile();
+      haptics.success();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to remove profile picture.';
+      Alert.alert('Remove Failed', msg);
+      haptics.error();
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarPress = () => {
+    if (uploadingAvatar) return;
+
+    if (currentAvatar) {
+      Alert.alert('Profile Picture', 'Choose an option', [
+        { text: 'Choose from Library', onPress: handlePickImage },
+        { text: 'Remove Photo', style: 'destructive', onPress: handleRemoveAvatar },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    } else {
+      handlePickImage();
+    }
+  };
 
   const handleSave = async () => {
     const trimmedName = fullName.trim();
@@ -84,15 +178,43 @@ export default function EditProfileScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Circular Interactive Avatar */}
           <View style={styles.avatarWrap}>
-            <View style={styles.avatarPlaceholder}>
-              <Ionicons
-                name="person-add-outline"
-                size={26}
-                color={colors.accent || colors.teal}
-              />
-            </View>
-            <Text style={styles.avatarLabel}>Profile Picture</Text>
+            <TouchableOpacity
+              style={styles.avatarTouchTarget}
+              onPress={handleAvatarPress}
+              disabled={uploadingAvatar}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile picture"
+              accessibilityHint="Tap to choose or remove profile photo"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <View style={styles.avatarContainer}>
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+                ) : currentAvatar ? (
+                  <Image source={{ uri: currentAvatar }} style={styles.avatarImage} />
+                ) : initials ? (
+                  <Text style={styles.avatarInitials}>{initials}</Text>
+                ) : (
+                  <Ionicons
+                    name="person-add-outline"
+                    size={28}
+                    color={colors.accent || colors.teal}
+                  />
+                )}
+
+                {/* Camera / Edit Badge Indicator */}
+                {!uploadingAvatar && (
+                  <View style={styles.editBadge}>
+                    <Ionicons name="camera" size={13} color="#FFFFFF" />
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.avatarLabel}>
+              {currentAvatar ? 'Change Photo' : 'Add Photo'}
+            </Text>
           </View>
 
           <Text style={styles.label}>Full Name</Text>
@@ -134,7 +256,7 @@ export default function EditProfileScreen({ navigation }) {
           )}
 
           <GradientButton
-            title={saving ? "Saving..." : "Save"}
+            title={saving ? 'Saving...' : 'Save'}
             color={colors.accent || colors.teal}
             onPress={handleSave}
             style={{ marginTop: spacing.lg }}
@@ -162,20 +284,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
-  avatarPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1.5,
+  avatarTouchTarget: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarContainer: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
     borderColor: colors.accent || colors.teal,
     backgroundColor: colors.surface || colors.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    shadowColor: 'rgba(14, 116, 144, 0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  avatarInitials: {
+    ...typography.display,
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.accentStrong || colors.tealDark,
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.accentStrong || colors.tealDark,
+    borderWidth: 2,
+    borderColor: colors.surface || '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarLabel: {
     ...typography.caption,
-    color: colors.textSecondary || colors.textMuted,
-    marginTop: spacing.xs,
+    fontWeight: '600',
+    color: colors.accentStrong || colors.tealDark,
+    marginTop: spacing.xs + 2,
   },
   label: {
     ...typography.caption,

@@ -14,6 +14,7 @@ from fastapi import HTTPException, status
 
 RATE_LIMIT_POLICIES: Dict[str, Dict[str, int]] = {
     "cv_upload": {"limit": 5, "window_seconds": 600},
+    "avatar_upload": {"limit": 10, "window_seconds": 600},
     "match_calculate": {"limit": 10, "window_seconds": 600},
     "match_explanation": {"limit": 30, "window_seconds": 600},
     "application_generate": {"limit": 10, "window_seconds": 600},

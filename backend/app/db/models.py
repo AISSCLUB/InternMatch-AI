@@ -41,6 +41,7 @@ class StudentProfile(Base):
     full_name: Mapped[str] = mapped_column(String, nullable=False)
     headline: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     cv_storage_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    avatar_storage_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     preferences: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON, nullable=True, default=dict
     )

@@ -141,6 +141,7 @@ export type StudentProfileResponse = {
   projects: ProjectEntry[];
   preferences: Record<string, unknown>;
   cv_url: string | null;
+  avatar_url?: string | null;
 };
 
 export type UpsertProfilePayload = {
@@ -161,6 +162,40 @@ export async function upsertProfile(
   return apiRequest<StudentProfileResponse>('/profile', {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+export type AvatarUploadResponse = {
+  avatar_url: string;
+  message: string;
+};
+
+export type AvatarDeleteResponse = {
+  avatar_url: null;
+  message: string;
+};
+
+export async function uploadAvatar(file: {
+  uri: string;
+  name?: string;
+  type?: string;
+}): Promise<AvatarUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name || 'avatar.jpg',
+    type: file.type || 'image/jpeg',
+  } as any);
+
+  return apiRequest<AvatarUploadResponse>('/profile/avatar', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function deleteAvatar(): Promise<AvatarDeleteResponse> {
+  return apiRequest<AvatarDeleteResponse>('/profile/avatar', {
+    method: 'DELETE',
   });
 }
 

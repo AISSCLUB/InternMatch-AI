@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
@@ -23,6 +24,14 @@ import { useProfile } from '../context/ProfileContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 
 const appVersion = require('../../app.json').expo.version || '1.0.0';
+
+function getInitials(name) {
+  if (!name || typeof name !== 'string') return '';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function ProfileScreen({ navigation }) {
   const scrollViewRef = useRef(null);
@@ -41,10 +50,12 @@ export default function ProfileScreen({ navigation }) {
   );
 
   const skills = profile?.skills || [];
-  const education = profile?.education || [];
+  const initials = getInitials(profile?.full_name);
+
+  // Derive primary education summary if available
   const primaryEducation =
-    education.length > 0
-      ? `${education[0].institution}${education[0].degree ? ` Â· ${education[0].degree}` : ''}`
+    profile?.education && profile.education.length > 0
+      ? `${profile.education[0].degree} â€” ${profile.education[0].institution}`
       : null;
 
   const renderSettingsAction = () => (
@@ -65,8 +76,8 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
-      <AppChromeHeader />
-      <ScreenHeader
+      {/* Dynamic App Chrome Header with FREE PLAN badge & settings action */}
+      <AppChromeHeader
         title="Profile"
         alignment="start"
         rightAction={renderSettingsAction()}
@@ -89,11 +100,17 @@ export default function ProfileScreen({ navigation }) {
       >
         <View style={styles.avatarWrap}>
           <View style={styles.avatarPlaceholder}>
-            <Ionicons
-              name="person-outline"
-              size={36}
-              color={colors.textSecondary || colors.textMuted}
-            />
+            {profile?.avatar_url ? (
+              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+            ) : initials ? (
+              <Text style={styles.avatarInitials}>{initials}</Text>
+            ) : (
+              <Ionicons
+                name="person-outline"
+                size={36}
+                color={colors.textSecondary || colors.textMuted}
+              />
+            )}
           </View>
         </View>
 
@@ -138,27 +155,38 @@ export default function ProfileScreen({ navigation }) {
               </View>
               <View style={[styles.linkRow, styles.linkRowBorder]}>
                 <Ionicons
-                  name="link-outline"
+                  name="logo-github"
                   size={16}
                   color={colors.textSecondary || colors.textMuted}
                   style={styles.linkIcon}
                 />
                 <Text style={styles.linkText}>GitHub</Text>
               </View>
+              <View style={[styles.linkRow, styles.linkRowBorder]}>
+                <Ionicons
+                  name="globe-outline"
+                  size={16}
+                  color={colors.textSecondary || colors.textMuted}
+                  style={styles.linkIcon}
+                />
+                <Text style={styles.linkText}>Portfolio</Text>
+              </View>
             </Card>
 
-            <GradientButton
-              title="Edit Profile"
-              color={colors.accent || colors.teal}
-              onPress={() => navigation.navigate('EditProfile')}
-              style={{ marginTop: spacing.xl }}
-            />
-            <GradientButton
-              title="CV Upload"
-              color={colors.accentStrong || colors.tealDark}
-              onPress={() => navigation.navigate('CVUpload')}
-              style={{ marginTop: spacing.md }}
-            />
+            <View style={styles.buttonRow}>
+              <GradientButton
+                title="Edit Profile"
+                color={colors.accent || colors.teal}
+                onPress={() => navigation.navigate('EditProfile')}
+                style={styles.actionBtn}
+              />
+              <GradientButton
+                title="Upload CV"
+                color={colors.primary || colors.blue}
+                onPress={() => navigation.navigate('CVUpload')}
+                style={styles.actionBtn}
+              />
+            </View>
 
             {/* Legal & About Section */}
             <Text style={styles.sectionTitle}>Legal & About</Text>
@@ -168,7 +196,6 @@ export default function ProfileScreen({ navigation }) {
                 onPress={() => navigation.navigate('PrivacyPolicy')}
                 accessibilityRole="button"
                 accessibilityLabel="Privacy Policy"
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <View style={styles.legalRowLeft}>
                   <Ionicons
@@ -191,7 +218,6 @@ export default function ProfileScreen({ navigation }) {
                 onPress={() => navigation.navigate('TermsOfUse')}
                 accessibilityRole="button"
                 accessibilityLabel="Terms of Use"
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 <View style={styles.legalRowLeft}>
                   <Ionicons
@@ -267,10 +293,27 @@ const styles = StyleSheet.create({
     height: 84,
     borderRadius: 42,
     borderWidth: 2,
-    borderColor: colors.borderSubtle || colors.border,
+    borderColor: colors.accent || colors.teal,
     backgroundColor: colors.surface || colors.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: 'rgba(14, 116, 144, 0.15)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  avatarInitials: {
+    ...typography.display,
+    fontSize: 26,
+    fontWeight: '700',
+    color: colors.accentStrong || colors.tealDark,
   },
   name: {
     ...typography.cardTitle,
@@ -319,8 +362,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.sm + 2,
-    minHeight: spacing.minimumTouchTarget,
+    paddingVertical: spacing.sm,
   },
   legalRowLeft: {
     flexDirection: 'row',
@@ -328,20 +370,32 @@ const styles = StyleSheet.create({
   },
   versionText: {
     ...typography.caption,
-    fontWeight: '600',
     color: colors.textTertiary || colors.textMuted,
+    fontWeight: '500',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  actionBtn: {
+    flex: 1,
+    marginHorizontal: spacing.xxs,
   },
   loadingWrap: {
     alignItems: 'center',
-    marginTop: spacing.xl * 2,
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl,
   },
   loadingText: {
-    ...typography.caption,
-    marginTop: spacing.sm,
+    ...typography.body,
     color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.sm,
   },
   emptyWrap: {
+    marginTop: spacing.xxl,
     alignItems: 'center',
-    marginTop: spacing.xl,
+    textAlign: 'center',
   },
 });
