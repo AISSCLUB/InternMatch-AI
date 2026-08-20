@@ -19,11 +19,13 @@ import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import AppChromeHeader from '../components/AppChromeHeader';
+import GlassSurface from '../components/GlassSurface';
 import Card from '../components/Card';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
+import { calculateProfileCompleteness } from '../utils/profileCompleteness';
 
 const appVersion = require('../../app.json').expo.version || '1.0.0';
 
@@ -53,6 +55,7 @@ export default function ProfileScreen({ navigation }) {
 
   const skills = profile?.skills || [];
   const initials = getInitials(profile?.full_name);
+  const completeness = calculateProfileCompleteness(profile);
 
   const linkedinUrl =
     typeof profile?.preferences?.linkedin_url === 'string'
@@ -159,15 +162,99 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.subtitle}>{primaryEducation}</Text>
             ) : null}
 
-            {skills.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Skills</Text>
-                <View style={styles.chipRow}>
-                  {skills.map((s) => (
-                    <Chip key={s} label={s} variant="skill" />
-                  ))}
+            {/* Profile Completeness Card */}
+            <GlassSurface variant="card" style={styles.completenessCard}>
+              <View style={styles.completenessHeader}>
+                <View style={styles.completenessTitleRow}>
+                  <Ionicons
+                    name={completeness.isComplete ? 'shield-checkmark' : 'sparkles'}
+                    size={16}
+                    color={completeness.isComplete ? colors.green || '#10B981' : colors.accent || colors.teal}
+                    style={{ marginEnd: spacing.xs }}
+                  />
+                  <Text style={styles.completenessTitle}>
+                    {completeness.isComplete
+                      ? 'Profile 100% Complete'
+                      : `Profile ${completeness.percentage}% complete`}
+                  </Text>
                 </View>
-              </>
+                <Text style={styles.completenessCount}>
+                  {completeness.completedCount}/{completeness.totalCount}
+                </Text>
+              </View>
+
+              <View style={styles.progressBarBg}>
+                <View
+                  style={[
+                    styles.progressBarFill,
+                    {
+                      width: `${completeness.percentage}%`,
+                      backgroundColor: completeness.isComplete
+                        ? colors.green || '#10B981'
+                        : colors.accentStrong || colors.tealDark,
+                    },
+                  ]}
+                />
+              </View>
+
+              {!completeness.isComplete && completeness.firstMissingItem ? (
+                <TouchableOpacity
+                  style={styles.completenessCtaRow}
+                  onPress={() => navigation.navigate(completeness.firstMissingItem.route)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${completeness.firstMissingItem.label} to improve your profile`}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.completenessCtaText} numberOfLines={1}>
+                    {completeness.firstMissingItem.label} to improve matching
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={14}
+                    color={colors.accentStrong || colors.tealDark}
+                  />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.completenessCompleteRow}>
+                  <Text style={styles.completenessCompleteText}>
+                    Profile ready for optimal internship matching
+                  </Text>
+                </View>
+              )}
+            </GlassSurface>
+
+            {/* Skills Section */}
+            <Text style={styles.sectionTitle}>Skills</Text>
+            {skills.length > 0 ? (
+              <View style={styles.chipRow}>
+                {skills.map((s) => (
+                  <Chip key={s} label={s} variant="skill" />
+                ))}
+              </View>
+            ) : (
+              <Card style={styles.linkCard} padding="sm">
+                <TouchableOpacity
+                  style={styles.linkRow}
+                  onPress={() => navigation.navigate('EditProfile')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add your skills in Edit Profile"
+                >
+                  <View style={styles.linkRowLeft}>
+                    <Ionicons
+                      name="add-circle-outline"
+                      size={18}
+                      color={colors.accent || colors.teal}
+                      style={styles.linkIcon}
+                    />
+                    <Text style={styles.addLinksText}>Add your skills</Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.textTertiary || colors.textMuted}
+                  />
+                </TouchableOpacity>
+              </Card>
             )}
 
             {/* Functional Social & Portfolio Links */}
@@ -432,6 +519,64 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xxs,
     lineHeight: 18,
+  },
+  completenessCard: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: spacing.radii.lg,
+  },
+  completenessHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  completenessTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  completenessTitle: {
+    ...typography.body,
+    fontWeight: '600',
+    color: colors.textPrimary || colors.textDark,
+  },
+  completenessCount: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
+  },
+  progressBarBg: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(14, 116, 144, 0.12)',
+    overflow: 'hidden',
+    marginVertical: spacing.xs,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  completenessCtaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xxs,
+  },
+  completenessCtaText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.accentStrong || colors.tealDark,
+    flex: 1,
+    marginEnd: spacing.xs,
+  },
+  completenessCompleteRow: {
+    marginTop: spacing.xxs,
+  },
+  completenessCompleteText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    fontWeight: '500',
   },
   sectionTitle: {
     ...typography.sectionTitle,

@@ -25,6 +25,12 @@ import { useProfile } from '../context/ProfileContext';
 import { upsertProfile, uploadAvatar, deleteAvatar } from '../services/api';
 import haptics from '../services/haptics';
 
+const WORK_TYPE_OPTIONS = [
+  { id: 'remote', label: 'Remote' },
+  { id: 'hybrid', label: 'Hybrid' },
+  { id: 'onsite', label: 'On-site' },
+];
+
 function getInitials(name) {
   if (!name || typeof name !== 'string') return '';
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -87,11 +93,38 @@ export default function EditProfileScreen({ navigation }) {
     typeof profile?.preferences?.portfolio_url === 'string' ? profile.preferences.portfolio_url : ''
   );
 
+  const [skills, setSkills] = useState(
+    Array.isArray(profile?.skills) ? [...profile.skills] : []
+  );
+  const [newSkill, setNewSkill] = useState('');
+
+  // Career Preferences State
+  const [workTypes, setWorkTypes] = useState(
+    Array.isArray(profile?.preferences?.work_types)
+      ? profile.preferences.work_types
+          .map((wt) => (typeof wt === 'string' ? wt.trim().toLowerCase() : ''))
+          .filter(Boolean)
+      : []
+  );
+
+  const [desiredLocations, setDesiredLocations] = useState(
+    Array.isArray(profile?.preferences?.desired_locations)
+      ? [...profile.preferences.desired_locations]
+      : []
+  );
+  const [newLocation, setNewLocation] = useState('');
+
+  const [targetRoles, setTargetRoles] = useState(
+    Array.isArray(profile?.preferences?.target_roles)
+      ? [...profile.preferences.target_roles]
+      : []
+  );
+  const [newRole, setNewRole] = useState('');
+
   const [avatarUri, setAvatarUri] = useState(profile?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const skills = profile?.skills || [];
   const currentAvatar = avatarUri || profile?.avatar_url || null;
   const initials = getInitials(fullName || profile?.full_name);
 
@@ -174,6 +207,137 @@ export default function EditProfileScreen({ navigation }) {
     }
   };
 
+  // Skill Add / Remove
+  const handleAddSkill = () => {
+    if (!newSkill) return;
+    const clean = newSkill.replace(/\s+/g, ' ').trim();
+    if (!clean) {
+      setNewSkill('');
+      return;
+    }
+
+    if (clean.length > 80) {
+      haptics.error();
+      Alert.alert('Skill Too Long', 'Each skill must be 80 characters or fewer.');
+      return;
+    }
+
+    if (skills.length >= 50) {
+      haptics.error();
+      Alert.alert('Maximum Skills Reached', 'You can add up to 50 skills to your profile.');
+      return;
+    }
+
+    const isDuplicate = skills.some(
+      (s) => s.trim().toLowerCase() === clean.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      haptics.selection();
+      setNewSkill('');
+      return;
+    }
+
+    haptics.selection();
+    setSkills((prev) => [...prev, clean]);
+    setNewSkill('');
+  };
+
+  const handleRemoveSkill = (skillToRemove) => {
+    haptics.selection();
+    setSkills((prev) => prev.filter((s) => s !== skillToRemove));
+  };
+
+  // Work Type Toggle
+  const toggleWorkType = (typeId) => {
+    haptics.selection();
+    setWorkTypes((prev) =>
+      prev.includes(typeId) ? prev.filter((t) => t !== typeId) : [...prev, typeId]
+    );
+  };
+
+  // Location Add / Remove
+  const handleAddLocation = () => {
+    if (!newLocation) return;
+    const clean = newLocation.replace(/\s+/g, ' ').trim();
+    if (!clean) {
+      setNewLocation('');
+      return;
+    }
+
+    if (clean.length > 80) {
+      haptics.error();
+      Alert.alert('Location Too Long', 'Each location must be 80 characters or fewer.');
+      return;
+    }
+
+    if (desiredLocations.length >= 10) {
+      haptics.error();
+      Alert.alert('Limit Reached', 'You can add up to 10 desired locations.');
+      return;
+    }
+
+    const isDuplicate = desiredLocations.some(
+      (l) => l.trim().toLowerCase() === clean.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      haptics.selection();
+      setNewLocation('');
+      return;
+    }
+
+    haptics.selection();
+    setDesiredLocations((prev) => [...prev, clean]);
+    setNewLocation('');
+  };
+
+  const handleRemoveLocation = (locToRemove) => {
+    haptics.selection();
+    setDesiredLocations((prev) => prev.filter((l) => l !== locToRemove));
+  };
+
+  // Role Add / Remove
+  const handleAddRole = () => {
+    if (!newRole) return;
+    const clean = newRole.replace(/\s+/g, ' ').trim();
+    if (!clean) {
+      setNewRole('');
+      return;
+    }
+
+    if (clean.length > 80) {
+      haptics.error();
+      Alert.alert('Role Too Long', 'Each target role must be 80 characters or fewer.');
+      return;
+    }
+
+    if (targetRoles.length >= 10) {
+      haptics.error();
+      Alert.alert('Limit Reached', 'You can add up to 10 target roles.');
+      return;
+    }
+
+    const isDuplicate = targetRoles.some(
+      (r) => r.trim().toLowerCase() === clean.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      haptics.selection();
+      setNewRole('');
+      return;
+    }
+
+    haptics.selection();
+    setTargetRoles((prev) => [...prev, clean]);
+    setNewRole('');
+  };
+
+  const handleRemoveRole = (roleToRemove) => {
+    haptics.selection();
+    setTargetRoles((prev) => prev.filter((r) => r !== roleToRemove));
+  };
+
   const handleSave = async () => {
     const trimmedName = fullName.trim();
     if (!trimmedName) {
@@ -215,7 +379,11 @@ export default function EditProfileScreen({ navigation }) {
           linkedin_url: normalizedLinkedin,
           github_url: normalizedGithub,
           portfolio_url: normalizedPortfolio,
+          work_types: workTypes,
+          desired_locations: desiredLocations,
+          target_roles: targetRoles,
         },
+        skills: skills,
       };
 
       const updated = await upsertProfile(payload);
@@ -316,6 +484,146 @@ export default function EditProfileScreen({ navigation }) {
             onChangeText={setDepartment}
           />
 
+          {/* Editable Skills Section */}
+          <Text style={styles.sectionTitle}>Skills</Text>
+          <View style={styles.chipInputRow}>
+            <TextInput
+              style={[styles.input, styles.chipInput]}
+              placeholder="Add a skill (e.g. Python, React)"
+              placeholderTextColor={colors.textTertiary || colors.textMuted}
+              value={newSkill}
+              onChangeText={setNewSkill}
+              onSubmitEditing={handleAddSkill}
+              returnKeyType="done"
+              maxLength={80}
+            />
+            <TouchableOpacity
+              style={styles.addChipBtn}
+              onPress={handleAddSkill}
+              accessibilityRole="button"
+              accessibilityLabel="Add skill"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {skills.length > 0 ? (
+            <View style={styles.chipRow}>
+              {skills.map((s) => (
+                <Chip
+                  key={s}
+                  label={s}
+                  variant="skill"
+                  onRemove={() => handleRemoveSkill(s)}
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyItemsText}>
+              No skills added yet. Add your top skills to stand out to employers.
+            </Text>
+          )}
+
+          {/* Career Preferences Section */}
+          <Text style={styles.sectionTitle}>Career Preferences</Text>
+
+          <Text style={styles.label}>Work Style</Text>
+          <View style={styles.chipRow}>
+            {WORK_TYPE_OPTIONS.map((opt) => {
+              const isSelected = workTypes.includes(opt.id);
+              return (
+                <Chip
+                  key={opt.id}
+                  label={opt.label}
+                  variant={isSelected ? 'skill' : 'neutral'}
+                  selected={isSelected}
+                  onPress={() => toggleWorkType(opt.id)}
+                />
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>Desired Locations</Text>
+          <View style={styles.chipInputRow}>
+            <TextInput
+              style={[styles.input, styles.chipInput]}
+              placeholder="Add location (e.g. Istanbul, London, Remote)"
+              placeholderTextColor={colors.textTertiary || colors.textMuted}
+              value={newLocation}
+              onChangeText={setNewLocation}
+              onSubmitEditing={handleAddLocation}
+              returnKeyType="done"
+              maxLength={80}
+            />
+            <TouchableOpacity
+              style={styles.addChipBtn}
+              onPress={handleAddLocation}
+              accessibilityRole="button"
+              accessibilityLabel="Add desired location"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {desiredLocations.length > 0 ? (
+            <View style={styles.chipRow}>
+              {desiredLocations.map((loc) => (
+                <Chip
+                  key={loc}
+                  label={loc}
+                  variant="skill"
+                  onRemove={() => handleRemoveLocation(loc)}
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyItemsText}>
+              No desired locations set.
+            </Text>
+          )}
+
+          <Text style={styles.label}>Target Roles</Text>
+          <View style={styles.chipInputRow}>
+            <TextInput
+              style={[styles.input, styles.chipInput]}
+              placeholder="Add role (e.g. Frontend Developer, Data Intern)"
+              placeholderTextColor={colors.textTertiary || colors.textMuted}
+              value={newRole}
+              onChangeText={setNewRole}
+              onSubmitEditing={handleAddRole}
+              returnKeyType="done"
+              maxLength={80}
+            />
+            <TouchableOpacity
+              style={styles.addChipBtn}
+              onPress={handleAddRole}
+              accessibilityRole="button"
+              accessibilityLabel="Add target role"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {targetRoles.length > 0 ? (
+            <View style={styles.chipRow}>
+              {targetRoles.map((role) => (
+                <Chip
+                  key={role}
+                  label={role}
+                  variant="skill"
+                  onRemove={() => handleRemoveRole(role)}
+                />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyItemsText}>
+              No target roles set.
+            </Text>
+          )}
+
           <Text style={styles.sectionTitle}>Social & Portfolio Links</Text>
 
           <Text style={styles.label}>LinkedIn URL</Text>
@@ -353,17 +661,6 @@ export default function EditProfileScreen({ navigation }) {
             autoCorrect={false}
             keyboardType="url"
           />
-
-          {skills.length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Skills (Extracted from CV)</Text>
-              <View style={styles.chipRow}>
-                {skills.map((s) => (
-                  <Chip key={s} label={s} variant="skill" />
-                ))}
-              </View>
-            </>
-          )}
 
           <GradientButton
             title={saving ? 'Saving...' : 'Save'}
@@ -462,6 +759,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     color: colors.textPrimary || colors.textDark,
     ...typography.body,
+  },
+  chipInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  chipInput: {
+    flex: 1,
+    marginBottom: 0,
+    marginEnd: spacing.sm,
+  },
+  addChipBtn: {
+    width: 46,
+    height: 46,
+    borderRadius: spacing.radii.md,
+    backgroundColor: colors.accentStrong || colors.tealDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyItemsText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginBottom: spacing.md,
+    marginStart: spacing.xxs,
+    fontStyle: 'italic',
   },
   sectionTitle: {
     ...typography.sectionTitle,
