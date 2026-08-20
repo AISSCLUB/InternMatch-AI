@@ -3,6 +3,7 @@ Candidate Profile Structured Write Repository Foundation
 Provides atomic transactional replacement of candidate profile data
 (StudentProfile, StudentSkill, EducationEntry, ExperienceEntry, ProjectEntry)
 from extracted CV schemas without performing commit/rollback.
+Preserves and merges existing candidate skills with CV-extracted skills.
 """
 
 import re
@@ -17,6 +18,7 @@ from app.db.models import (
     StudentProfile,
     StudentSkill,
 )
+from app.repositories.matching_data import MatchingDataRepository
 from app.repositories.student_profile import StudentProfileRepository
 from app.services.cv_profile_extraction import ExtractedCandidateProfile
 from sqlalchemy import delete, func, select
@@ -31,9 +33,9 @@ def replace_candidate_profile_from_extraction(
     extracted: ExtractedCandidateProfile,
 ) -> StudentProfile:
     """
-    Atomically replace candidate profile and related structured CV data in a single transaction.
+    Atomically update candidate profile and structured CV data in a single transaction.
     Invalidates summary_embedding prior to replacement.
-    Deduplicates skills case-insensitively and links to global taxonomy.
+    Preserves existing candidate skills and merges newly extracted CV skills without duplicates.
     Flushes all mutations to the current session.
     Caller owns transaction lifecycle (commit/rollback).
     """
@@ -49,13 +51,24 @@ def replace_candidate_profile_from_extraction(
             f"got {type(extracted).__name__}"
         )
 
-    # 1. Prepare preferences payload
-    preferences_dict: Dict[str, Any] = {}
+    # 1. Preserve existing manual/profile metadata and overlay only
+    # meaningful semantic preferences extracted from the CV.
+    existing_profile = StudentProfileRepository.get_by_user_id(db, user_id=user_id)
+    preferences_dict: Dict[str, Any] = dict(
+        (existing_profile.preferences or {}) if existing_profile else {}
+    )
+
+    extracted_preferences: Dict[str, Any] = {}
     if extracted.preferences:
         if hasattr(extracted.preferences, "model_dump"):
-            preferences_dict = extracted.preferences.model_dump()
+            extracted_preferences = extracted.preferences.model_dump()
         elif isinstance(extracted.preferences, dict):
-            preferences_dict = extracted.preferences
+            extracted_preferences = extracted.preferences
+
+    for key in ("work_types", "desired_locations", "target_roles"):
+        value = extracted_preferences.get(key)
+        if value:
+            preferences_dict[key] = value
 
     # 2. Upsert base StudentProfile record
     profile = StudentProfileRepository.upsert_by_user_id(
@@ -68,17 +81,22 @@ def replace_candidate_profile_from_extraction(
     )
     db.flush()
 
-    # 3. Explicitly invalidate summary_embedding before replacing related structured rows
+    # 3. Explicitly invalidate summary_embedding before updating related structured rows
     StudentProfileRepository.invalidate_summary_embedding(db, profile)
 
-    # 4. Remove previous candidate-specific child rows for this profile
-    db.execute(delete(StudentSkill).where(StudentSkill.student_id == profile.id))
+    # 4. Remove previous history entries (education, experience, projects)
     db.execute(delete(EducationEntry).where(EducationEntry.student_id == profile.id))
     db.execute(delete(ExperienceEntry).where(ExperienceEntry.student_id == profile.id))
     db.execute(delete(ProjectEntry).where(ProjectEntry.student_id == profile.id))
 
-    # 5. Insert Deduplicated Skills & StudentSkill Associations
-    seen_skills: Set[str] = set()
+    # 5. Merge Extracted Skills with Existing Skills (preserving manual skills)
+    existing_skills = MatchingDataRepository.get_skill_names_for_student(db, student_id=profile.id)
+    seen_skills: Set[str] = {
+        re.sub(r"\s+", " ", s.strip()).casefold()
+        for s in existing_skills
+        if re.sub(r"\s+", " ", s.strip())
+    }
+
     for s in extracted.skills:
         if not s.name or not isinstance(s.name, str):
             continue

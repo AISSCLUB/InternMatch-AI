@@ -556,13 +556,13 @@ def test_second_cv_extraction_replaces_prior_candidate_related_rows():
         assert exp[0].company == "Google DeepMind"
 
         skills = MatchingDataRepository.get_skill_names_for_student(db, prof2.id)
-        assert skills == ["Go", "Rust"]
+        assert sorted(skills) == ["Go", "PyTorch", "Python", "Rust"]
     finally:
         db.close()
 
 
-def test_stale_student_skills_removed_on_update():
-    """Test 22: Stale StudentSkill junction rows are removed upon new CV extraction."""
+def test_cv_extraction_merges_skills_without_duplicates():
+    """Test 22: Subsequent CV extraction merges skills and avoids duplicates."""
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
@@ -575,10 +575,10 @@ def test_stale_student_skills_removed_on_update():
         )
         db.commit()
 
-        # Update with only Skill3
+        # Update with Skill2 (existing) and Skill3 (new)
         ext2 = ExtractedCandidateProfile(
             full_name="Dev",
-            skills=[ExtractedSkill(name="Skill3")],
+            skills=[ExtractedSkill(name="Skill2"), ExtractedSkill(name="Skill3")],
         )
         replace_candidate_profile_from_extraction(
             db=db, user_id=user_id, cv_storage_path="path", extracted=ext2
@@ -586,9 +586,9 @@ def test_stale_student_skills_removed_on_update():
         db.commit()
 
         student_skills = db.query(StudentSkill).filter_by(student_id=prof.id).all()
-        assert len(student_skills) == 1
+        assert len(student_skills) == 3
         skill_names = MatchingDataRepository.get_skill_names_for_student(db, prof.id)
-        assert skill_names == ["Skill3"]
+        assert sorted(skill_names) == ["Skill1", "Skill2", "Skill3"]
     finally:
         db.close()
 

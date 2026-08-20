@@ -3,6 +3,7 @@ Protected Student Profile Endpoints
 Provides authenticated read, write, and CV upload access to candidate profiles.
 """
 
+import re
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
@@ -28,7 +29,7 @@ from app.services.cv_storage import (
     store_candidate_cv,
 )
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -43,6 +44,26 @@ class StudentProfileCreateUpdate(BaseModel):
     preferences: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Job/internship preferences"
     )
+    skills: Optional[List[str]] = Field(
+        None, description="List of candidate skills"
+    )
+
+    @field_validator("skills")
+    @classmethod
+    def validate_skills_list(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is None:
+            return None
+        if len(v) > 50:
+            raise ValueError("Candidate profile cannot have more than 50 skills.")
+        for item in v:
+            if not isinstance(item, str):
+                raise ValueError("Each skill must be a string.")
+            clean = re.sub(r"\s+", " ", item.strip())
+            if not clean:
+                raise ValueError("Skill name cannot be empty.")
+            if len(clean) > 80:
+                raise ValueError(f"Skill name '{clean}' exceeds maximum limit of 80 characters.")
+        return v
 
 
 class EducationResponse(BaseModel):
@@ -196,6 +217,16 @@ def upsert_my_profile(
         cv_storage_path=payload.cv_storage_path,
         preferences=payload.preferences,
     )
+
+    if payload.skills is not None:
+        skills_changed = StudentProfileRepository.sync_student_skills(
+            db=db,
+            student_id=profile.id,
+            skills=payload.skills,
+        )
+        if skills_changed:
+            StudentProfileRepository.invalidate_summary_embedding(db, profile)
+
     try:
         db.commit()
         db.refresh(profile)

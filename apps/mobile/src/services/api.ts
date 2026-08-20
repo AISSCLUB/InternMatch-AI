@@ -148,6 +148,7 @@ export type UpsertProfilePayload = {
   full_name: string;
   headline?: string | null;
   preferences?: Record<string, unknown>;
+  skills?: string[];
 };
 
 export async function getProfile(): Promise<StudentProfileResponse> {
