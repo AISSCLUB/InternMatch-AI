@@ -33,6 +33,42 @@ function getInitials(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function normalizeUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  let trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  // Block dangerous schemes
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('file:')
+  ) {
+    return null;
+  }
+
+  // Prepend https:// if no scheme provided
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = 'https://' + trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    // Regex validation fallback
+    if (/^https?:\/\/[^\s$.?#].[^\s]*$/i.test(trimmed)) {
+      return trimmed;
+    }
+    return null;
+  }
+}
+
 export default function EditProfileScreen({ navigation }) {
   const { profile, setProfile, refreshProfile } = useProfile();
 
@@ -41,6 +77,16 @@ export default function EditProfileScreen({ navigation }) {
   const [department, setDepartment] = useState(
     typeof profile?.preferences?.department === 'string' ? profile.preferences.department : ''
   );
+  const [linkedinUrl, setLinkedinUrl] = useState(
+    typeof profile?.preferences?.linkedin_url === 'string' ? profile.preferences.linkedin_url : ''
+  );
+  const [githubUrl, setGithubUrl] = useState(
+    typeof profile?.preferences?.github_url === 'string' ? profile.preferences.github_url : ''
+  );
+  const [portfolioUrl, setPortfolioUrl] = useState(
+    typeof profile?.preferences?.portfolio_url === 'string' ? profile.preferences.portfolio_url : ''
+  );
+
   const [avatarUri, setAvatarUri] = useState(profile?.avatar_url ?? null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -138,6 +184,26 @@ export default function EditProfileScreen({ navigation }) {
 
     if (saving) return;
 
+    const normalizedLinkedin = normalizeUrl(linkedinUrl);
+    const normalizedGithub = normalizeUrl(githubUrl);
+    const normalizedPortfolio = normalizeUrl(portfolioUrl);
+
+    if (linkedinUrl.trim() && !normalizedLinkedin) {
+      haptics.error();
+      Alert.alert('Invalid LinkedIn URL', 'Please enter a valid website address.');
+      return;
+    }
+    if (githubUrl.trim() && !normalizedGithub) {
+      haptics.error();
+      Alert.alert('Invalid GitHub URL', 'Please enter a valid website address.');
+      return;
+    }
+    if (portfolioUrl.trim() && !normalizedPortfolio) {
+      haptics.error();
+      Alert.alert('Invalid Portfolio URL', 'Please enter a valid website address.');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -146,11 +212,15 @@ export default function EditProfileScreen({ navigation }) {
         preferences: {
           ...(profile?.preferences || {}),
           department: department.trim() || null,
+          linkedin_url: normalizedLinkedin,
+          github_url: normalizedGithub,
+          portfolio_url: normalizedPortfolio,
         },
       };
 
       const updated = await upsertProfile(payload);
       setProfile(updated);
+      haptics.success();
       navigation.goBack();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save profile.';
@@ -217,6 +287,8 @@ export default function EditProfileScreen({ navigation }) {
             </Text>
           </View>
 
+          <Text style={styles.sectionTitle}>Basic Information</Text>
+
           <Text style={styles.label}>Full Name</Text>
           <TextInput
             style={styles.input}
@@ -242,6 +314,44 @@ export default function EditProfileScreen({ navigation }) {
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={department}
             onChangeText={setDepartment}
+          />
+
+          <Text style={styles.sectionTitle}>Social & Portfolio Links</Text>
+
+          <Text style={styles.label}>LinkedIn URL</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://linkedin.com/in/username"
+            placeholderTextColor={colors.textTertiary || colors.textMuted}
+            value={linkedinUrl}
+            onChangeText={setLinkedinUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+
+          <Text style={styles.label}>GitHub URL</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://github.com/username"
+            placeholderTextColor={colors.textTertiary || colors.textMuted}
+            value={githubUrl}
+            onChangeText={setGithubUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+
+          <Text style={styles.label}>Portfolio Website</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://yourportfolio.com"
+            placeholderTextColor={colors.textTertiary || colors.textMuted}
+            value={portfolioUrl}
+            onChangeText={setPortfolioUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
           />
 
           {skills.length > 0 && (
@@ -356,7 +466,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.sectionTitle,
     color: colors.textPrimary || colors.textDark,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   chipRow: {

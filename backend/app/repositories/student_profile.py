@@ -43,9 +43,20 @@ class StudentProfileRepository:
         now = datetime.now(timezone.utc)
 
         if profile:
+            old_preferences = profile.preferences or {}
+            new_preferences = preferences if preferences is not None else old_preferences
+            semantic_preference_keys = (
+                "work_types",
+                "desired_locations",
+                "target_roles",
+            )
+            semantic_preferences_changed = any(
+                old_preferences.get(key) != new_preferences.get(key)
+                for key in semantic_preference_keys
+            )
             embedding_inputs_changed = (
                 profile.headline != headline
-                or (preferences is not None and profile.preferences != preferences)
+                or semantic_preferences_changed
             )
 
             if embedding_inputs_changed:

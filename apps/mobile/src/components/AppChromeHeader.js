@@ -5,12 +5,15 @@ import { spacing } from '../theme/spacing';
 import InternMatchLogo from './InternMatchLogo';
 import PlanBadge from './PlanBadge';
 
-export default function AppChromeHeader({ style }) {
+export default function AppChromeHeader({ style, rightAction }) {
   return (
     <View style={[styles.headerContainer, style]}>
       <View style={styles.contentRow}>
         <InternMatchLogo style={styles.logoItem} />
-        <PlanBadge plan="free" style={styles.badgeItem} />
+        <View style={styles.rightGroup}>
+          <PlanBadge plan="free" style={styles.badgeItem} />
+          {rightAction ? <View style={styles.actionItem}>{rightAction}</View> : null}
+        </View>
       </View>
     </View>
   );
@@ -34,7 +37,15 @@ const styles = StyleSheet.create({
   logoItem: {
     alignSelf: 'center',
   },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   badgeItem: {
+    alignSelf: 'center',
+  },
+  actionItem: {
+    marginStart: spacing.sm,
     alignSelf: 'center',
   },
 });

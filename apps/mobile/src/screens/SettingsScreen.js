@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,54 +13,158 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
-import { signOut } from '../services/auth';
+import GlassSurface from '../components/GlassSurface';
+import { signOut, getCurrentUser, sendPasswordResetEmail } from '../services/auth';
 import { useProfile } from '../context/ProfileContext';
+import haptics from '../services/haptics';
 
-function Row({ label, right, onPress }) {
-  const Wrapper = onPress ? TouchableOpacity : View;
+const appVersion = require('../../app.json').expo.version || '1.0.0';
+
+function SettingsRow({
+  icon,
+  iconColor,
+  label,
+  value,
+  onPress,
+  showChevron = true,
+  isLast = false,
+  accessibilityLabel,
+}) {
+  const isPressable = typeof onPress === 'function';
+  const Wrapper = isPressable ? TouchableOpacity : View;
+
   return (
     <Wrapper
-      style={styles.row}
-      onPress={onPress}
+      style={[styles.row, isLast && styles.rowLast]}
+      onPress={
+        isPressable
+          ? () => {
+              haptics.selection();
+              onPress();
+            }
+          : undefined
+      }
       activeOpacity={0.7}
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={typeof label === 'string' ? label : undefined}
+      accessibilityRole={isPressable ? 'button' : undefined}
+      accessibilityLabel={accessibilityLabel || (typeof label === 'string' ? label : undefined)}
     >
-      <Text style={styles.rowLabel}>{label}</Text>
-      {right}
+      <View style={styles.rowLeft}>
+        {icon ? (
+          <View style={styles.iconContainer}>
+            <Ionicons
+              name={icon}
+              size={18}
+              color={iconColor || colors.accent || colors.teal}
+            />
+          </View>
+        ) : null}
+        <Text style={styles.rowLabel}>{label}</Text>
+      </View>
+      <View style={styles.rowRight}>
+        {value ? <Text style={styles.valueText}>{value}</Text> : null}
+        {showChevron && isPressable ? (
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={colors.textTertiary || colors.textMuted}
+            style={styles.chevron}
+          />
+        ) : null}
+      </View>
     </Wrapper>
   );
 }
 
 export default function SettingsScreen({ navigation }) {
-  const [newMatches, setNewMatches] = useState(true);
-  const [statusUpdates, setStatusUpdates] = useState(true);
-  const [searchable, setSearchable] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
   const { clearProfile } = useProfile();
 
-  const handleExit = async () => {
-    try {
-      const { error } = await signOut();
+  useEffect(() => {
+    let isMounted = true;
+    getCurrentUser()
+      .then(({ data }) => {
+        if (isMounted && data?.user?.email) {
+          setUserEmail(data.user.email);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch user email:', err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-      if (error) {
-        throw error;
+  const handlePasswordReset = async () => {
+    try {
+      const email = userEmail.trim();
+      if (!email) {
+        Alert.alert('Change Password', 'No authenticated email address found.');
+        return;
       }
 
-      clearProfile();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'SignIn' }],
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign out.';
-      Alert.alert('Sign out failed', message);
+      Alert.alert(
+        'Change Password',
+        `Send a secure password reset link to ${email}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Send Link',
+            onPress: async () => {
+              try {
+                const { error } = await sendPasswordResetEmail(email);
+                if (error) {
+                  Alert.alert('Reset Failed', error.message);
+                } else {
+                  haptics.success();
+                  Alert.alert(
+                    'Password Reset Sent',
+                    `A password reset link has been sent to ${email}. Please check your inbox.`
+                  );
+                }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Unable to send reset email.';
+                Alert.alert('Error', msg);
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to initiate password reset.';
+      Alert.alert('Error', msg);
     }
   };
 
-  const confirmDelete = () => {
-    Alert.alert('Delete Account', 'This action cannot be undone. Are you sure?', [
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out of your account?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {} },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          if (signingOut) return;
+          setSigningOut(true);
+          try {
+            const { error } = await signOut();
+            if (error) {
+              throw error;
+            }
+            clearProfile();
+            haptics.success();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'SignIn' }],
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unable to sign out.';
+            Alert.alert('Sign Out Failed', message);
+          } finally {
+            setSigningOut(false);
+          }
+        },
+      },
     ]);
   };
 
@@ -78,122 +181,102 @@ export default function SettingsScreen({ navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>Account</Text>
-        <Row
-          label="Account Type"
-          right={
-            <View style={styles.badge}>
-              <Ionicons
-                name="school"
-                size={12}
-                color={colors.info || colors.primaryBlue}
-                style={styles.badgeIcon}
-              />
-              <Text style={styles.badgeText}>Intern</Text>
-            </View>
-          }
-        />
-        <Row
-          label="Change E-Mail"
-          right={
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textTertiary || colors.textMuted}
-            />
-          }
-          onPress={() => {}}
-        />
-        <Row
-          label="Change Password"
-          right={
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textTertiary || colors.textMuted}
-            />
-          }
-          onPress={() => {}}
-        />
+        {/* Account Section */}
+        <Text style={styles.sectionHeader}>ACCOUNT</Text>
+        <GlassSurface variant="card" style={styles.glassCard}>
+          <SettingsRow
+            icon="school-outline"
+            label="Account Type"
+            value="Intern"
+            showChevron={false}
+          />
+          <SettingsRow
+            icon="mail-outline"
+            label="Email Address"
+            value={userEmail || 'Authenticated'}
+            showChevron={false}
+          />
+          <SettingsRow
+            icon="key-outline"
+            label="Change Password"
+            onPress={handlePasswordReset}
+            isLast={true}
+            accessibilityLabel="Send password reset link"
+          />
+        </GlassSurface>
 
-        <Text style={styles.sectionTitle}>Notifications</Text>
-        <Row
-          label="New Matches"
-          right={
-            <Switch
-              value={newMatches}
-              onValueChange={setNewMatches}
-              trackColor={{ true: colors.accent || colors.teal }}
-            />
-          }
-        />
-        <Row
-          label="Application Status Updates"
-          right={
-            <Switch
-              value={statusUpdates}
-              onValueChange={setStatusUpdates}
-              trackColor={{ true: colors.accent || colors.teal }}
-            />
-          }
-        />
+        {/* Profile & Career Section */}
+        <Text style={styles.sectionHeader}>PROFILE & CAREER</Text>
+        <GlassSurface variant="card" style={styles.glassCard}>
+          <SettingsRow
+            icon="person-outline"
+            label="Edit Profile"
+            onPress={() => navigation.navigate('EditProfile')}
+            accessibilityLabel="Navigate to Edit Profile"
+          />
+          <SettingsRow
+            icon="document-text-outline"
+            label="Manage CV / Resume"
+            onPress={() => navigation.navigate('CVUpload')}
+            isLast={true}
+            accessibilityLabel="Navigate to CV Upload"
+          />
+        </GlassSurface>
 
-        <Text style={styles.sectionTitle}>Privacy & Data</Text>
-        <Row
-          label="My profile is searchable"
-          right={
-            <Switch
-              value={searchable}
-              onValueChange={setSearchable}
-              trackColor={{ true: colors.accent || colors.teal }}
-            />
-          }
-        />
-        <Row
-          label="Download my CV"
-          right={
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textTertiary || colors.textMuted}
-            />
-          }
-          onPress={() => {}}
-        />
-        <Row
-          label="Export My Data"
-          right={
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textTertiary || colors.textMuted}
-            />
-          }
-          onPress={() => {}}
-        />
+        {/* Privacy & Legal Section */}
+        <Text style={styles.sectionHeader}>PRIVACY & LEGAL</Text>
+        <GlassSurface variant="card" style={styles.glassCard}>
+          <SettingsRow
+            icon="shield-checkmark-outline"
+            label="Privacy Policy"
+            onPress={() => navigation.navigate('PrivacyPolicy')}
+            accessibilityLabel="Navigate to Privacy Policy"
+          />
+          <SettingsRow
+            icon="document-outline"
+            label="Terms of Use"
+            onPress={() => navigation.navigate('TermsOfUse')}
+            isLast={true}
+            accessibilityLabel="Navigate to Terms of Use"
+          />
+        </GlassSurface>
 
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <Row
-          label="Language"
-          right={<Text style={styles.valueText}>{'English  >'}</Text>}
-          onPress={() => {}}
-        />
+        {/* About Section */}
+        <Text style={styles.sectionHeader}>ABOUT</Text>
+        <GlassSurface variant="card" style={styles.glassCard}>
+          <SettingsRow
+            icon="information-circle-outline"
+            label="InternMatch AI"
+            value="AI Internship Matching"
+            showChevron={false}
+          />
+          <SettingsRow
+            icon="code-slash-outline"
+            label="App Version"
+            value={`v${appVersion}`}
+            showChevron={false}
+            isLast={true}
+          />
+        </GlassSurface>
 
+        {/* Sign Out CTA */}
         <TouchableOpacity
-          style={styles.dangerButton}
-          onPress={handleExit}
+          style={styles.signOutButton}
+          onPress={handleSignOut}
+          disabled={signingOut}
           accessibilityRole="button"
           accessibilityLabel="Sign out of your account"
+          activeOpacity={0.75}
         >
-          <Text style={styles.dangerText}>Sign Out</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.dangerButton, styles.deleteButton]}
-          onPress={confirmDelete}
-          accessibilityRole="button"
-          accessibilityLabel="Delete Account"
-        >
-          <Text style={styles.dangerText}>Delete Account</Text>
+          <Ionicons
+            name="log-out-outline"
+            size={18}
+            color={colors.danger || colors.red}
+            style={styles.signOutIcon}
+          />
+          <Text style={styles.signOutText}>
+            {signingOut ? 'Signing Out...' : 'Sign Out'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </ScreenContainer>
@@ -210,60 +293,84 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
     paddingBottom: spacing.xxxl,
   },
-  sectionTitle: {
-    ...typography.sectionTitle,
-    color: colors.textPrimary || colors.textDark,
+  sectionHeader: {
+    ...typography.caption,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: colors.textSecondary || colors.textMuted,
     marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+    marginStart: spacing.xs,
+  },
+  glassCard: {
+    borderRadius: spacing.radii.lg,
+    overflow: 'hidden',
     marginBottom: spacing.xs,
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    minHeight: 52,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderSubtle || colors.border,
-    minHeight: spacing.minimumTouchTarget,
+    borderBottomColor: colors.borderSubtle || 'rgba(14, 116, 144, 0.12)',
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  rowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginEnd: spacing.sm,
+  },
+  iconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(14, 116, 144, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginEnd: spacing.md,
   },
   rowLabel: {
     ...typography.body,
+    fontWeight: '500',
     color: colors.textPrimary || colors.textDark,
+  },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   valueText: {
     ...typography.caption,
     color: colors.textSecondary || colors.textMuted,
+    fontWeight: '500',
+    maxWidth: 180,
   },
-  badge: {
+  chevron: {
+    marginStart: spacing.xs,
+  },
+  signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.purpleBg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xxs + 1,
-    borderRadius: spacing.radii.sm,
-  },
-  badgeIcon: {
-    marginEnd: spacing.xxs + 2,
-  },
-  badgeText: {
-    ...typography.caption,
-    color: colors.info || colors.primaryBlue,
-    fontWeight: '600',
-  },
-  dangerButton: {
-    borderWidth: 1,
-    borderColor: colors.danger || colors.red,
-    borderRadius: spacing.radii.md,
-    minHeight: spacing.minimumTouchTarget,
-    alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderRadius: spacing.radii.lg,
+    paddingVertical: spacing.md,
     marginTop: spacing.xl,
-    backgroundColor: colors.surface || colors.cardBg,
+    minHeight: 50,
   },
-  deleteButton: {
-    marginTop: spacing.md,
+  signOutIcon: {
+    marginEnd: spacing.xs,
   },
-  dangerText: {
+  signOutText: {
     ...typography.button,
     color: colors.danger || colors.red,
+    fontWeight: '600',
   },
 });

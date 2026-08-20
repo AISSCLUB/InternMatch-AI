@@ -8,6 +8,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Image,
+  Linking,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
@@ -52,10 +54,38 @@ export default function ProfileScreen({ navigation }) {
   const skills = profile?.skills || [];
   const initials = getInitials(profile?.full_name);
 
+  const linkedinUrl =
+    typeof profile?.preferences?.linkedin_url === 'string'
+      ? profile.preferences.linkedin_url
+      : null;
+  const githubUrl =
+    typeof profile?.preferences?.github_url === 'string'
+      ? profile.preferences.github_url
+      : null;
+  const portfolioUrl =
+    typeof profile?.preferences?.portfolio_url === 'string'
+      ? profile.preferences.portfolio_url
+      : null;
+  const hasAnyLinks = Boolean(linkedinUrl || githubUrl || portfolioUrl);
+
+  const handleOpenLink = async (url, title) => {
+    if (!url) return;
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Unable to Open Link', `Cannot open the ${title} link on this device.`);
+      }
+    } catch {
+      Alert.alert('Link Error', 'An error occurred while opening the link.');
+    }
+  };
+
   // Derive primary education summary if available
   const primaryEducation =
     profile?.education && profile.education.length > 0
-      ? `${profile.education[0].degree} â€” ${profile.education[0].institution}`
+      ? `${profile.education[0].degree} — ${profile.education[0].institution}`
       : null;
 
   const renderSettingsAction = () => (
@@ -76,10 +106,8 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
-      {/* Dynamic App Chrome Header with FREE PLAN badge & settings action */}
+      {/* Dynamic App Chrome Header with FREE PLAN badge & visibly positioned settings action */}
       <AppChromeHeader
-        title="Profile"
-        alignment="start"
         rightAction={renderSettingsAction()}
       />
 
@@ -142,35 +170,109 @@ export default function ProfileScreen({ navigation }) {
               </>
             )}
 
+            {/* Functional Social & Portfolio Links */}
             <Text style={styles.sectionTitle}>Links</Text>
             <Card style={styles.linkCard} padding="sm">
-              <View style={styles.linkRow}>
-                <Ionicons
-                  name="link-outline"
-                  size={16}
-                  color={colors.textSecondary || colors.textMuted}
-                  style={styles.linkIcon}
-                />
-                <Text style={styles.linkText}>LinkedIn</Text>
-              </View>
-              <View style={[styles.linkRow, styles.linkRowBorder]}>
-                <Ionicons
-                  name="logo-github"
-                  size={16}
-                  color={colors.textSecondary || colors.textMuted}
-                  style={styles.linkIcon}
-                />
-                <Text style={styles.linkText}>GitHub</Text>
-              </View>
-              <View style={[styles.linkRow, styles.linkRowBorder]}>
-                <Ionicons
-                  name="globe-outline"
-                  size={16}
-                  color={colors.textSecondary || colors.textMuted}
-                  style={styles.linkIcon}
-                />
-                <Text style={styles.linkText}>Portfolio</Text>
-              </View>
+              {hasAnyLinks ? (
+                <>
+                  {linkedinUrl ? (
+                    <TouchableOpacity
+                      style={styles.linkRow}
+                      onPress={() => handleOpenLink(linkedinUrl, 'LinkedIn')}
+                      accessibilityRole="link"
+                      accessibilityLabel="Open LinkedIn Profile"
+                    >
+                      <View style={styles.linkRowLeft}>
+                        <Ionicons
+                          name="logo-linkedin"
+                          size={18}
+                          color={colors.accent || colors.teal}
+                          style={styles.linkIcon}
+                        />
+                        <Text style={styles.linkText}>LinkedIn</Text>
+                      </View>
+                      <Ionicons
+                        name="open-outline"
+                        size={16}
+                        color={colors.textTertiary || colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {githubUrl ? (
+                    <TouchableOpacity
+                      style={[styles.linkRow, linkedinUrl ? styles.linkRowBorder : null]}
+                      onPress={() => handleOpenLink(githubUrl, 'GitHub')}
+                      accessibilityRole="link"
+                      accessibilityLabel="Open GitHub Profile"
+                    >
+                      <View style={styles.linkRowLeft}>
+                        <Ionicons
+                          name="logo-github"
+                          size={18}
+                          color={colors.accent || colors.teal}
+                          style={styles.linkIcon}
+                        />
+                        <Text style={styles.linkText}>GitHub</Text>
+                      </View>
+                      <Ionicons
+                        name="open-outline"
+                        size={16}
+                        color={colors.textTertiary || colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {portfolioUrl ? (
+                    <TouchableOpacity
+                      style={[
+                        styles.linkRow,
+                        linkedinUrl || githubUrl ? styles.linkRowBorder : null,
+                      ]}
+                      onPress={() => handleOpenLink(portfolioUrl, 'Portfolio')}
+                      accessibilityRole="link"
+                      accessibilityLabel="Open Portfolio Website"
+                    >
+                      <View style={styles.linkRowLeft}>
+                        <Ionicons
+                          name="globe-outline"
+                          size={18}
+                          color={colors.accent || colors.teal}
+                          style={styles.linkIcon}
+                        />
+                        <Text style={styles.linkText}>Portfolio</Text>
+                      </View>
+                      <Ionicons
+                        name="open-outline"
+                        size={16}
+                        color={colors.textTertiary || colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.linkRow}
+                  onPress={() => navigation.navigate('EditProfile')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add LinkedIn, GitHub, or Portfolio in Edit Profile"
+                >
+                  <View style={styles.linkRowLeft}>
+                    <Ionicons
+                      name="add-circle-outline"
+                      size={18}
+                      color={colors.accent || colors.teal}
+                      style={styles.linkIcon}
+                    />
+                    <Text style={styles.addLinksText}>Add LinkedIn, GitHub, or Portfolio</Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.textTertiary || colors.textMuted}
+                  />
+                </TouchableOpacity>
+              )}
             </Card>
 
             <View style={styles.buttonRow}>
@@ -279,9 +381,11 @@ const styles = StyleSheet.create({
     paddingBottom: 104,
   },
   settingsBtn: {
-    width: spacing.minimumTouchTarget,
-    height: spacing.minimumTouchTarget,
-    alignItems: 'flex-end',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(14, 116, 144, 0.08)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   avatarWrap: {
@@ -345,11 +449,17 @@ const styles = StyleSheet.create({
   linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: spacing.sm,
+    minHeight: 44,
   },
   linkRowBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle || colors.border,
+  },
+  linkRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   linkIcon: {
     marginEnd: spacing.sm,
@@ -358,11 +468,17 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textPrimary || colors.textDark,
   },
+  addLinksText: {
+    ...typography.body,
+    color: colors.accentStrong || colors.tealDark,
+    fontWeight: '500',
+  },
   legalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: spacing.sm,
+    minHeight: 44,
   },
   legalRowLeft: {
     flexDirection: 'row',
