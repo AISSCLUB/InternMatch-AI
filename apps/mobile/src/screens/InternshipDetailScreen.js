@@ -15,7 +15,9 @@ import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import Chip from '../components/Chip';
+import BookmarkButton from '../components/BookmarkButton';
 import { getInternshipDetail, ApiError } from '../services/api';
+import { useSavedInternships } from '../context/SavedInternshipsContext';
 
 export default function InternshipDetailScreen({ route, navigation }) {
   const internshipId =
@@ -73,12 +75,27 @@ export default function InternshipDetailScreen({ route, navigation }) {
     }
   };
 
+  const { isSaved, toggleSave, isMutating } = useSavedInternships();
+
+  const renderHeaderBookmark = () => {
+    if (!internshipId) return null;
+    return (
+      <BookmarkButton
+        isSaved={isSaved(internshipId)}
+        disabled={!internship || isMutating(internshipId)}
+        onPress={() => toggleSave(internship)}
+        size={22}
+      />
+    );
+  };
+
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
         title="Internship Details"
         showBack={true}
         navigation={navigation}
+        rightAction={renderHeaderBookmark()}
       />
 
       <ScrollView
@@ -137,7 +154,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
             <Card style={styles.heroCard} padding="md">
               <View style={styles.headerRow}>
                 <Text style={styles.companyLocation}>
-                  {internship.company} · {internship.location}
+                  {internship.company} - {internship.location}
                 </Text>
                 {internship.work_type ? (
                   <View style={styles.workTypeBadge}>

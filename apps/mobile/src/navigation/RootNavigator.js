@@ -14,6 +14,7 @@ import CoverLetterScreen from '../screens/CoverLetterScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CVUploadScreen from '../screens/CVUploadScreen';
+import SavedInternshipsScreen from '../screens/SavedInternshipsScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsOfUseScreen from '../screens/TermsOfUseScreen';
 
@@ -39,6 +40,7 @@ export default function RootNavigator() {
         <Stack.Screen name="CoverLetter" component={CoverLetterScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="SavedInternships" component={SavedInternshipsScreen} />
         <Stack.Screen name="CVUpload" component={CVUploadScreen} options={{ presentation: 'modal' }} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
         <Stack.Screen name="TermsOfUse" component={TermsOfUseScreen} />

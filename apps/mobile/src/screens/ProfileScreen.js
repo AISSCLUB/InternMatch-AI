@@ -24,6 +24,7 @@ import Card from '../components/Card';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
+import { useSavedInternships } from '../context/SavedInternshipsContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 import { calculateProfileCompleteness } from '../utils/profileCompleteness';
 
@@ -44,6 +45,7 @@ export default function ProfileScreen({ navigation }) {
   const onScroll = useTabScrollReporter(20);
 
   const { profile, loading, refreshProfile } = useProfile();
+  const { savedIds } = useSavedInternships();
 
   useFocusEffect(
     useCallback(() => {
@@ -88,7 +90,7 @@ export default function ProfileScreen({ navigation }) {
   // Derive primary education summary if available
   const primaryEducation =
     profile?.education && profile.education.length > 0
-      ? `${profile.education[0].degree} — ${profile.education[0].institution}`
+      ? `${profile.education[0].degree} - ${profile.education[0].institution}`
       : null;
 
   const renderSettingsAction = () => (
@@ -377,6 +379,39 @@ export default function ProfileScreen({ navigation }) {
               />
             </View>
 
+            {/* Bookmarks Section */}
+            <Text style={styles.sectionTitle}>Bookmarks</Text>
+            <Card style={styles.linkCard} padding="sm">
+              <TouchableOpacity
+                style={styles.legalRow}
+                onPress={() => navigation.navigate('SavedInternships')}
+                accessibilityRole="button"
+                accessibilityLabel={`Saved Internships, ${savedIds.size} saved`}
+              >
+                <View style={styles.legalRowLeft}>
+                  <Ionicons
+                    name="bookmark-outline"
+                    size={18}
+                    color={colors.accent || colors.teal}
+                    style={styles.linkIcon}
+                  />
+                  <Text style={styles.linkText}>Saved Internships</Text>
+                </View>
+                <View style={styles.badgeRowRight}>
+                  {savedIds.size > 0 ? (
+                    <View style={styles.savedBadgePill}>
+                      <Text style={styles.savedBadgeText}>{savedIds.size}</Text>
+                    </View>
+                  ) : null}
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.textTertiary || colors.textMuted}
+                  />
+                </View>
+              </TouchableOpacity>
+            </Card>
+
             {/* Legal & About Section */}
             <Text style={styles.sectionTitle}>Legal & About</Text>
             <Card style={styles.linkCard} padding="sm">
@@ -628,6 +663,23 @@ const styles = StyleSheet.create({
   legalRowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  badgeRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  savedBadgePill: {
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: spacing.radiusSm || 8,
+    marginEnd: spacing.xs,
+  },
+  savedBadgeText: {
+    ...typography.caption,
+    color: colors.accentStrong || colors.tealDark,
+    fontWeight: '700',
+    fontSize: 11,
   },
   versionText: {
     ...typography.caption,

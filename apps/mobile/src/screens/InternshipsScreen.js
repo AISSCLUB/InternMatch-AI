@@ -19,9 +19,12 @@ import AppChromeHeader from '../components/AppChromeHeader';
 import Card from '../components/Card';
 import PressableCard from '../components/PressableCard';
 import Chip from '../components/Chip';
+import PressableScale from '../components/PressableScale';
+import BookmarkButton from '../components/BookmarkButton';
 import { getInternships } from '../services/api';
 import haptics from '../services/haptics';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
+import { useSavedInternships } from '../context/SavedInternshipsContext';
 
 const PAGE_SIZE = 20;
 
@@ -37,6 +40,8 @@ export default function InternshipsScreen({ navigation }) {
   useTabScroll('Internships', scrollViewRef);
   useScrollToTop(scrollViewRef);
   const onScroll = useTabScrollReporter(20);
+
+  const { isSaved, toggleSave, isMutating, savedIds } = useSavedInternships();
 
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [items, setItems] = useState([]);
@@ -167,11 +172,35 @@ export default function InternshipsScreen({ navigation }) {
 
   const hasMore = items.length < total;
 
+  const savedHeaderAction = (
+    <PressableScale
+      onPress={() => navigation.navigate('SavedInternships')}
+      haptic="light"
+      accessibilityRole="button"
+      accessibilityLabel={"Saved internships, " + savedIds.size + " saved"}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <View>
+        <Ionicons
+          name={savedIds.size > 0 ? 'bookmark' : 'bookmark-outline'}
+          size={22}
+          color={colors.accentStrong}
+        />
+        {savedIds.size > 0 ? (
+          <View style={styles.savedCountBadge}>
+            <Text style={styles.savedCountText}>{savedIds.size}</Text>
+          </View>
+        ) : null}
+      </View>
+    </PressableScale>
+  );
+
   return (
     <ScreenContainer edges={['top']}>
       <AppChromeHeader />
       <ScreenHeader
         title="Internships"
+        rightAction={savedHeaderAction}
         alignment="start"
       />
 
@@ -280,6 +309,15 @@ export default function InternshipsScreen({ navigation }) {
                 accessibilityLabel={`${item.title} at ${item.company}`}
               >
                 <View style={styles.cardTop}>
+                  <BookmarkButton
+                    isSaved={isSaved(item.id)}
+                    disabled={isMutating(item.id)}
+                    onPress={(event) => {
+                      event?.stopPropagation?.();
+                      toggleSave(item);
+                    }}
+                    style={styles.cardBookmark}
+                  />
                   <Text style={styles.cardTitle}>{item.title}</Text>
                   {item.work_type ? (
                     <View style={styles.workTypeBadge}>
@@ -289,7 +327,7 @@ export default function InternshipsScreen({ navigation }) {
                 </View>
 
                 <Text style={styles.cardMeta}>
-                  {item.company} · {item.location}
+                  {item.company} - {item.location}
                 </Text>
 
                 {item.required_skills && item.required_skills.length > 0 && (
@@ -510,5 +548,26 @@ const styles = StyleSheet.create({
     color: colors.textTertiary || colors.textMuted,
     marginTop: spacing.xs,
     marginBottom: spacing.md,
+  },
+  savedCountBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: colors.accentStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedCountText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.textInverse,
+  },
+  cardBookmark: {
+    marginStart: spacing.xs,
+    marginTop: -spacing.xs,
   },
 });
