@@ -15,6 +15,7 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CVUploadScreen from '../screens/CVUploadScreen';
 import SavedInternshipsScreen from '../screens/SavedInternshipsScreen';
+import ApplicationDetailScreen from '../screens/ApplicationDetailScreen';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
 import TermsOfUseScreen from '../screens/TermsOfUseScreen';
 
@@ -38,6 +39,7 @@ export default function RootNavigator() {
         <Stack.Screen name="WhyYouMatch" component={WhyYouMatchScreen} />
         <Stack.Screen name="CoverLetterDraft" component={CoverLetterDraftScreen} />
         <Stack.Screen name="CoverLetter" component={CoverLetterScreen} />
+        <Stack.Screen name="ApplicationDetail" component={ApplicationDetailScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="SavedInternships" component={SavedInternshipsScreen} />

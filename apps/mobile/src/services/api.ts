@@ -475,6 +475,25 @@ export type ApplicationTrackerItem = {
   notes: string | null;
 };
 
+export type ApplicationStatusEvent = {
+  status: ApplicationStatus;
+  occurred_at: string;
+};
+
+export type ApplicationDetailResponse = {
+  id: string;
+  internship_id: string | null;
+  company_name: string | null;
+  job_title: string | null;
+  status: ApplicationStatus;
+  generated_cover_letter: string | null;
+  applied_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  timeline: ApplicationStatusEvent[];
+};
+
 export type ApplicationListResponse = {
   applications: ApplicationTrackerItem[];
 };
@@ -500,6 +519,17 @@ export async function getApplications(): Promise<ApplicationListResponse> {
   return apiRequest<ApplicationListResponse>('/applications', {
     method: 'GET',
   });
+}
+
+export async function getApplicationDetail(
+  applicationId: string
+): Promise<ApplicationDetailResponse> {
+  return apiRequest<ApplicationDetailResponse>(
+    `/applications/${encodeURIComponent(applicationId)}`,
+    {
+      method: 'GET',
+    }
+  );
 }
 
 export async function generateApplication(

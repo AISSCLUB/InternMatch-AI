@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useScrollToTop } from '@react-navigation/native';
+import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -55,13 +55,17 @@ export default function ApplicationsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [statusUpdatingId, setStatusUpdatingId] = useState(null);
+  const requestGenerationRef = useRef(0);
 
   const fetchApplicationsData = useCallback(async () => {
+    const generation = ++requestGenerationRef.current;
     setError(null);
     try {
       const res = await getApplications();
+      if (generation !== requestGenerationRef.current) return;
       setApplications(res.applications || []);
     } catch (err) {
+      if (generation !== requestGenerationRef.current) return;
       console.warn('Failed to fetch applications:', err);
       let msg = 'Unable to load applications.';
       if (err instanceof ApiError) {
@@ -75,13 +79,19 @@ export default function ApplicationsScreen({ navigation }) {
       }
       setError(msg);
     } finally {
+      if (generation !== requestGenerationRef.current) return;
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchApplicationsData();
-  }, [fetchApplicationsData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchApplicationsData();
+      return () => {
+        requestGenerationRef.current += 1;
+      };
+    }, [fetchApplicationsData])
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -93,6 +103,7 @@ export default function ApplicationsScreen({ navigation }) {
   };
 
   const handleQuickMarkApplied = async (applicationId) => {
+    requestGenerationRef.current += 1;
     setStatusUpdatingId(applicationId);
     try {
       await updateApplicationStatus(applicationId, { status: 'applied' });
@@ -206,7 +217,11 @@ export default function ApplicationsScreen({ navigation }) {
               const isUpdatingThis = statusUpdatingId === app.id;
 
               return (
-                <Card key={app.id} style={styles.appCard} padding="md">
+                <Card
+                  key={app.id}
+                  style={styles.appCard}
+                  padding="md"
+                >
                   <View style={styles.cardHeader}>
                     <View style={styles.cardTitleWrap}>
                       <Text style={styles.jobTitle}>
@@ -243,6 +258,26 @@ export default function ApplicationsScreen({ navigation }) {
 
                   {/* Action Buttons */}
                   <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={styles.detailBtn}
+                      onPress={() =>
+                        navigation.navigate('ApplicationDetail', {
+                          applicationId: app.id,
+                        })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel="View Application Details"
+                      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                    >
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color={colors.textPrimary || colors.textDark}
+                        style={styles.actionIcon}
+                      />
+                      <Text style={styles.detailBtnText}>Timeline</Text>
+                    </TouchableOpacity>
+
                     {hasCoverLetter && (
                       <TouchableOpacity
                         style={styles.letterBtn}
@@ -272,23 +307,23 @@ export default function ApplicationsScreen({ navigation }) {
 
                     {app.internship_id && (
                       <TouchableOpacity
-                        style={styles.detailBtn}
+                        style={styles.listingBtn}
                         onPress={() =>
                           navigation.navigate('InternshipDetail', {
                             internshipId: app.internship_id,
                           })
                         }
                         accessibilityRole="button"
-                        accessibilityLabel="View Listing"
+                        accessibilityLabel="View Internship Listing"
                         hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                       >
                         <Ionicons
                           name="open-outline"
                           size={14}
-                          color={colors.textPrimary || colors.textDark}
+                          color={colors.textSecondary || colors.textMuted}
                           style={styles.actionIcon}
                         />
-                        <Text style={styles.detailBtnText}>Listing</Text>
+                        <Text style={styles.listingBtnText}>Listing</Text>
                       </TouchableOpacity>
                     )}
 
@@ -507,6 +542,22 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: '600',
     color: colors.textPrimary || colors.textDark,
+  },
+  listingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceSubtle || '#F8FAFC',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.sm,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle || colors.border,
+    minHeight: 36,
+  },
+  listingBtnText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
   },
   markAppliedBtn: {
     flexDirection: 'row',
