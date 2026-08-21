@@ -349,6 +349,43 @@ class Application(Base):
     internship: Mapped[Optional["InternshipListing"]] = relationship(
         "InternshipListing"
     )
+    status_events: Mapped[List["ApplicationStatusEvent"]] = relationship(
+        "ApplicationStatusEvent",
+        back_populates="application",
+        passive_deletes="all",
+        order_by="ApplicationStatusEvent.occurred_at.asc(), ApplicationStatusEvent.id.asc()",
+    )
+
+
+class ApplicationStatusEvent(Base):
+    """ORM Model mapping public.application_status_events table (Application Status History)."""
+
+    __tablename__ = "application_status_events"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('saved', 'applied', 'interviewing', 'rejected', 'accepted')",
+            name="ck_application_status_events_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    application_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("applications.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    application: Mapped["Application"] = relationship(
+        "Application", back_populates="status_events"
+    )
 
 
 class SavedInternship(Base):

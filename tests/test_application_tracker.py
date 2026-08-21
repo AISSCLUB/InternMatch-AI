@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 from app.db.models import (
     Application,
+    ApplicationStatusEvent,
     EducationEntry,
     ExperienceEntry,
     InternshipListing,
@@ -35,6 +36,7 @@ def clean_database():
     """Ensure all related tables are cleared before and after each test."""
     db = TestingSessionLocal()
     try:
+        db.query(ApplicationStatusEvent).delete()
         db.query(Application).delete()
         db.query(Match).delete()
         db.query(ProcessingJob).delete()
@@ -51,6 +53,7 @@ def clean_database():
     yield
     db = TestingSessionLocal()
     try:
+        db.query(ApplicationStatusEvent).delete()
         db.query(Application).delete()
         db.query(Match).delete()
         db.query(ProcessingJob).delete()
@@ -751,5 +754,478 @@ def test_gate_2_28_regeneration_preserves_status_notes_applied_date():
         assert updated_app.applied_date == original_applied_date  # PRESERVED
         assert updated_app.notes == "Second round next Tuesday"  # PRESERVED
         assert updated_app.generated_cover_letter == "Version 2 regenerated cover letter"
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# 3. GATE 2.38F-C4C-A DETAIL ENDPOINT & TIMELINE EVENT TESTS (22 - 34)
+# ---------------------------------------------------------------------------
+
+
+def test_unauthenticated_detail_request_rejected(client: TestClient):
+    """Test 22: Unauthenticated GET /api/v1/applications/{id} returns 401."""
+    random_id = uuid4()
+    response = client.get(f"/api/v1/applications/{random_id}")
+    assert response.status_code == 401
+    assert response.json()["detail"]["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_owner_can_fetch_own_application_detail(client: TestClient):
+    """Test 23: Owner can fetch detail of their own application with 200 OK."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate A")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Frontend Engineering Intern",
+            company="Tech Corp",
+            location="San Francisco, CA",
+            work_type="hybrid",
+            description="React Native engineering.",
+        )
+        db.add(listing)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            status="saved",
+            generated_cover_letter="My personalized cover letter.",
+            notes="Follow up next week",
+        )
+        db.add(app)
+        db.commit()
+        app_id = app.id
+        listing_id = listing.id
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == str(app_id)
+    assert data["internship_id"] == str(listing_id)
+    assert data["company_name"] == "Tech Corp"
+    assert data["job_title"] == "Frontend Engineering Intern"
+    assert data["status"] == "saved"
+    assert data["generated_cover_letter"] == "My personalized cover letter."
+    assert data["notes"] == "Follow up next week"
+    assert "created_at" in data
+    assert "updated_at" in data
+    assert data["timeline"] == []
+
+
+def test_other_user_cannot_fetch_application_detail(client: TestClient):
+    """
+    Test 24: Cross-tenant isolation — User B receives 404 when requesting
+    User A's application.
+    """
+    user_a = uuid4()
+    user_b = uuid4()
+    token_b = f"valid-user-{user_b}"
+
+    db = TestingSessionLocal()
+    try:
+        profile_a = StudentProfile(id=uuid4(), user_id=user_a, full_name="User A")
+        profile_b = StudentProfile(id=uuid4(), user_id=user_b, full_name="User B")
+        db.add_all([profile_a, profile_b])
+        db.flush()
+
+        app_a = Application(
+            id=uuid4(),
+            student_id=profile_a.id,
+            internship_id=None,
+            status="applied",
+            generated_cover_letter="User A cover letter",
+        )
+        db.add(app_a)
+        db.commit()
+        app_a_id = app_a.id
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/applications/{app_a_id}",
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Application not found."
+
+
+def test_nonexistent_application_detail_returns_404(client: TestClient):
+    """Test 25: Requesting nonexistent application UUID returns 404."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="User")
+        db.add(profile)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/applications/{uuid4()}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Application not found."
+
+
+def test_status_transition_appends_exactly_one_event_and_persists_occurred_at(
+    client: TestClient,
+):
+    """
+    Test 26: Status transition appends exactly one ApplicationStatusEvent with
+    correct status and persisted occurred_at timestamp.
+    """
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="User")
+        db.add(profile)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=None,
+            status="saved",
+            notes=None,
+        )
+        db.add(app)
+        db.commit()
+        app_id = app.id
+    finally:
+        db.close()
+
+    # Transition 1: saved -> applied
+    patch_resp1 = client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "applied"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert patch_resp1.status_code == 200
+    assert patch_resp1.json()["status"] == "applied"
+
+    # Detail check: timeline has 1 event
+    detail_resp1 = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_resp1.status_code == 200
+    data1 = detail_resp1.json()
+    assert len(data1["timeline"]) == 1
+    assert data1["timeline"][0]["status"] == "applied"
+    assert "occurred_at" in data1["timeline"][0]
+
+    # Transition 2: applied -> interviewing
+    patch_resp2 = client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "interviewing"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert patch_resp2.status_code == 200
+    assert patch_resp2.json()["status"] == "interviewing"
+
+    # Detail check: timeline has 2 events
+    detail_resp2 = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_resp2.status_code == 200
+    data2 = detail_resp2.json()
+    assert len(data2["timeline"]) == 2
+    assert data2["timeline"][0]["status"] == "applied"
+    assert data2["timeline"][1]["status"] == "interviewing"
+
+
+def test_repeated_patch_with_same_status_does_not_append_duplicate_event(
+    client: TestClient,
+):
+    """Test 27: Repeating PATCH with identical status does NOT append duplicate timeline events."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="User")
+        db.add(profile)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=None,
+            status="saved",
+        )
+        db.add(app)
+        db.commit()
+        app_id = app.id
+    finally:
+        db.close()
+
+    # First PATCH: transition to applied
+    client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "applied"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    # Second PATCH: repeated applied
+    client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "applied"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    # Third PATCH: repeated applied with notes
+    client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "applied", "notes": "Updated note without changing status"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    detail_resp = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_resp.status_code == 200
+    data = detail_resp.json()
+    assert data["status"] == "applied"
+    assert data["notes"] == "Updated note without changing status"
+    assert len(data["timeline"]) == 1  # Exactly ONE event, not 3
+
+
+def test_applied_transition_sets_applied_date_and_preserves_on_later_transitions(
+    client: TestClient,
+):
+    """
+    Test 28: Transition to 'applied' sets applied_date, and subsequent transitions
+    preserve the original applied_date.
+    """
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="User")
+        db.add(profile)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=None,
+            status="saved",
+            applied_date=None,
+        )
+        db.add(app)
+        db.commit()
+        app_id = app.id
+    finally:
+        db.close()
+
+    # saved -> applied
+    client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "applied"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    detail1 = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+    assert detail1["applied_date"] is not None
+    original_applied_date = detail1["applied_date"]
+
+    # applied -> interviewing
+    client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "interviewing"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    detail2 = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+    assert detail2["status"] == "interviewing"
+    assert detail2["applied_date"] == original_applied_date  # PRESERVED
+
+    # interviewing -> accepted
+    client.patch(
+        f"/api/v1/applications/{app_id}/status",
+        json={"status": "accepted"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    detail3 = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    ).json()
+    assert detail3["status"] == "accepted"
+    assert detail3["applied_date"] == original_applied_date  # PRESERVED
+    assert len(detail3["timeline"]) == 3
+
+
+def test_timeline_events_returned_in_chronological_order():
+    """Test 29: Status events are listed in strict ascending chronological order."""
+    db = TestingSessionLocal()
+    try:
+        student_id = uuid4()
+        profile = StudentProfile(id=student_id, user_id=uuid4(), full_name="User")
+        db.add(profile)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=student_id,
+            internship_id=None,
+            status="accepted",
+        )
+        db.add(app)
+        db.flush()
+
+        t1 = datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc)
+        t2 = datetime(2026, 8, 5, 14, 30, tzinfo=timezone.utc)
+        t3 = datetime(2026, 8, 12, 9, 15, tzinfo=timezone.utc)
+
+        event1 = ApplicationStatusEvent(
+            id=uuid4(),
+            application_id=app.id,
+            status="applied",
+            occurred_at=t1,
+        )
+        event2 = ApplicationStatusEvent(
+            id=uuid4(),
+            application_id=app.id,
+            status="interviewing",
+            occurred_at=t2,
+        )
+        event3 = ApplicationStatusEvent(
+            id=uuid4(),
+            application_id=app.id,
+            status="accepted",
+            occurred_at=t3,
+        )
+        # Add out of order to verify sorting query
+        db.add_all([event3, event1, event2])
+        db.commit()
+
+        events = ApplicationRepository.list_events_for_application(
+            db=db, application_id=app.id
+        )
+        assert len(events) == 3
+        assert events[0].status == "applied"
+        assert events[1].status == "interviewing"
+        assert events[2].status == "accepted"
+
+        # Verify ascending chronological order
+        occurred_times = [
+            e.occurred_at.replace(tzinfo=timezone.utc)
+            if e.occurred_at.tzinfo is None
+            else e.occurred_at
+            for e in events
+        ]
+        assert occurred_times == [t1, t2, t3]
+    finally:
+        db.close()
+
+
+def test_legacy_application_with_no_events_returns_empty_timeline(
+    client: TestClient,
+):
+    """
+    Test 30: A legacy application created before the status event system returns
+    an empty timeline array (no synthesized or fabricated timestamps).
+    """
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="User")
+        db.add(profile)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=None,
+            status="interviewing",
+            applied_date=date(2026, 7, 20),
+            notes="Legacy application from before timeline was enabled",
+        )
+        db.add(app)
+        db.commit()
+        app_id = app.id
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/applications/{app_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "interviewing"
+    assert data["applied_date"] == "2026-07-20"
+    assert data["notes"] == "Legacy application from before timeline was enabled"
+    assert data["timeline"] == []  # Empty, genuine
+
+
+def test_status_event_cascade_delete():
+    """Test 31: Deleting an Application cascades and deletes its ApplicationStatusEvent records."""
+    db = TestingSessionLocal()
+    try:
+        student_id = uuid4()
+        profile = StudentProfile(id=student_id, user_id=uuid4(), full_name="User")
+        db.add(profile)
+        db.flush()
+
+        app = Application(
+            id=uuid4(),
+            student_id=student_id,
+            internship_id=None,
+            status="applied",
+        )
+        db.add(app)
+        db.flush()
+
+        event = ApplicationStatusEvent(
+            id=uuid4(),
+            application_id=app.id,
+            status="applied",
+            occurred_at=datetime.now(timezone.utc),
+        )
+        db.add(event)
+        db.commit()
+        app_id = app.id
+
+        # Verify event exists
+        assert len(ApplicationRepository.list_events_for_application(db, app_id)) == 1
+
+        # Delete Application
+        db.delete(app)
+        db.commit()
+
+        # Verify event was cascade deleted
+        assert len(ApplicationRepository.list_events_for_application(db, app_id)) == 0
     finally:
         db.close()

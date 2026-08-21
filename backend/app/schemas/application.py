@@ -4,7 +4,7 @@ Provides Pydantic schemas for personalized application cover-letter generation
 and application tracker management.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, List, Literal, Optional
 from uuid import UUID
 
@@ -95,3 +95,60 @@ class ApplicationStatusUpdateRequest(BaseModel):
 
     status: ApplicationStatus
     notes: Optional[str] = None
+
+
+class ApplicationStatusEventResponse(BaseModel):
+    """Schema representing an individual status transition in an application's timeline."""
+
+    status: ApplicationStatus
+    occurred_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ApplicationDetailResponse(BaseModel):
+    """Schema representing full application detail with chronological timeline."""
+
+    id: UUID
+    internship_id: Optional[UUID]
+    company_name: Optional[str]
+    job_title: Optional[str]
+    status: ApplicationStatus
+    generated_cover_letter: Optional[str]
+    applied_date: Optional[date]
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    timeline: List[ApplicationStatusEventResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_orm_data(
+        cls,
+        application: Any,
+        internship: Optional[Any],
+        events: List[Any],
+    ) -> "ApplicationDetailResponse":
+        """
+        Factory mapping (Application, Optional[InternshipListing], List[ApplicationStatusEvent]).
+        """
+        return cls(
+            id=application.id,
+            internship_id=application.internship_id,
+            company_name=internship.company if internship is not None else None,
+            job_title=internship.title if internship is not None else None,
+            status=application.status,
+            generated_cover_letter=application.generated_cover_letter,
+            applied_date=application.applied_date,
+            notes=application.notes,
+            created_at=application.created_at,
+            updated_at=application.updated_at,
+            timeline=[
+                ApplicationStatusEventResponse(
+                    status=event.status,
+                    occurred_at=event.occurred_at,
+                )
+                for event in events
+            ],
+        )

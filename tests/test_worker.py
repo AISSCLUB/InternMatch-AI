@@ -18,6 +18,7 @@ if str(worker_dir) not in sys.path:
 
 from app.db.models import (  # noqa: E402
     EducationEntry,
+    InternshipListing,
     Match,
     StudentProfile,
     StudentSkill,
@@ -377,6 +378,22 @@ def test_run_match_calculation_calculation_exception_rolls_back_and_marks_failed
     internship_id = uuid4()
     db = TestingSessionLocal()
     try:
+        profile = StudentProfile(
+            id=student_id,
+            user_id=user_id,
+            full_name="Rollback Worker",
+            summary_embedding=[0.1] * 768,
+        )
+        listing = InternshipListing(
+            id=internship_id,
+            title="Rollback Internship",
+            company="Rollback Co",
+            location="Remote",
+            work_type="remote",
+            description="Rollback lifecycle test.",
+        )
+        db.add_all([profile, listing])
+        db.flush()
         job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="match_calculation")
         db.commit()
         job_id = job.id

@@ -13,6 +13,7 @@ from app.repositories.application import ApplicationRepository
 from app.repositories.match import MatchRepository
 from app.repositories.processing_job import ProcessingJobRepository
 from app.schemas.application import (
+    ApplicationDetailResponse,
     ApplicationGenerateAcceptedResponse,
     ApplicationGenerateRequest,
     ApplicationListResponse,
@@ -49,6 +50,42 @@ def get_my_applications(
     ]
 
     return ApplicationListResponse(applications=items)
+
+
+@router.get("/{id}", response_model=ApplicationDetailResponse)
+def get_application_detail(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve candidate application details including chronological status timeline.
+    Requires valid Supabase Bearer JWT authentication token.
+    Identity is strictly derived from the validated JWT subject UUID.
+    Returns 404 if application is not found or owned by another candidate.
+    """
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, internship = record
+    events = ApplicationRepository.list_events_for_application(
+        db=db,
+        application_id=id,
+    )
+
+    return ApplicationDetailResponse.from_orm_data(
+        application=application,
+        internship=internship,
+        events=events,
+    )
 
 
 @router.post(
