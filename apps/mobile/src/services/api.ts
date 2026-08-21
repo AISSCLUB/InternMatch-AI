@@ -320,6 +320,80 @@ export async function getInternshipDetail(
   });
 }
 
+export type SavedInternshipItem = {
+  id: string;
+  internship_id: string;
+  saved_at: string;
+  internship: InternshipSummary;
+};
+
+export type SavedInternshipListResponse = {
+  items: SavedInternshipItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type SaveInternshipResponse = {
+  id: string;
+  internship_id: string;
+  saved_at: string;
+  is_saved: boolean;
+  message: string;
+};
+
+export type UnsaveInternshipResponse = {
+  internship_id: string;
+  is_saved: boolean;
+  message: string;
+};
+
+export type GetSavedInternshipsParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export async function getSavedInternships(
+  params: GetSavedInternshipsParams = {}
+): Promise<SavedInternshipListResponse> {
+  const queryParts: string[] = [];
+
+  if (typeof params.limit === 'number' && params.limit > 0) {
+    queryParts.push(`limit=${encodeURIComponent(params.limit.toString())}`);
+  }
+  if (typeof params.offset === 'number' && params.offset >= 0) {
+    queryParts.push(`offset=${encodeURIComponent(params.offset.toString())}`);
+  }
+
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+  return apiRequest<SavedInternshipListResponse>(`/saved-internships${queryString}`, {
+    method: 'GET',
+  });
+}
+
+export async function saveInternship(
+  internshipId: string
+): Promise<SaveInternshipResponse> {
+  return apiRequest<SaveInternshipResponse>(
+    `/saved-internships/${encodeURIComponent(internshipId)}`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
+export async function unsaveInternship(
+  internshipId: string
+): Promise<UnsaveInternshipResponse> {
+  return apiRequest<UnsaveInternshipResponse>(
+    `/saved-internships/${encodeURIComponent(internshipId)}`,
+    {
+      method: 'DELETE',
+    }
+  );
+}
+
 export type InternshipMatchSummary = {
   id: string;
   title: string;

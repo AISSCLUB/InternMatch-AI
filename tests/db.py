@@ -6,6 +6,7 @@ from app.db.models import (  # noqa: F401
     Match,
     ProcessingJob,
     ProjectEntry,
+    SavedInternship,
     Skill,
     StudentProfile,
     StudentSkill,

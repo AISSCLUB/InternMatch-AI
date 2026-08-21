@@ -25,6 +25,7 @@ from app.db.models import (  # noqa: E402,F401
     Match,
     ProcessingJob,
     ProjectEntry,
+    SavedInternship,
     Skill,
     StudentProfile,
     StudentSkill,
@@ -134,6 +135,7 @@ def setup_test_database():
         "processing_jobs",
         "matches",
         "applications",
+        "saved_internships",
     ]
     for table_name in required_tables:
         if table_name not in Base.metadata.tables:

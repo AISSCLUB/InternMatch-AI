@@ -349,3 +349,38 @@ class Application(Base):
     internship: Mapped[Optional["InternshipListing"]] = relationship(
         "InternshipListing"
     )
+
+
+class SavedInternship(Base):
+    """ORM Model mapping public.saved_internships table (Candidate Bookmarks)."""
+
+    __tablename__ = "saved_internships"
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id",
+            "internship_id",
+            name="uq_saved_internships_student_internship",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    internship_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("internship_listings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    student_profile: Mapped["StudentProfile"] = relationship("StudentProfile")
+    internship: Mapped["InternshipListing"] = relationship("InternshipListing")

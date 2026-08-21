@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     jobs,
     matches,
     profile,
+    saved_internships,
 )
 from fastapi import APIRouter
 
@@ -32,6 +33,13 @@ api_v1_router.include_router(
 # Register public internship catalog router
 api_v1_router.include_router(
     internships.router, prefix="/internships", tags=["Internship Catalog"]
+)
+
+# Register candidate saved internships router
+api_v1_router.include_router(
+    saved_internships.router,
+    prefix="/saved-internships",
+    tags=["Saved Internships"],
 )
 
 # Register processing job status tracking router
