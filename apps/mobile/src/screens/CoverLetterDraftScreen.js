@@ -9,6 +9,7 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -21,16 +22,18 @@ import Reveal from '../components/motion/Reveal';
 import BrandedAILoader from '../components/motion/BrandedAILoader';
 import { useApplicationGeneration } from '../hooks/useApplicationGeneration';
 import { getApplications } from '../services/api';
+import { getLocalizedErrorMessage } from '../localization/errorMessages';
 import haptics from '../services/haptics';
 
 const TONE_PRESETS = ['Professional', 'Concise', 'Enthusiastic'];
 const LOCALES = [
-  { code: 'en', label: 'English' },
-  { code: 'tr', label: 'Türkçe' },
-  { code: 'ar', label: 'العربية' },
+  { code: 'en', key: 'languages.en', defaultLabel: 'English' },
+  { code: 'tr', key: 'languages.tr', defaultLabel: 'Türkçe' },
+  { code: 'ar', key: 'languages.ar', defaultLabel: 'العربية' },
 ];
 
 export default function CoverLetterDraftScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const matchId = route?.params?.matchId;
   const internshipId = route?.params?.internshipId;
 
@@ -76,7 +79,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
 
   const handleGenerate = () => {
     if (!matchId) {
-      setResolveError('Match identifier is missing. Please return to Matchups.');
+      setResolveError('MISSING_MATCH_REF');
       return;
     }
 
@@ -111,15 +114,11 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
           if (resolvedApp) {
             setApplication(resolvedApp);
           } else {
-            setResolveError(
-              'Cover letter generated, but could not load the application record. Please check Application Tracker.'
-            );
+            setResolveError('SYNC_FAILED');
           }
         } catch (err) {
           console.warn('Failed to refresh applications after generation:', err);
-          const msg =
-            err instanceof Error ? err.message : 'Failed to retrieve generated cover letter.';
-          setResolveError(msg);
+          setResolveError('SYNC_FAILED');
         }
       }
     );
@@ -141,20 +140,20 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
   if (!matchId && !internshipId) {
     return (
       <ScreenContainer edges={['top', 'bottom']}>
-        <ScreenHeader title="AI Cover Letter" showBack={true} navigation={navigation} />
+        <ScreenHeader title={t('coverLetterDraft.title')} showBack={true} navigation={navigation} />
         <Card style={styles.centerScreenCard} padding="lg">
           <Ionicons name="alert-circle-outline" size={48} color={colors.textTertiary || colors.textMuted} />
-          <Text style={styles.errorScreenTitle}>Missing Match Reference</Text>
+          <Text style={styles.errorScreenTitle}>{t('coverLetterDraft.missingRefTitle')}</Text>
           <Text style={styles.errorScreenSubtitle}>
-            Please select a match from the Matchups tab to generate a cover letter.
+            {t('coverLetterDraft.missingRefSubtitle')}
           </Text>
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel="Go Back"
+            accessibilityLabel={t('coverLetterDraft.goBack')}
           >
-            <Text style={styles.primaryBtnText}>Go Back</Text>
+            <Text style={styles.primaryBtnText}>{t('coverLetterDraft.goBack')}</Text>
           </TouchableOpacity>
         </Card>
       </ScreenContainer>
@@ -164,7 +163,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="AI Cover Letter"
+        title={t('coverLetterDraft.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -175,82 +174,88 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.subtitle}>
-          Grounded application letter tailored to the job requirements and your verified profile.
+          {t('coverLetterDraft.subtitle')}
         </Text>
 
         {/* Loading Existing Draft Check */}
         {loadingExisting && (
           <View style={styles.centerLoading}>
             <ActivityIndicator size="small" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Checking existing drafts...</Text>
+            <Text style={styles.loadingText}>{t('coverLetterDraft.checkingDrafts')}</Text>
           </View>
         )}
 
         {/* Configuration Section (Tone & Locale) */}
         {!loadingExisting && !isGenerating && (
           <Card style={styles.configCard} padding="md">
-            <Text style={styles.sectionHeader}>GENERATION SETTINGS</Text>
+            <Text style={styles.sectionHeader}>{t('coverLetterDraft.settingsTitle')}</Text>
 
             {/* Tone Selector */}
-            <Text style={styles.fieldLabel}>Tone of Voice</Text>
+            <Text style={styles.fieldLabel}>{t('coverLetterDraft.toneLabel')}</Text>
             <View style={styles.presetRow}>
-              {TONE_PRESETS.map((preset) => (
-                <TouchableOpacity
-                  key={preset}
-                  style={[
-                    styles.presetChip,
-                    tone === preset && styles.presetChipActive,
-                  ]}
-                  onPress={() => setTone(preset)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Tone: ${preset}`}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <Text
+              {TONE_PRESETS.map((preset) => {
+                const localizedPreset = t(`coverLetterDraft.tones.${preset}`, { defaultValue: preset });
+                return (
+                  <TouchableOpacity
+                    key={preset}
                     style={[
-                      styles.presetChipText,
-                      tone === preset && styles.presetChipTextActive,
+                      styles.presetChip,
+                      tone === preset && styles.presetChipActive,
                     ]}
+                    onPress={() => setTone(preset)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('coverLetterDraft.toneLabel')}: ${localizedPreset}`}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                   >
-                    {preset}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.presetChipText,
+                        tone === preset && styles.presetChipTextActive,
+                      ]}
+                    >
+                      {localizedPreset}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
             <TextInput
               style={styles.customToneInput}
               value={tone}
               onChangeText={setTone}
-              placeholder="Or customize tone (e.g. Confident & Analytical)"
+              placeholder={t('coverLetterDraft.tonePlaceholder')}
               placeholderTextColor={colors.textTertiary || colors.textMuted}
               maxLength={60}
             />
 
             {/* Locale Selector */}
-            <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>Language</Text>
+            <Text style={[styles.fieldLabel, { marginTop: spacing.md }]}>{t('coverLetterDraft.languageLabel')}</Text>
             <View style={styles.presetRow}>
-              {LOCALES.map((loc) => (
-                <TouchableOpacity
-                  key={loc.code}
-                  style={[
-                    styles.presetChip,
-                    contentLocale === loc.code && styles.presetChipActive,
-                  ]}
-                  onPress={() => setContentLocale(loc.code)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Language: ${loc.label}`}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <Text
+              {LOCALES.map((loc) => {
+                const label = t(loc.key, { defaultValue: loc.defaultLabel });
+                return (
+                  <TouchableOpacity
+                    key={loc.code}
                     style={[
-                      styles.presetChipText,
-                      contentLocale === loc.code && styles.presetChipTextActive,
+                      styles.presetChip,
+                      contentLocale === loc.code && styles.presetChipActive,
                     ]}
+                    onPress={() => setContentLocale(loc.code)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('coverLetterDraft.languageLabel')}: ${label}`}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                   >
-                    {loc.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.presetChipText,
+                        contentLocale === loc.code && styles.presetChipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </Card>
         )}
@@ -265,9 +270,9 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
                 active={isGenerating}
                 style={{ marginBottom: spacing.xs }}
               />
-              <Text style={styles.generatingTitle}>Generating Cover Letter...</Text>
+              <Text style={styles.generatingTitle}>{t('coverLetterDraft.generatingTitle')}</Text>
               <Text style={styles.generatingSubtitle}>
-                Gemini is grounding your skills and experience against the internship description ({progressPercent}%)
+                {t('coverLetterDraft.generatingSubtitle', { progress: progressPercent })}
               </Text>
 
               <View style={styles.progressTrack}>
@@ -279,9 +284,9 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
                 style={styles.cancelBtn}
                 onPress={cancelGeneration}
                 accessibilityRole="button"
-                accessibilityLabel="Stop Checking"
+                accessibilityLabel={t('coverLetterDraft.stopChecking')}
               >
-                <Text style={styles.cancelBtnText}>Stop Checking</Text>
+                <Text style={styles.cancelBtnText}>{t('coverLetterDraft.stopChecking')}</Text>
               </TouchableOpacity>
             </Card>
           </AIPulse>
@@ -291,15 +296,15 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
         {generationError && !isGenerating && (
           <Card style={styles.errorCard} padding="md">
             <Ionicons name="alert-circle-outline" size={28} color={colors.danger || '#EF4444'} />
-            <Text style={styles.errorCardTitle}>Generation Could Not Complete</Text>
-            <Text style={styles.errorCardMessage}>{generationError}</Text>
+            <Text style={styles.errorCardTitle}>{t('coverLetterDraft.generationErrorTitle')}</Text>
+            <Text style={styles.errorCardMessage}>{getLocalizedErrorMessage(generationError, t)}</Text>
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={handleGenerate}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.retryBtnText}>Try Again</Text>
+              <Text style={styles.retryBtnText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -308,15 +313,21 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
         {resolveError && !isGenerating && (
           <Card style={styles.errorCard} padding="md">
             <Ionicons name="alert-circle-outline" size={28} color={colors.warning || '#F59E0B'} />
-            <Text style={styles.errorCardTitle}>Application Tracker Sync</Text>
-            <Text style={styles.errorCardMessage}>{resolveError}</Text>
+            <Text style={styles.errorCardTitle}>{t('coverLetterDraft.syncTitle')}</Text>
+            <Text style={styles.errorCardMessage}>
+              {resolveError === 'MISSING_MATCH_REF'
+                ? t('coverLetterDraft.missingRefSubtitle', { defaultValue: t('coverLetterDraft.missingRefTitle') })
+                : resolveError === 'SYNC_FAILED'
+                  ? t('coverLetterDraft.syncFailedMsg', { defaultValue: t('errors.coverLetterGenerateFailed') })
+                  : getLocalizedErrorMessage(resolveError, t)}
+            </Text>
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={checkExistingApplication}
               accessibilityRole="button"
-              accessibilityLabel="Refresh Applications"
+              accessibilityLabel={t('coverLetterDraft.refreshApplications')}
             >
-              <Text style={styles.retryBtnText}>Refresh Applications</Text>
+              <Text style={styles.retryBtnText}>{t('coverLetterDraft.refreshApplications')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -326,7 +337,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
           <Reveal delay={0}>
             <View style={styles.resultSection}>
               <View style={styles.resultHeaderRow}>
-                <Text style={styles.resultLabel}>GENERATED DRAFT</Text>
+                <Text style={styles.resultLabel}>{t('coverLetterDraft.generatedDraftTitle')}</Text>
                 <View style={styles.savedBadge}>
                   <Ionicons
                     name="checkmark-circle"
@@ -334,7 +345,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
                     color={colors.accent || colors.teal}
                     style={styles.savedIcon}
                   />
-                  <Text style={styles.savedBadgeText}>Saved in Tracker</Text>
+                  <Text style={styles.savedBadgeText}>{t('coverLetterDraft.savedInTracker')}</Text>
                 </View>
               </View>
 
@@ -343,7 +354,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
               </Card>
 
               <GradientButton
-                title="Review & Edit"
+                title={t('coverLetterDraft.reviewAndEdit')}
                 color={colors.accentStrong || colors.tealDark}
                 onPress={handleProceedToEdit}
                 style={{ marginTop: spacing.lg }}
@@ -353,7 +364,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
                 style={styles.recreateBtn}
                 onPress={handleGenerate}
                 accessibilityRole="button"
-                accessibilityLabel="Regenerate with New Options"
+                accessibilityLabel={t('coverLetterDraft.regenerate')}
               >
                 <Ionicons
                   name="refresh-outline"
@@ -361,7 +372,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
                   color={colors.accentStrong || colors.tealDark}
                   style={styles.recreateIcon}
                 />
-                <Text style={styles.recreateBtnText}>Regenerate with New Options</Text>
+                <Text style={styles.recreateBtnText}>{t('coverLetterDraft.regenerate')}</Text>
               </TouchableOpacity>
             </View>
           </Reveal>
@@ -370,7 +381,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
         {/* Initial Generate Action (When no draft exists yet) */}
         {!loadingExisting && !isGenerating && (!application || !application.generated_cover_letter) ? (
           <GradientButton
-            title="Generate Cover Letter"
+            title={t('coverLetterDraft.generateBtn')}
             color={colors.accent || colors.teal}
             onPress={handleGenerate}
             style={{ marginTop: spacing.xl }}
@@ -527,6 +538,7 @@ const styles = StyleSheet.create({
     color: colors.accent || colors.teal,
     alignSelf: 'flex-end',
     marginTop: spacing.xs,
+    writingDirection: 'ltr',
   },
   cancelBtn: {
     marginTop: spacing.md,

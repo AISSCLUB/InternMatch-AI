@@ -1,18 +1,23 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
+import { useLocalization } from '../localization/LocalizationContext';
 
 export default function TermsOfUseScreen({ navigation }) {
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
+
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Terms of Use"
-        subtitle="Using InternMatch"
+        title={t('legal.termsTitle')}
+        subtitle={t('legal.termsSubtitle')}
         showBack={true}
         navigation={navigation}
       />
@@ -22,68 +27,58 @@ export default function TermsOfUseScreen({ navigation }) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Card style={styles.introCard} variant="subtle" padding="md">
-          <Text style={styles.introBadge}>TERMS OF USE</Text>
-          <Text style={styles.introText}>
-            These Terms describe the conditions for using InternMatch AI. Please read them
-            before using the app and its AI-assisted internship features.
+        <Card style={[styles.introCard, isRTL && styles.introCardRTL]} variant="subtle" padding="md">
+          <Text style={[styles.introBadge, isRTL && styles.textRTL]}>{t('legal.termsBadge')}</Text>
+          <Text style={[styles.introText, isRTL && styles.textRTL]}>
+            {t('legal.termsIntro')}
           </Text>
         </Card>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Purpose of InternMatch</Text>
-          <Text style={styles.bodyText}>
-            InternMatch AI is an assistive internship platform designed to support the
-            internship discovery, profile-based match analysis, application preparation, and tracking for students and
-            early-career candidates.
+          <Text style={[styles.sectionTitle, isRTL && styles.textRTL]}>{t('legal.termsSection1Title')}</Text>
+          <Text style={[styles.bodyText, isRTL && styles.textRTL]}>
+            {t('legal.termsSection1Body')}
           </Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Assistive AI & User Review</Text>
-          <Text style={styles.bodyText}>
-            AI-generated recommendations, matchup insights, and draft cover letters are designed to
-            assist you. They do not constitute professional career advice and should always be reviewed
-            and edited by you before submission to employers.
+          <Text style={[styles.sectionTitle, isRTL && styles.textRTL]}>{t('legal.termsSection2Title')}</Text>
+          <Text style={[styles.bodyText, isRTL && styles.textRTL]}>
+            {t('legal.termsSection2Body')}
           </Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3. No Guarantee of Employment</Text>
-          <Text style={styles.bodyText}>
-            InternMatch AI facilitates discovery and preparation but does not guarantee internship
-            placements, interview invitations, or employment offers from listed companies or recruiters.
+          <Text style={[styles.sectionTitle, isRTL && styles.textRTL]}>{t('legal.termsSection3Title')}</Text>
+          <Text style={[styles.bodyText, isRTL && styles.textRTL]}>
+            {t('legal.termsSection3Body')}
           </Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>4. User Responsibilities & Conduct</Text>
-          <Text style={styles.bodyText}>
-            You agree to provide accurate and truthful information in your profile and uploaded CVs.
-            You are responsible for maintaining the confidentiality of your account credentials.
+          <Text style={[styles.sectionTitle, isRTL && styles.textRTL]}>{t('legal.termsSection4Title')}</Text>
+          <Text style={[styles.bodyText, isRTL && styles.textRTL]}>
+            {t('legal.termsSection4Body')}
           </Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>5. Third-Party Services</Text>
-          <Text style={styles.bodyText}>
-            InternMatch relies on third-party services for functions such as authentication, storage,
-            and AI-assisted processing. Third-party services may have their own terms and privacy practices.
-            Where external internship or employer links are provided, you are responsible for reviewing those external sites.
+          <Text style={[styles.sectionTitle, isRTL && styles.textRTL]}>{t('legal.termsSection5Title')}</Text>
+          <Text style={[styles.bodyText, isRTL && styles.textRTL]}>
+            {t('legal.termsSection5Body')}
           </Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>6. Product Status & Availability</Text>
-          <Text style={styles.bodyText}>
-            InternMatch AI is under active development. Features and service availability may be updated,
-            modified, or refined over time. The service may also experience interruptions during development.
+          <Text style={[styles.sectionTitle, isRTL && styles.textRTL]}>{t('legal.termsSection6Title')}</Text>
+          <Text style={[styles.bodyText, isRTL && styles.textRTL]}>
+            {t('legal.termsSection6Body')}
           </Text>
         </View>
 
         <View style={styles.footerNote}>
           <Text style={styles.footerText}>
-            Last updated: August 2026 | InternMatch AI
+            {t('legal.lastUpdated')}
           </Text>
         </View>
       </ScrollView>
@@ -105,6 +100,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     borderLeftWidth: 3,
     borderLeftColor: colors.accent || colors.teal,
+  },
+  introCardRTL: {
+    borderLeftWidth: 0,
+    borderRightWidth: 3,
+    borderRightColor: colors.accent || colors.teal,
   },
   introBadge: {
     ...typography.eyebrow,
@@ -128,6 +128,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary || colors.textMuted,
     lineHeight: 21,
+  },
+  textRTL: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
   footerNote: {
     marginTop: spacing.xl,

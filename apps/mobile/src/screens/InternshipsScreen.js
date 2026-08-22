@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -25,17 +26,20 @@ import { getInternships } from '../services/api';
 import haptics from '../services/haptics';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 import { useSavedInternships } from '../context/SavedInternshipsContext';
+import { useLocalization } from '../localization/LocalizationContext';
 
 const PAGE_SIZE = 20;
 
-const WORK_TYPE_FILTERS = [
-  { label: 'All', value: undefined },
-  { label: 'Remote', value: 'remote' },
-  { label: 'Hybrid', value: 'hybrid' },
-  { label: 'Onsite', value: 'onsite' },
+const FILTER_KEYS = [
+  { key: 'all', value: undefined },
+  { key: 'remote', value: 'remote' },
+  { key: 'hybrid', value: 'hybrid' },
+  { key: 'onsite', value: 'onsite' },
 ];
 
 export default function InternshipsScreen({ navigation }) {
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
   const scrollViewRef = useRef(null);
   useTabScroll('Internships', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -43,7 +47,7 @@ export default function InternshipsScreen({ navigation }) {
 
   const { isSaved, toggleSave, isMutating, savedIds } = useSavedInternships();
 
-  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [selectedFilterKey, setSelectedFilterKey] = useState('all');
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -51,19 +55,19 @@ export default function InternshipsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  const activeFilterRef = useRef(selectedFilter);
-  activeFilterRef.current = selectedFilter;
+  const activeFilterRef = useRef(selectedFilterKey);
+  activeFilterRef.current = selectedFilterKey;
 
-  const getFilterValue = (filterLabel) => {
-    const found = WORK_TYPE_FILTERS.find((f) => f.label === filterLabel);
+  const getFilterValue = (filterKey) => {
+    const found = FILTER_KEYS.find((f) => f.key === filterKey);
     return found ? found.value : undefined;
   };
 
-  const fetchInitialInternships = useCallback(async (filterLabel = selectedFilter) => {
+  const fetchInitialInternships = useCallback(async (filterKey = selectedFilterKey) => {
     setLoading(true);
     setError(null);
 
-    const workType = getFilterValue(filterLabel);
+    const workType = getFilterValue(filterKey);
 
     try {
       const response = await getInternships({
@@ -72,33 +76,33 @@ export default function InternshipsScreen({ navigation }) {
         offset: 0,
       });
 
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         setItems(response.items || []);
         setTotal(response.total || 0);
       }
     } catch (err) {
-      if (activeFilterRef.current === filterLabel) {
-        const msg = err instanceof Error ? err.message : 'Failed to load internships.';
-        setError(msg);
+      if (activeFilterRef.current === filterKey) {
+        console.warn('Failed to load internships:', err);
+        setError('INTERNSHIPS_LOAD_FAILED');
       }
     } finally {
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         setLoading(false);
       }
     }
-  }, [selectedFilter]);
+  }, [selectedFilterKey]);
 
   useEffect(() => {
     setRefreshing(false);
     setLoadingMore(false);
-    fetchInitialInternships(selectedFilter);
-  }, [selectedFilter, fetchInitialInternships]);
+    fetchInitialInternships(selectedFilterKey);
+  }, [selectedFilterKey, fetchInitialInternships]);
 
   const handleRefresh = async () => {
-    const filterLabel = selectedFilter;
+    const filterKey = selectedFilterKey;
     setRefreshing(true);
     setError(null);
-    const workType = getFilterValue(filterLabel);
+    const workType = getFilterValue(filterKey);
 
     try {
       const response = await getInternships({
@@ -107,17 +111,17 @@ export default function InternshipsScreen({ navigation }) {
         offset: 0,
       });
 
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         setItems(response.items || []);
         setTotal(response.total || 0);
       }
     } catch (err) {
-      if (activeFilterRef.current === filterLabel) {
-        const msg = err instanceof Error ? err.message : 'Failed to refresh internships.';
-        setError(msg);
+      if (activeFilterRef.current === filterKey) {
+        console.warn('Failed to refresh internships:', err);
+        setError('INTERNSHIPS_LOAD_FAILED');
       }
     } finally {
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         setRefreshing(false);
       }
     }
@@ -128,9 +132,9 @@ export default function InternshipsScreen({ navigation }) {
       return;
     }
 
-    const filterLabel = selectedFilter;
+    const filterKey = selectedFilterKey;
     setLoadingMore(true);
-    const workType = getFilterValue(filterLabel);
+    const workType = getFilterValue(filterKey);
 
     try {
       const response = await getInternships({
@@ -139,7 +143,7 @@ export default function InternshipsScreen({ navigation }) {
         offset: items.length,
       });
 
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         setItems((prevItems) => {
           const seenIds = new Set(prevItems.map((i) => i.id));
           const newUniqueItems = (response.items || []).filter((i) => !seenIds.has(i.id));
@@ -148,26 +152,29 @@ export default function InternshipsScreen({ navigation }) {
         setTotal(response.total || 0);
       }
     } catch (err) {
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         console.warn('Load more error:', err);
       }
     } finally {
-      if (activeFilterRef.current === filterLabel) {
+      if (activeFilterRef.current === filterKey) {
         setLoadingMore(false);
       }
     }
   };
 
-  const handleFilterSelect = (label) => {
-    if (selectedFilter !== label) {
+  const handleFilterSelect = (key) => {
+    if (selectedFilterKey !== key) {
       haptics.selection();
-      setSelectedFilter(label);
+      setSelectedFilterKey(key);
     }
   };
 
   const formatWorkType = (wt) => {
     if (!wt) return null;
-    return wt.charAt(0).toUpperCase() + wt.slice(1);
+    const lower = wt.toLowerCase();
+    return t(`internships.workTypes.${lower}`, {
+      defaultValue: wt.charAt(0).toUpperCase() + wt.slice(1),
+    });
   };
 
   const hasMore = items.length < total;
@@ -177,7 +184,7 @@ export default function InternshipsScreen({ navigation }) {
       onPress={() => navigation.navigate('SavedInternships')}
       haptic="light"
       accessibilityRole="button"
-      accessibilityLabel={"Saved internships, " + savedIds.size + " saved"}
+      accessibilityLabel={t('internships.savedCountA11y', { count: savedIds.size })}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <View>
@@ -199,7 +206,7 @@ export default function InternshipsScreen({ navigation }) {
     <ScreenContainer edges={['top']}>
       <AppChromeHeader />
       <ScreenHeader
-        title="Internships"
+        title={t('internships.title')}
         rightAction={savedHeaderAction}
         alignment="start"
       />
@@ -221,37 +228,41 @@ export default function InternshipsScreen({ navigation }) {
         }
       >
         {/* Work Type Filter Chips */}
-        <View style={styles.filterRow}>
-          {WORK_TYPE_FILTERS.map((f) => (
-            <TouchableOpacity
-              key={f.label}
-              style={[
-                styles.filterChip,
-                selectedFilter === f.label && styles.filterChipActive,
-              ]}
-              onPress={() => handleFilterSelect(f.label)}
-              accessibilityRole="button"
-              accessibilityLabel={`Filter ${f.label}`}
-              accessibilityState={{ selected: selectedFilter === f.label }}
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            >
-              <Text
+        <View style={[styles.filterRow, isRTL && styles.filterRowRTL]}>
+          {FILTER_KEYS.map((f) => {
+            const label = t(`internships.filters.${f.key}`);
+            const isSelected = selectedFilterKey === f.key;
+            return (
+              <TouchableOpacity
+                key={f.key}
                 style={[
-                  styles.filterText,
-                  selectedFilter === f.label && styles.filterTextActive,
+                  styles.filterChip,
+                  isSelected && styles.filterChipActive,
                 ]}
+                onPress={() => handleFilterSelect(f.key)}
+                accessibilityRole="button"
+                accessibilityLabel={t('internships.filters.filterA11y', { label })}
+                accessibilityState={{ selected: isSelected }}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
               >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                <Text
+                  style={[
+                    styles.filterText,
+                    isSelected && styles.filterTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Initial Loading State */}
         {loading && !refreshing && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Loading internships...</Text>
+            <Text style={styles.loadingText}>{t('internships.loading')}</Text>
           </View>
         )}
 
@@ -259,15 +270,17 @@ export default function InternshipsScreen({ navigation }) {
         {!loading && error && (
           <Card style={styles.errorCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={36} color={colors.danger || '#EF4444'} />
-            <Text style={styles.errorTitle}>Could Not Load Internships</Text>
-            <Text style={styles.errorMessage}>{error}</Text>
+            <Text style={styles.errorTitle}>{t('internships.errorTitle')}</Text>
+            <Text style={styles.errorMessage}>
+              {t('errors.internshipsLoadFailed', { defaultValue: t('internships.errorTitle') })}
+            </Text>
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={() => fetchInitialInternships(selectedFilter)}
+              onPress={() => fetchInitialInternships(selectedFilterKey)}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.retryButtonText}>Try Again</Text>
+              <Text style={styles.retryButtonText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -276,20 +289,20 @@ export default function InternshipsScreen({ navigation }) {
         {!loading && !error && items.length === 0 && (
           <Card style={styles.emptyCard} padding="lg">
             <Ionicons name="briefcase-outline" size={48} color={colors.textTertiary || colors.textMuted} />
-            <Text style={styles.emptyTitle}>No Internships Found</Text>
+            <Text style={styles.emptyTitle}>{t('internships.emptyTitle')}</Text>
             <Text style={styles.emptySubtitle}>
-              {selectedFilter !== 'All'
-                ? `There are currently no ${selectedFilter.toLowerCase()} internships available.`
-                : 'The internship catalog is currently empty. Check back soon!'}
+              {selectedFilterKey !== 'all'
+                ? t('internships.emptyFiltered', { filter: t(`internships.filters.${selectedFilterKey}`) })
+                : t('internships.emptyCatalog')}
             </Text>
-            {selectedFilter !== 'All' && (
+            {selectedFilterKey !== 'all' && (
               <TouchableOpacity
                 style={styles.resetFilterButton}
-                onPress={() => setSelectedFilter('All')}
+                onPress={() => setSelectedFilterKey('all')}
                 accessibilityRole="button"
-                accessibilityLabel="Show All Internships"
+                accessibilityLabel={t('internships.showAll')}
               >
-                <Text style={styles.resetFilterText}>Show All Internships</Text>
+                <Text style={styles.resetFilterText}>{t('internships.showAll')}</Text>
               </TouchableOpacity>
             )}
           </Card>
@@ -306,7 +319,10 @@ export default function InternshipsScreen({ navigation }) {
                 onPress={() =>
                   navigation.navigate('InternshipDetail', { internshipId: item.id })
                 }
-                accessibilityLabel={`${item.title} at ${item.company}`}
+                accessibilityLabel={t('internships.cardA11y', {
+                  title: item.title,
+                  company: item.company,
+                })}
               >
                 <View style={styles.cardTop}>
                   <BookmarkButton
@@ -337,7 +353,7 @@ export default function InternshipsScreen({ navigation }) {
                     ))}
                     {item.required_skills.length > 3 && (
                       <Text style={styles.moreSkillsText}>
-                        +{item.required_skills.length - 3} more
+                        {t('internships.moreSkills', { count: item.required_skills.length - 3 })}
                       </Text>
                     )}
                   </View>
@@ -352,20 +368,25 @@ export default function InternshipsScreen({ navigation }) {
                 onPress={handleLoadMore}
                 disabled={loadingMore}
                 accessibilityRole="button"
-                accessibilityLabel={`Load more (${items.length} of ${total})`}
+                accessibilityLabel={t('internships.loadMoreA11y', {
+                  count: items.length,
+                  total,
+                })}
               >
                 {loadingMore ? (
                   <ActivityIndicator size="small" color={colors.textInverse || colors.white} />
                 ) : (
                   <Text style={styles.loadMoreText}>
-                    Load More ({items.length} of {total})
+                    {t('internships.loadMore', { count: items.length, total })}
                   </Text>
                 )}
               </TouchableOpacity>
             )}
 
             {!hasMore && total > 0 && (
-              <Text style={styles.exhaustedText}>Showing all {total} internships</Text>
+              <Text style={styles.exhaustedText}>
+                {t('internships.showingAll', { total })}
+              </Text>
             )}
           </>
         )}
@@ -382,7 +403,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: 104,
+    paddingBottom: 128,
   },
   filterRow: {
     flexDirection: 'row',

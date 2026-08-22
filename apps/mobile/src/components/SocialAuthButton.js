@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
@@ -46,8 +47,9 @@ export default function SocialAuthButton({
   disabled = false,
   style,
 }) {
+  const { t } = useTranslation();
   const isGoogle = provider === 'google';
-  const label = isGoogle ? 'Continue with Google' : 'Continue with Apple';
+  const label = isGoogle ? t('auth.continueWithGoogle') : t('auth.continueWithApple');
 
   return (
     <PressableScale

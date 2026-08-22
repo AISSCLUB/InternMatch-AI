@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -18,8 +19,12 @@ import Chip from '../components/Chip';
 import BookmarkButton from '../components/BookmarkButton';
 import { getInternshipDetail, ApiError } from '../services/api';
 import { useSavedInternships } from '../context/SavedInternshipsContext';
+import { useLocalization } from '../localization/LocalizationContext';
+import { formatLocalizedDate } from '../localization/formatters';
 
 export default function InternshipDetailScreen({ route, navigation }) {
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
   const internshipId =
     route?.params?.internshipId ||
     route?.params?.internship?.id ||
@@ -29,9 +34,13 @@ export default function InternshipDetailScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isNotFound, setIsNotFound] = useState(false);
+  const requestGenerationRef = useRef(0);
 
   const fetchDetail = useCallback(async () => {
+    const generation = ++requestGenerationRef.current;
+
     if (!internshipId) {
+      if (generation !== requestGenerationRef.current) return;
       setIsNotFound(true);
       setLoading(false);
       return;
@@ -42,19 +51,23 @@ export default function InternshipDetailScreen({ route, navigation }) {
     setIsNotFound(false);
 
     try {
-      const data = await getInternshipDetail(internshipId);
+      const data = await getInternshipDetail(internshipId, locale);
+      if (generation !== requestGenerationRef.current) return;
       setInternship(data);
     } catch (err) {
+      if (generation !== requestGenerationRef.current) return;
       if (err instanceof ApiError && err.status === 404) {
         setIsNotFound(true);
       } else {
-        const msg = err instanceof Error ? err.message : 'Unable to load internship details.';
-        setError(msg);
+        console.warn('Failed to fetch internship detail:', err);
+        setError('INTERNSHIP_LOAD_FAILED');
       }
     } finally {
-      setLoading(false);
+      if (generation === requestGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  }, [internshipId]);
+  }, [internshipId, locale]);
 
   useEffect(() => {
     fetchDetail();
@@ -62,17 +75,16 @@ export default function InternshipDetailScreen({ route, navigation }) {
 
   const formatWorkType = (workType) => {
     if (!workType) return '';
-    return workType.charAt(0).toUpperCase() + workType.slice(1).toLowerCase();
+    const lower = workType.toLowerCase();
+    return t(`internships.workTypes.${lower}`, {
+      defaultValue: workType.charAt(0).toUpperCase() + workType.slice(1).toLowerCase(),
+    });
   };
 
-  const formatDate = (isoString) => {
+  const formatDateString = (isoString) => {
     if (!isoString) return null;
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    } catch {
-      return null;
-    }
+    const formatted = formatLocalizedDate(isoString, locale);
+    return formatted ? t('internshipDetail.postedDate', { date: formatted }) : null;
   };
 
   const { isSaved, toggleSave, isMutating } = useSavedInternships();
@@ -92,7 +104,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Internship Details"
+        title={t('internshipDetail.title')}
         showBack={true}
         navigation={navigation}
         rightAction={renderHeaderBookmark()}
@@ -107,7 +119,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
         {loading && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Loading internship details...</Text>
+            <Text style={styles.loadingText}>{t('internshipDetail.loading')}</Text>
           </View>
         )}
 
@@ -115,17 +127,17 @@ export default function InternshipDetailScreen({ route, navigation }) {
         {!loading && isNotFound && (
           <Card style={styles.statusCard} padding="lg">
             <Ionicons name="document-text-outline" size={48} color={colors.textTertiary || colors.textMuted} />
-            <Text style={styles.cardTitle}>Listing Not Found</Text>
+            <Text style={styles.cardTitle}>{t('internshipDetail.notFoundTitle')}</Text>
             <Text style={styles.cardSubtitle}>
-              This internship listing may have expired or been removed from the catalog.
+              {t('internshipDetail.notFoundMessage')}
             </Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => navigation.goBack()}
               accessibilityRole="button"
-              accessibilityLabel="Back to Internships"
+              accessibilityLabel={t('internshipDetail.backToInternships')}
             >
-              <Text style={styles.primaryButtonText}>Back to Internships</Text>
+              <Text style={styles.primaryButtonText}>{t('internshipDetail.backToInternships')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -134,15 +146,17 @@ export default function InternshipDetailScreen({ route, navigation }) {
         {!loading && !isNotFound && error && (
           <Card style={styles.errorCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={48} color={colors.danger || '#EF4444'} />
-            <Text style={styles.cardTitle}>Error Loading Listing</Text>
-            <Text style={styles.cardSubtitle}>{error}</Text>
+            <Text style={styles.cardTitle}>{t('internshipDetail.errorTitle')}</Text>
+            <Text style={styles.cardSubtitle}>
+              {t('errors.internshipLoadFailed', { defaultValue: t('internshipDetail.errorSubtitle', { defaultValue: t('internshipDetail.errorTitle') }) })}
+            </Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={fetchDetail}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.primaryButtonText}>Try Again</Text>
+              <Text style={styles.primaryButtonText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -167,13 +181,13 @@ export default function InternshipDetailScreen({ route, navigation }) {
 
               {internship.posted_at ? (
                 <Text style={styles.postedDate}>
-                  Posted on {formatDate(internship.posted_at)}
+                  {formatDateString(internship.posted_at)}
                 </Text>
               ) : null}
             </Card>
 
             {/* Description Section */}
-            <Text style={styles.sectionTitle}>About the Role</Text>
+            <Text style={styles.sectionTitle}>{t('internshipDetail.aboutRole')}</Text>
             <Card style={styles.descriptionCard} padding="md">
               <Text style={styles.descriptionText}>{internship.description}</Text>
             </Card>
@@ -181,7 +195,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
             {/* Required Skills */}
             {internship.required_skills && internship.required_skills.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>Required Skills</Text>
+                <Text style={styles.sectionTitle}>{t('internshipDetail.requiredSkills')}</Text>
                 <View style={styles.chipRow}>
                   {internship.required_skills.map((skill) => (
                     <Chip key={skill} label={skill} variant="skill" />
@@ -193,7 +207,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
             {/* Preferred Skills */}
             {internship.preferred_skills && internship.preferred_skills.length > 0 && (
               <>
-                <Text style={styles.sectionTitle}>Preferred Skills</Text>
+                <Text style={styles.sectionTitle}>{t('internshipDetail.preferredSkills')}</Text>
                 <View style={styles.chipRow}>
                   {internship.preferred_skills.map((skill) => (
                     <Chip key={skill} label={skill} variant="neutral" />
@@ -205,7 +219,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
             {/* Languages & Education */}
             {(internship.languages?.length > 0 || internship.min_education) && (
               <>
-                <Text style={styles.sectionTitle}>Requirements & Background</Text>
+                <Text style={styles.sectionTitle}>{t('internshipDetail.requirementsAndBackground')}</Text>
                 <Card style={styles.detailsCard} padding="md">
                   {internship.languages && internship.languages.length > 0 && (
                     <View style={styles.detailItem}>
@@ -216,7 +230,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
                         style={styles.detailIcon}
                       />
                       <View style={styles.detailTextContainer}>
-                        <Text style={styles.detailLabel}>Working Languages</Text>
+                        <Text style={styles.detailLabel}>{t('internshipDetail.workingLanguages')}</Text>
                         <Text style={styles.detailValue}>{internship.languages.join(', ')}</Text>
                       </View>
                     </View>
@@ -231,7 +245,7 @@ export default function InternshipDetailScreen({ route, navigation }) {
                         style={styles.detailIcon}
                       />
                       <View style={styles.detailTextContainer}>
-                        <Text style={styles.detailLabel}>Education Level</Text>
+                        <Text style={styles.detailLabel}>{t('internshipDetail.educationLevel')}</Text>
                         <Text style={styles.detailValue}>{internship.min_education}</Text>
                       </View>
                     </View>

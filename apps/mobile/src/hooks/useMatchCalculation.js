@@ -76,7 +76,7 @@ export function useMatchCalculation() {
             isCalculatingRef.current = false;
             if (isMountedRef.current) {
               setIsCalculating(false);
-              setCalculationError('Match calculation is taking longer than expected. Please try again later.');
+              setCalculationError('MATCH_CALCULATION_TIMEOUT');
             }
             return;
           }
@@ -116,7 +116,7 @@ export function useMatchCalculation() {
               isCalculatingRef.current = false;
               setProgressPercent(100);
               setIsCalculating(false);
-              setCalculationError(job.error || 'Match calculation failed.');
+              setCalculationError('MATCH_CALCULATION_FAILED');
             }
           } catch (err) {
             if (!isMountedRef.current || !isCalculatingRef.current) {
@@ -129,7 +129,7 @@ export function useMatchCalculation() {
               clearPolling();
               isCalculatingRef.current = false;
               setIsCalculating(false);
-              setCalculationError('Session expired. Please sign in again.');
+              setCalculationError('SESSION_EXPIRED');
             } else {
               // Transient network failure; schedule retry poll
               scheduleNextPoll();
@@ -154,8 +154,8 @@ export function useMatchCalculation() {
         clearPolling();
         isCalculatingRef.current = false;
         setIsCalculating(false);
-        const msg = err instanceof Error ? err.message : 'Failed to start match calculation.';
-        setCalculationError(msg);
+        const errorCode = 'MATCH_CALCULATION_START_FAILED';
+        setCalculationError(errorCode);
       }
     },
     [clearPolling]

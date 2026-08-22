@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -16,6 +17,7 @@ export default function AuthSegmentedControl({
   onTabChange,
   style,
 }) {
+  const { t } = useTranslation();
   const isSignIn = activeTab === 'signIn';
 
   const handleSignInPress = () => {
@@ -44,11 +46,16 @@ export default function AuthSegmentedControl({
         haptic={isSignIn ? 'none' : 'selection'}
         accessibilityRole="tab"
         accessibilityState={{ selected: isSignIn }}
-        accessibilityLabel="Sign In tab"
+        accessibilityLabel={t('auth.segmentedSignInA11y')}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Text style={[styles.tabText, isSignIn ? styles.activeTabText : styles.inactiveTabText]}>
-          Sign In
+        <Text
+          style={[styles.tabText, isSignIn ? styles.activeTabText : styles.inactiveTabText]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
+          {t('auth.segmentedSignIn')}
         </Text>
       </PressableScale>
 
@@ -61,11 +68,16 @@ export default function AuthSegmentedControl({
         haptic={!isSignIn ? 'none' : 'selection'}
         accessibilityRole="tab"
         accessibilityState={{ selected: !isSignIn }}
-        accessibilityLabel="Sign Up tab"
+        accessibilityLabel={t('auth.segmentedSignUpA11y')}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Text style={[styles.tabText, !isSignIn ? styles.activeTabText : styles.inactiveTabText]}>
-          Sign Up
+        <Text
+          style={[styles.tabText, !isSignIn ? styles.activeTabText : styles.inactiveTabText]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+        >
+          {t('auth.segmentedSignUp')}
         </Text>
       </PressableScale>
     </View>
@@ -84,6 +96,8 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
+    minWidth: 0,
+    paddingHorizontal: spacing.xs,
     minHeight: 38,
     borderRadius: spacing.radii.pill,
     alignItems: 'center',
@@ -101,12 +115,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   tabText: {
-    ...typography.button,
-    fontSize: 14,
+    ...typography.caption,
     fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
   },
   activeTabText: {
-    color: colors.white,
+    color: colors.textInverse || colors.white,
     fontWeight: '700',
   },
   inactiveTabText: {

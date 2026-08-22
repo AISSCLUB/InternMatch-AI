@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { gradientColors, colors } from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -22,6 +23,7 @@ import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
 
 export default function OnboardingProfileScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const initialName = typeof route?.params?.initialName === 'string' ? route.params.initialName : '';
   const initialDepartment = typeof route?.params?.initialDepartment === 'string' ? route.params.initialDepartment : '';
@@ -41,7 +43,7 @@ export default function OnboardingProfileScreen({ navigation, route }) {
 
     if (!trimmedName) {
       haptics.error();
-      Alert.alert('Profile Setup', 'Please enter your full name.');
+      Alert.alert(t('common.error'), t('onboarding.enterFullName'));
       return;
     }
 
@@ -62,8 +64,8 @@ export default function OnboardingProfileScreen({ navigation, route }) {
       setProfile(created);
       navigation.replace('MainTabs');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save profile.';
-      Alert.alert('Setup Failed', message);
+      console.warn('Profile save failed during onboarding:', error);
+      Alert.alert(t('common.error'), t('errors.profileSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -86,18 +88,18 @@ export default function OnboardingProfileScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>Complete Your Profile</Text>
+          <Text style={styles.title}>{t('onboarding.title')}</Text>
           <Text style={styles.subtitle}>
-            Please set up your profile details before exploring internship opportunities.
+            {t('onboarding.subtitle')}
           </Text>
 
-          <Text style={styles.sectionLabel}>Account type</Text>
+          <Text style={styles.sectionLabel}>{t('onboarding.accountType')}</Text>
           <View style={styles.typeRow}>
             <TouchableOpacity
               style={[styles.typeButton, accountType === 'intern' && styles.typeButtonActive]}
               onPress={() => setAccountType('intern')}
               accessibilityRole="button"
-              accessibilityLabel="Account type: Intern"
+              accessibilityLabel={`${t('onboarding.accountType')}: ${t('onboarding.intern')}`}
             >
               <Ionicons
                 name="school"
@@ -105,14 +107,14 @@ export default function OnboardingProfileScreen({ navigation, route }) {
                 color={accountType === 'intern' ? colors.white : colors.textDark}
               />
               <Text style={[styles.typeText, accountType === 'intern' && styles.typeTextActive]}>
-                Intern
+                {t('onboarding.intern')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.typeButton, accountType === 'employer' && styles.typeButtonActive]}
               onPress={() => setAccountType('employer')}
               accessibilityRole="button"
-              accessibilityLabel="Account type: Employer"
+              accessibilityLabel={`${t('onboarding.accountType')}: ${t('onboarding.employer')}`}
             >
               <Ionicons
                 name="briefcase"
@@ -120,40 +122,40 @@ export default function OnboardingProfileScreen({ navigation, route }) {
                 color={accountType === 'employer' ? colors.white : colors.textDark}
               />
               <Text style={[styles.typeText, accountType === 'employer' && styles.typeTextActive]}>
-                Employer
+                {t('onboarding.employer')}
               </Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.label}>Full Name *</Text>
+          <Text style={styles.label}>{t('onboarding.fullName')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Jane Doe"
+            placeholder={t('onboarding.fullNamePlaceholder', { defaultValue: 'e.g. Jane Doe' })}
             placeholderTextColor="#8A8A8A"
             value={fullName}
             onChangeText={setFullName}
           />
 
-          <Text style={styles.label}>Department / Major</Text>
+          <Text style={styles.label}>{t('onboarding.department')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Computer Science"
+            placeholder={t('onboarding.departmentPlaceholder', { defaultValue: 'e.g. Computer Science' })}
             placeholderTextColor="#8A8A8A"
             value={department}
             onChangeText={setDepartment}
           />
 
-          <Text style={styles.label}>Headline / Short Bio</Text>
+          <Text style={styles.label}>{t('onboarding.headline')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Aspiring AI & Backend Intern"
+            placeholder={t('onboarding.headlinePlaceholder', { defaultValue: 'e.g. Aspiring AI & Backend Intern' })}
             placeholderTextColor="#8A8A8A"
             value={headline}
             onChangeText={setHeadline}
           />
 
           <GradientButton
-            title={saving ? "Saving profile..." : "Save & Continue"}
+            title={saving ? t('onboarding.saving') : t('onboarding.saveAndContinue')}
             color={colors.primaryBlue}
             onPress={handleComplete}
             style={{ marginTop: spacing.xl }}

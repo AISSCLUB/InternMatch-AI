@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLocalization } from '../localization/LocalizationContext';
 import { View, StyleSheet, Platform, useWindowDimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -33,6 +35,14 @@ const ICONS = {
   Profile: 'person-circle',
 };
 
+const TAB_TRANSLATION_KEYS = Object.freeze({
+  Home: 'navigation.tabs.home',
+  Internships: 'navigation.tabs.internships',
+  Matchups: 'navigation.tabs.matchups',
+  Applications: 'navigation.tabs.applications',
+  Profile: 'navigation.tabs.profile',
+});
+
 export default function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
   const resetTabScroll = useTabScrollResetTrigger();
@@ -40,6 +50,8 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
   const isReducedMotion = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
   const { profile } = useProfile();
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
 
   const [avatarLoadError, setAvatarLoadError] = useState(false);
 
@@ -54,6 +66,8 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
 
   const bottomOffset = Math.max(insets.bottom, 12);
   const routeCount = state.routes.length || 5;
+  const activeVisualIndex = isRTL ? routeCount - 1 - state.index : state.index;
+  const visualRoutes = isRTL ? [...state.routes].reverse() : state.routes;
 
   // Exact geometry derived directly from windowWidth
   const totalBarWidth = windowWidth - 32; // left: 16, right: 16
@@ -61,12 +75,12 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
   const lensWidth = Math.max(48, tabWidth - 8);
   const lensInset = (tabWidth - lensWidth) / 2; // Symmetric 4px inset
 
-  // Exact initial target position for state.index
-  const initialTargetX = tabWidth * state.index + lensInset;
+  // Exact initial target position for the current visual order
+  const initialTargetX = tabWidth * activeVisualIndex + lensInset;
   const translateX = useSharedValue(initialTargetX);
 
   useEffect(() => {
-    const targetX = tabWidth * state.index + lensInset;
+    const targetX = tabWidth * activeVisualIndex + lensInset;
 
     if (isReducedMotion) {
       translateX.value = targetX;
@@ -78,7 +92,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
       stiffness: 300,
       mass: 0.7,
     });
-  }, [state.index, tabWidth, lensInset, isReducedMotion, translateX]);
+  }, [activeVisualIndex, tabWidth, lensInset, isReducedMotion, translateX]);
 
   const animatedLensStyle = useAnimatedStyle(() => {
     return {
@@ -170,11 +184,13 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
         </Animated.View>
 
         {/* Interactive Tab Items */}
-        {state.routes.map((route, index) => {
-          const focused = state.index === index;
+        {visualRoutes.map((route) => {
+          const routeIndex = state.routes.findIndex((candidate) => candidate.key === route.key);
+          const focused = state.index === routeIndex;
           const iconName = ICONS[route.name] ?? 'ellipse';
           const isProfileRoute = route.name === 'Profile';
           const hasAvatar = isProfileRoute && Boolean(profile?.avatar_url) && !avatarLoadError;
+          const tabTranslationKey = TAB_TRANSLATION_KEYS[route.name];
 
           const onPress = () => {
             const event = navigation.emit({
@@ -203,7 +219,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
               haptic="none"
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
-              accessibilityLabel={route.name}
+              accessibilityLabel={tabTranslationKey ? t(tabTranslationKey) : route.name}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <View style={styles.tabContent}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -19,8 +20,11 @@ import Chip from '../components/Chip';
 import AnimatedScoreRing from '../components/motion/AnimatedScoreRing';
 import Reveal from '../components/motion/Reveal';
 import { getMatchExplanation, ApiError } from '../services/api';
+import { useLocalization } from '../localization/LocalizationContext';
 
 export default function WhyYouMatchScreen({ route, navigation }) {
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
   const matchId = route?.params?.matchId;
   const internshipId = route?.params?.internshipId;
 
@@ -28,9 +32,13 @@ export default function WhyYouMatchScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isNotFound, setIsNotFound] = useState(false);
+  const requestGenerationRef = useRef(0);
 
   const fetchExplanationData = useCallback(async () => {
+    const generation = ++requestGenerationRef.current;
+
     if (!matchId) {
+      if (generation !== requestGenerationRef.current) return;
       setIsNotFound(true);
       setLoading(false);
       return;
@@ -41,21 +49,25 @@ export default function WhyYouMatchScreen({ route, navigation }) {
     setIsNotFound(false);
 
     try {
-      const data = await getMatchExplanation(matchId);
+      const data = await getMatchExplanation(matchId, locale);
+      if (generation !== requestGenerationRef.current) return;
       setExplanation(data);
     } catch (err) {
+      if (generation !== requestGenerationRef.current) return;
       if (err instanceof ApiError && err.status === 404) {
         setIsNotFound(true);
       } else if (err instanceof ApiError && err.status === 429) {
-        setError('Match explanation service is busy. Please try again in a moment.');
+        setError('SERVICE_BUSY');
       } else {
-        const msg = err instanceof Error ? err.message : 'Unable to generate match explanation.';
-        setError(msg);
+        console.warn('Failed to load match explanation:', err);
+        setError('MATCH_EXPLANATION_FAILED');
       }
     } finally {
-      setLoading(false);
+      if (generation === requestGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  }, [matchId]);
+  }, [matchId, locale]);
 
   useEffect(() => {
     fetchExplanationData();
@@ -64,7 +76,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Why You Match"
+        title={t('whyYouMatch.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -78,9 +90,9 @@ export default function WhyYouMatchScreen({ route, navigation }) {
         {loading && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Generating AI Match Breakdown...</Text>
+            <Text style={styles.loadingText}>{t('whyYouMatch.generating')}</Text>
             <Text style={styles.loadingSubtext}>
-              Analyzing requirements against your verified background
+              {t('whyYouMatch.analyzingRequirements')}
             </Text>
           </View>
         )}
@@ -89,17 +101,17 @@ export default function WhyYouMatchScreen({ route, navigation }) {
         {!loading && isNotFound && (
           <Card style={styles.statusCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={48} color={colors.textTertiary || colors.textMuted} />
-            <Text style={styles.cardTitle}>Match Record Not Found</Text>
+            <Text style={styles.cardTitle}>{t('whyYouMatch.notFoundTitle')}</Text>
             <Text style={styles.cardSubtitle}>
-              This match explanation could not be found. Please recalculate matches from the Matchups tab.
+              {t('whyYouMatch.notFoundMessage')}
             </Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => navigation.goBack()}
               accessibilityRole="button"
-              accessibilityLabel="Back to Matchups"
+              accessibilityLabel={t('whyYouMatch.backToMatchups')}
             >
-              <Text style={styles.primaryButtonText}>Back to Matchups</Text>
+              <Text style={styles.primaryButtonText}>{t('whyYouMatch.backToMatchups')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -108,15 +120,19 @@ export default function WhyYouMatchScreen({ route, navigation }) {
         {!loading && !isNotFound && error && (
           <Card style={styles.errorCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={48} color={colors.danger || '#EF4444'} />
-            <Text style={styles.cardTitle}>Could Not Load Explanation</Text>
-            <Text style={styles.cardSubtitle}>{error}</Text>
+            <Text style={styles.cardTitle}>{t('whyYouMatch.errorTitle')}</Text>
+            <Text style={styles.cardSubtitle}>
+              {error === 'SERVICE_BUSY'
+                ? t('whyYouMatch.serviceBusy')
+                : t('errors.matchExplanationFailed', { defaultValue: t('whyYouMatch.errorTitle') })}
+            </Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={fetchExplanationData}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.primaryButtonText}>Try Again</Text>
+              <Text style={styles.primaryButtonText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -128,7 +144,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
             <Reveal delay={0}>
               <View style={styles.ringWrap}>
                 <AnimatedScoreRing score={explanation.overall_score} />
-                <Text style={styles.scoreLabel}>Overall Compatibility Fit</Text>
+                <Text style={styles.scoreLabel}>{t('whyYouMatch.overallFit')}</Text>
               </View>
             </Reveal>
 
@@ -143,7 +159,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                       color={colors.accentStrong || colors.tealDark}
                       style={styles.headerIcon}
                     />
-                    <Text style={styles.narrativeTitle}>AI Fit Assessment</Text>
+                    <Text style={styles.narrativeTitle}>{t('whyYouMatch.aiFitAssessment')}</Text>
                   </View>
                   <Text style={styles.narrativeBody}>{explanation.why_you_match}</Text>
                 </Card>
@@ -153,7 +169,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
             {/* Sequence 3: Competencies & Skill Gaps */}
             <Reveal delay={motionTokens.stagger.normal}>
               {/* Matching Competencies */}
-              <Text style={styles.sectionTitle}>Matching Competencies</Text>
+              <Text style={styles.sectionTitle}>{t('whyYouMatch.matchingCompetencies')}</Text>
               {explanation.matching_skills && explanation.matching_skills.length > 0 ? (
                 <View style={styles.chipRow}>
                   {explanation.matching_skills.map((skill) => (
@@ -161,11 +177,11 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                   ))}
                 </View>
               ) : (
-                <Text style={styles.emptySkillsNotice}>No direct skill overlaps identified.</Text>
+                <Text style={styles.emptySkillsNotice}>{t('whyYouMatch.noSkillOverlaps')}</Text>
               )}
 
               {/* Identified Skill Gaps */}
-              <Text style={styles.sectionTitle}>Identified Skill Gaps</Text>
+              <Text style={styles.sectionTitle}>{t('whyYouMatch.identifiedGaps')}</Text>
               {explanation.missing_skills && explanation.missing_skills.length > 0 ? (
                 <View style={styles.chipRow}>
                   {explanation.missing_skills.map((skill) => (
@@ -173,7 +189,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                   ))}
                 </View>
               ) : (
-                <Text style={styles.emptySkillsNotice}>No major skill gaps identified for this role.</Text>
+                <Text style={styles.emptySkillsNotice}>{t('whyYouMatch.noMajorGaps')}</Text>
               )}
 
               {/* Skill Gap Analysis & Recommendations */}
@@ -186,7 +202,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                       color="#B45309"
                       style={styles.headerIcon}
                     />
-                    <Text style={styles.recBoxTitle}>Skill Gap Analysis & Recommendations</Text>
+                    <Text style={styles.recBoxTitle}>{t('whyYouMatch.gapAnalysisAndRecs')}</Text>
                   </View>
 
                   {explanation.skill_gap_analysis.summary ? (
@@ -225,10 +241,10 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                     color={colors.accent || colors.teal}
                     style={styles.headerIcon}
                   />
-                  <Text style={styles.generateCtaTitle}>Personalized Application</Text>
+                  <Text style={styles.generateCtaTitle}>{t('whyYouMatch.personalizedApp')}</Text>
                 </View>
                 <Text style={styles.generateCtaSubtitle}>
-                  Generate a tailored, grounded cover letter crafted from your verified profile and this match breakdown.
+                  {t('whyYouMatch.personalizedSubtitle')}
                 </Text>
                 <TouchableOpacity
                   style={styles.generateButton}
@@ -239,7 +255,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                     })
                   }
                   accessibilityRole="button"
-                  accessibilityLabel="Generate Cover Letter"
+                  accessibilityLabel={t('whyYouMatch.generateCoverLetter')}
                   activeOpacity={0.85}
                 >
                   <Ionicons
@@ -248,7 +264,7 @@ export default function WhyYouMatchScreen({ route, navigation }) {
                     color={colors.textInverse || colors.white}
                     style={styles.buttonIcon}
                   />
-                  <Text style={styles.generateButtonText}>Generate Cover Letter</Text>
+                  <Text style={styles.generateButtonText}>{t('whyYouMatch.generateCoverLetter')}</Text>
                 </TouchableOpacity>
               </Card>
             </Reveal>

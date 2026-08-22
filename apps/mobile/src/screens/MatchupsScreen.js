@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -29,8 +30,12 @@ import { getMatches } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
+import { useLocalization } from '../localization/LocalizationContext';
+import { getLocalizedErrorMessage } from '../localization/errorMessages';
 
 export default function MatchupsScreen({ navigation }) {
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
   const scrollViewRef = useRef(null);
   useTabScroll('Matchups', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -50,7 +55,7 @@ export default function MatchupsScreen({ navigation }) {
     cancelCalculation,
   } = useMatchCalculation();
 
-  const hasAnalyzedCV = Boolean(
+  const hasAnalyZV = Boolean(
     profile?.cv_url ||
       (profile?.skills && profile.skills.length > 0) ||
       (profile?.education && profile.education.length > 0) ||
@@ -67,8 +72,7 @@ export default function MatchupsScreen({ navigation }) {
       setMatches(res.matches || []);
     } catch (err) {
       console.warn('Failed to load matchups:', err);
-      const msg = err instanceof Error ? err.message : 'Failed to load matchups.';
-      setError(msg);
+      setError('MATCHES_LOAD_FAILED');
     } finally {
       setLoading(false);
     }
@@ -96,7 +100,7 @@ export default function MatchupsScreen({ navigation }) {
   const [top, ...rest] = matches;
 
   const renderRecalculateAction = () => {
-    if (!hasAnalyzedCV || matches.length === 0 || isCalculating) return null;
+    if (!hasAnalyZV || matches.length === 0 || isCalculating) return null;
     return (
       <PressableScale
         style={styles.recalculateHeaderBtn}
@@ -104,7 +108,7 @@ export default function MatchupsScreen({ navigation }) {
         disabled={isCalculating}
         haptic="light"
         accessibilityRole="button"
-        accessibilityLabel="Recalculate matches"
+        accessibilityLabel={t('matchups.recalculate')}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Ionicons
@@ -113,7 +117,7 @@ export default function MatchupsScreen({ navigation }) {
           color={colors.accentStrong || colors.tealDark}
           style={styles.recalcIcon}
         />
-        <Text style={styles.recalculateHeaderText}>Recalculate</Text>
+        <Text style={styles.recalculateHeaderText}>{t('matchups.recalculate')}</Text>
       </PressableScale>
     );
   };
@@ -122,7 +126,7 @@ export default function MatchupsScreen({ navigation }) {
     <ScreenContainer edges={['top']}>
       <AppChromeHeader />
       <ScreenHeader
-        title="Matchups"
+        title={t('matchups.title')}
         alignment="start"
         rightAction={renderRecalculateAction()}
       />
@@ -153,9 +157,9 @@ export default function MatchupsScreen({ navigation }) {
                 active={isCalculating}
                 style={{ marginBottom: spacing.xs }}
               />
-              <Text style={styles.calculatingTitle}>Recalculating Matchups...</Text>
+              <Text style={styles.calculatingTitle}>{t('matchups.recalculating')}</Text>
               <Text style={styles.calculatingSubtitle}>
-                Comparing your profile against all internship listings ({progressPercent}%)
+                {t('matchups.comparingProfile', { percent: progressPercent })}
               </Text>
               <View style={styles.progressTrack}>
                 <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
@@ -164,26 +168,26 @@ export default function MatchupsScreen({ navigation }) {
                 style={styles.cancelCalcBtn}
                 onPress={cancelCalculation}
                 accessibilityRole="button"
-                accessibilityLabel="Stop Checking"
+                accessibilityLabel={t('matchups.stopChecking')}
               >
-                <Text style={styles.cancelCalcText}>Stop Checking</Text>
+                <Text style={styles.cancelCalcText}>{t('matchups.stopChecking')}</Text>
               </TouchableOpacity>
             </Card>
           </AIPulse>
         )}
 
-        {/* Calculation Error */}
+        {/* Match Calculation Error */}
         {calculationError && (
           <Card style={styles.errorCard} padding="md">
             <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
-            <Text style={styles.errorText}>{calculationError}</Text>
+            <Text style={styles.errorText}>{getLocalizedErrorMessage(calculationError, t)}</Text>
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={handleRecalculate}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.retryBtnText}>Try Again</Text>
+              <Text style={styles.retryBtnText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -192,7 +196,7 @@ export default function MatchupsScreen({ navigation }) {
         {loading && !refreshing && !isCalculating && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Loading your matchups...</Text>
+            <Text style={styles.loadingText}>{t('matchups.loading')}</Text>
           </View>
         )}
 
@@ -200,30 +204,32 @@ export default function MatchupsScreen({ navigation }) {
         {!loading && error && !isCalculating && (
           <Card style={styles.errorCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={36} color={colors.danger || '#EF4444'} />
-            <Text style={styles.errorTitle}>Could Not Load Matchups</Text>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorTitle}>{t('matchups.errorTitle')}</Text>
+            <Text style={styles.errorText}>
+              {t('errors.matchesLoadFailed', { defaultValue: t('matchups.errorTitle') })}
+            </Text>
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={fetchMatchesData}
               accessibilityRole="button"
-              accessibilityLabel="Retry"
+              accessibilityLabel={t('matchups.retry')}
             >
-              <Text style={styles.retryBtnText}>Retry</Text>
+              <Text style={styles.retryBtnText}>{t('matchups.retry')}</Text>
             </TouchableOpacity>
           </Card>
         )}
 
         {/* Empty State: No CV Analyzed */}
-        {!loading && !error && !isCalculating && !hasAnalyzedCV && (
+        {!loading && !error && !isCalculating && !hasAnalyZV && (
           <Reveal delay={0}>
             <Card style={styles.emptyCard} padding="lg">
               <Ionicons name="document-text-outline" size={48} color={colors.accent || colors.teal} />
-              <Text style={styles.emptyTitle}>CV Required for Matchups</Text>
+              <Text style={styles.emptyTitle}>{t('matchups.cvRequiredTitle')}</Text>
               <Text style={styles.emptySubtitle}>
-                Upload and analyze your CV so our AI matching engine can compute compatibility scores for you.
+                {t('matchups.cvRequiredSubtitle')}
               </Text>
               <GradientButton
-                title="Upload CV"
+                title={t('matchups.uploadCV')}
                 color={colors.accent || colors.teal}
                 onPress={() => navigation.navigate('CVUpload')}
                 style={{ marginTop: spacing.xl, width: '100%' }}
@@ -233,16 +239,16 @@ export default function MatchupsScreen({ navigation }) {
         )}
 
         {/* Empty State: CV Analyzed but No Matches Calculated */}
-        {!loading && !error && !isCalculating && hasAnalyzedCV && matches.length === 0 && (
+        {!loading && !error && !isCalculating && hasAnalyZV && matches.length === 0 && (
           <Reveal delay={0}>
             <Card style={styles.emptyCard} padding="lg">
               <Ionicons name="sparkles-outline" size={48} color={colors.accent || colors.teal} />
-              <Text style={styles.emptyTitle}>No Matches Calculated Yet</Text>
+              <Text style={styles.emptyTitle}>{t('matchups.noMatchesTitle')}</Text>
               <Text style={styles.emptySubtitle}>
-                Ready to find your best matches? Run our matching calculation to score available internships against your verified skills and background.
+                {t('matchups.noMatchesSubtitle')}
               </Text>
               <GradientButton
-                title="Calculate My Matches"
+                title={t('matchups.calculateMatches')}
                 color={colors.accent || colors.teal}
                 onPress={handleRecalculate}
                 style={{ marginTop: spacing.xl, width: '100%' }}
@@ -266,11 +272,14 @@ export default function MatchupsScreen({ navigation }) {
                   scaleTo={0.985}
                   activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityLabel={`${top.internship.title} at ${top.internship.company}`}
+                  accessibilityLabel={t('matchups.cardA11y', {
+                    title: top.internship.title,
+                    company: top.internship.company,
+                  })}
                 >
                   <View style={styles.highlightTop}>
                     <Ionicons name="flame" size={16} color="#F2812B" style={styles.flameIcon} />
-                    <Text style={styles.highlightLabel}>Highest Compatibility</Text>
+                    <Text style={styles.highlightLabel}>{t('matchups.highestCompatibility')}</Text>
                   </View>
 
                   <View style={styles.highlightTitleRow}>
@@ -279,12 +288,12 @@ export default function MatchupsScreen({ navigation }) {
                   </View>
 
                   <Text style={styles.highlightMeta}>
-                    {top.internship.company} · {top.internship.location}
+                    {top.internship.company} {'\u00b7'} {top.internship.location}
                   </Text>
 
                   <View style={styles.scoresSubRow}>
                     <Text style={styles.scoresSubText}>
-                      Skills: {top.skill_score}% · Vector: {top.vector_score}%
+                      {t('matchups.scoresSub', { skills: top.skill_score, vector: top.vector_score })}
                     </Text>
                   </View>
                 </PressableScale>
@@ -300,11 +309,11 @@ export default function MatchupsScreen({ navigation }) {
                   scaleTo={0.98}
                   activeOpacity={0.8}
                   accessibilityRole="button"
-                  accessibilityLabel="Why You Match breakdown"
+                  accessibilityLabel={t('matchups.whyYouMatch')}
                 >
-                  <Text style={styles.whyLink}>Why You Match</Text>
+                  <Text style={styles.whyLink}>{t('matchups.whyYouMatch')}</Text>
                   <Ionicons
-                    name="chevron-forward"
+                    name={isRTL ? "chevron-back" : "chevron-forward"}
                     size={14}
                     color={colors.primaryBlue}
                     style={styles.chevronIcon}
@@ -333,12 +342,15 @@ export default function MatchupsScreen({ navigation }) {
                     scaleTo={0.985}
                     activeOpacity={0.85}
                     accessibilityRole="button"
-                    accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
+                    accessibilityLabel={t('matchups.cardA11y', {
+                      title: item.internship.title,
+                      company: item.internship.company,
+                    })}
                   >
                     <View style={styles.plainRowMain}>
                       <Text style={styles.plainTitle}>{item.internship.title}</Text>
                       <Text style={styles.plainMeta}>
-                        {item.internship.company} · {item.internship.location}
+                        {item.internship.company} {'\u00b7'} {item.internship.location}
                       </Text>
                       <PressableScale
                         style={styles.plainWhyWrap}
@@ -351,11 +363,11 @@ export default function MatchupsScreen({ navigation }) {
                         scaleTo={0.98}
                         activeOpacity={0.8}
                         accessibilityRole="button"
-                        accessibilityLabel={`Why You Match breakdown for ${item.internship.title}`}
+                        accessibilityLabel={t('matchups.whyYouMatchA11y', { title: item.internship.title })}
                       >
-                        <Text style={styles.plainWhyLink}>Why You Match</Text>
+                        <Text style={styles.plainWhyLink}>{t('matchups.whyYouMatch')}</Text>
                         <Ionicons
-                          name="chevron-forward"
+                          name={isRTL ? "chevron-back" : "chevron-forward"}
                           size={12}
                           color={colors.primaryBlue}
                           style={styles.chevronIcon}
@@ -382,7 +394,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: 104,
+    paddingBottom: 128,
   },
   recalculateHeaderBtn: {
     flexDirection: 'row',

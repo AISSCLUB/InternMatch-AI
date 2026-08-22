@@ -80,9 +80,7 @@ export function useApplicationGeneration() {
             isGeneratingRef.current = false;
             if (isMountedRef.current) {
               setIsGenerating(false);
-              setGenerationError(
-                'Application generation is taking longer than expected. Please try again later.'
-              );
+              setGenerationError('APPLICATION_GENERATION_TIMEOUT');
             }
             return;
           }
@@ -118,7 +116,7 @@ export function useApplicationGeneration() {
               isGeneratingRef.current = false;
               setProgressPercent(100);
               setIsGenerating(false);
-              setGenerationError(job.error || 'Application generation failed.');
+              setGenerationError('APPLICATION_GENERATION_FAILED');
             }
           } catch (err) {
             if (!isMountedRef.current || !isGeneratingRef.current) {
@@ -131,7 +129,7 @@ export function useApplicationGeneration() {
               clearPolling();
               isGeneratingRef.current = false;
               setIsGenerating(false);
-              setGenerationError('Session expired. Please sign in again.');
+              setGenerationError('UNAUTHENTICATED');
             } else {
               // Transient network failure; schedule retry poll
               scheduleNextPoll();
@@ -157,21 +155,21 @@ export function useApplicationGeneration() {
         isGeneratingRef.current = false;
         setIsGenerating(false);
 
-        let msg = 'Failed to start application generation.';
         if (err instanceof ApiError) {
           if (err.status === 404) {
-            msg = 'Match record not found. Please refresh matches.';
+            setGenerationError('MATCH_NOT_FOUND');
           } else if (err.status === 429) {
-            msg = 'Generation limit reached. Please wait a moment before trying again.';
+            setGenerationError('RATE_LIMITED');
           } else if (err.status === 503) {
-            msg = 'Generation service is temporarily unavailable. Please try again later.';
+            setGenerationError('SERVICE_UNAVAILABLE');
+          } else if (err.status === 401) {
+            setGenerationError('UNAUTHENTICATED');
           } else {
-            msg = err.message || msg;
+            setGenerationError('APPLICATION_GENERATION_START_FAILED');
           }
-        } else if (err instanceof Error) {
-          msg = err.message;
+        } else {
+          setGenerationError('APPLICATION_GENERATION_START_FAILED');
         }
-        setGenerationError(msg);
       }
     },
     [clearPolling]

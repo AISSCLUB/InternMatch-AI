@@ -4,7 +4,7 @@ Provides endpoints for browsing and fetching internship listings.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
 from app.db.session import get_db
@@ -14,6 +14,7 @@ from app.schemas.internship import (
     InternshipListResponse,
     InternshipSummaryResponse,
 )
+from app.services.content_translation import translate_internship_content
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -69,11 +70,15 @@ def list_internships(
 @router.get("/{id}", response_model=InternshipDetailResponse)
 def get_internship_detail(
     id: UUID,
+    locale: Literal["en", "tr", "ar"] = Query(
+        "en", description="Target content display locale ('en', 'tr', 'ar')"
+    ),
     db: Session = Depends(get_db),
 ):
     """
     Retrieve complete details of a specific internship listing.
     Public read-only endpoint.
+    When locale is 'tr' or 'ar', free-form explanatory content is localized dynamically.
     """
     listing = InternshipRepository.get_by_id(db=db, internship_id=id)
     if not listing:
@@ -81,4 +86,25 @@ def get_internship_detail(
             status_code=status.HTTP_404_NOT_FOUND,
             content=format_not_found_error("Internship listing not found."),
         )
-    return InternshipDetailResponse.from_orm_model(listing)
+
+    base_response = InternshipDetailResponse.from_orm_model(listing)
+
+    if locale in ("tr", "ar"):
+        translated_desc, translated_edu = translate_internship_content(
+            internship_id=listing.id,
+            description=listing.description,
+            min_education=listing.education_requirements,
+            target_locale=locale,
+        )
+        return base_response.model_copy(
+            update={
+                "description": translated_desc
+                if translated_desc is not None
+                else base_response.description,
+                "min_education": translated_edu
+                if translated_edu is not None
+                else base_response.min_education,
+            }
+        )
+
+    return base_response

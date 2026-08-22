@@ -13,7 +13,9 @@ export default function MatchBadge({ score, style }) {
   const { bg, fg } = getPalette(score);
   return (
     <View style={[styles.badge, { backgroundColor: bg }, style]}>
-      <Text style={[styles.text, { color: fg }]}>%{score}</Text>
+      <Text style={[styles.text, { color: fg, writingDirection: 'ltr' }]}>
+        {score}%
+      </Text>
     </View>
   );
 }

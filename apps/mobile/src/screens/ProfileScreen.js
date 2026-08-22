@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -26,6 +27,7 @@ import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
 import { useSavedInternships } from '../context/SavedInternshipsContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
+import { useLocalization } from '../localization/LocalizationContext';
 import { calculateProfileCompleteness } from '../utils/profileCompleteness';
 
 const appVersion = require('../../app.json').expo.version || '1.0.0';
@@ -39,6 +41,8 @@ function getInitials(name) {
 }
 
 export default function ProfileScreen({ navigation }) {
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
   const scrollViewRef = useRef(null);
   useTabScroll('Profile', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -80,10 +84,10 @@ export default function ProfileScreen({ navigation }) {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Unable to Open Link', `Cannot open the ${title} link on this device.`);
+        Alert.alert(t('profile.linkError'), t('profile.unableOpenLink', { title }));
       }
     } catch {
-      Alert.alert('Link Error', 'An error occurred while opening the link.');
+      Alert.alert(t('profile.linkError'), t('profile.linkError'));
     }
   };
 
@@ -98,7 +102,7 @@ export default function ProfileScreen({ navigation }) {
       style={styles.settingsBtn}
       onPress={() => navigation.navigate('Settings')}
       accessibilityRole="button"
-      accessibilityLabel="Settings"
+      accessibilityLabel={t('navigation.settings')}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <Ionicons
@@ -150,7 +154,7 @@ export default function ProfileScreen({ navigation }) {
         {loading && !profile ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Loading profile...</Text>
+            <Text style={styles.loadingText}>{t('profile.loading')}</Text>
           </View>
         ) : profile ? (
           <>
@@ -176,8 +180,8 @@ export default function ProfileScreen({ navigation }) {
                   />
                   <Text style={styles.completenessTitle}>
                     {completeness.isComplete
-                      ? 'Profile 100% Complete'
-                      : `Profile ${completeness.percentage}% complete`}
+                      ? t('profile.completenessComplete')
+                      : t('profile.completenessPercent', { percentage: completeness.percentage })}
                   </Text>
                 </View>
                 <Text style={styles.completenessCount}>
@@ -204,14 +208,14 @@ export default function ProfileScreen({ navigation }) {
                   style={styles.completenessCtaRow}
                   onPress={() => navigation.navigate(completeness.firstMissingItem.route)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${completeness.firstMissingItem.label} to improve your profile`}
+                  accessibilityLabel={t('profile.completenessImproveMatching', { label: completeness.firstMissingItem.label })}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.completenessCtaText} numberOfLines={1}>
-                    {completeness.firstMissingItem.label} to improve matching
+                    {t('profile.completenessImproveMatching', { label: completeness.firstMissingItem.label })}
                   </Text>
                   <Ionicons
-                    name="chevron-forward"
+                    name={isRTL ? "chevron-back" : "chevron-forward"}
                     size={14}
                     color={colors.accentStrong || colors.tealDark}
                   />
@@ -219,14 +223,14 @@ export default function ProfileScreen({ navigation }) {
               ) : (
                 <View style={styles.completenessCompleteRow}>
                   <Text style={styles.completenessCompleteText}>
-                    Profile ready for optimal internship matching
+                    {t('profile.completenessReady')}
                   </Text>
                 </View>
               )}
             </GlassSurface>
 
             {/* Skills Section */}
-            <Text style={styles.sectionTitle}>Skills</Text>
+            <Text style={styles.sectionTitle}>{t('profile.skillsTitle')}</Text>
             {skills.length > 0 ? (
               <View style={styles.chipRow}>
                 {skills.map((s) => (
@@ -239,7 +243,7 @@ export default function ProfileScreen({ navigation }) {
                   style={styles.linkRow}
                   onPress={() => navigation.navigate('EditProfile')}
                   accessibilityRole="button"
-                  accessibilityLabel="Add your skills in Edit Profile"
+                  accessibilityLabel={t('profile.addSkills')}
                 >
                   <View style={styles.linkRowLeft}>
                     <Ionicons
@@ -248,10 +252,10 @@ export default function ProfileScreen({ navigation }) {
                       color={colors.accent || colors.teal}
                       style={styles.linkIcon}
                     />
-                    <Text style={styles.addLinksText}>Add your skills</Text>
+                    <Text style={styles.addLinksText}>{t('profile.addSkills')}</Text>
                   </View>
                   <Ionicons
-                    name="chevron-forward"
+                    name={isRTL ? "chevron-back" : "chevron-forward"}
                     size={16}
                     color={colors.textTertiary || colors.textMuted}
                   />
@@ -260,7 +264,7 @@ export default function ProfileScreen({ navigation }) {
             )}
 
             {/* Functional Social & Portfolio Links */}
-            <Text style={styles.sectionTitle}>Links</Text>
+            <Text style={styles.sectionTitle}>{t('profile.linksTitle')}</Text>
             <Card style={styles.linkCard} padding="sm">
               {hasAnyLinks ? (
                 <>
@@ -269,7 +273,7 @@ export default function ProfileScreen({ navigation }) {
                       style={styles.linkRow}
                       onPress={() => handleOpenLink(linkedinUrl, 'LinkedIn')}
                       accessibilityRole="link"
-                      accessibilityLabel="Open LinkedIn Profile"
+                      accessibilityLabel="LinkedIn"
                     >
                       <View style={styles.linkRowLeft}>
                         <Ionicons
@@ -293,7 +297,7 @@ export default function ProfileScreen({ navigation }) {
                       style={[styles.linkRow, linkedinUrl ? styles.linkRowBorder : null]}
                       onPress={() => handleOpenLink(githubUrl, 'GitHub')}
                       accessibilityRole="link"
-                      accessibilityLabel="Open GitHub Profile"
+                      accessibilityLabel="GitHub"
                     >
                       <View style={styles.linkRowLeft}>
                         <Ionicons
@@ -320,7 +324,7 @@ export default function ProfileScreen({ navigation }) {
                       ]}
                       onPress={() => handleOpenLink(portfolioUrl, 'Portfolio')}
                       accessibilityRole="link"
-                      accessibilityLabel="Open Portfolio Website"
+                      accessibilityLabel="Portfolio"
                     >
                       <View style={styles.linkRowLeft}>
                         <Ionicons
@@ -344,7 +348,7 @@ export default function ProfileScreen({ navigation }) {
                   style={styles.linkRow}
                   onPress={() => navigation.navigate('EditProfile')}
                   accessibilityRole="button"
-                  accessibilityLabel="Add LinkedIn, GitHub, or Portfolio in Edit Profile"
+                  accessibilityLabel={t('profile.addLinks')}
                 >
                   <View style={styles.linkRowLeft}>
                     <Ionicons
@@ -353,10 +357,10 @@ export default function ProfileScreen({ navigation }) {
                       color={colors.accent || colors.teal}
                       style={styles.linkIcon}
                     />
-                    <Text style={styles.addLinksText}>Add LinkedIn, GitHub, or Portfolio</Text>
+                    <Text style={styles.addLinksText}>{t('profile.addLinks')}</Text>
                   </View>
                   <Ionicons
-                    name="chevron-forward"
+                    name={isRTL ? "chevron-back" : "chevron-forward"}
                     size={16}
                     color={colors.textTertiary || colors.textMuted}
                   />
@@ -366,13 +370,13 @@ export default function ProfileScreen({ navigation }) {
 
             <View style={styles.buttonRow}>
               <GradientButton
-                title="Edit Profile"
+                title={t('profile.editProfile')}
                 color={colors.accent || colors.teal}
                 onPress={() => navigation.navigate('EditProfile')}
                 style={styles.actionBtn}
               />
               <GradientButton
-                title="Upload CV"
+                title={t('profile.uploadCV')}
                 color={colors.primary || colors.blue}
                 onPress={() => navigation.navigate('CVUpload')}
                 style={styles.actionBtn}
@@ -380,13 +384,13 @@ export default function ProfileScreen({ navigation }) {
             </View>
 
             {/* Bookmarks Section */}
-            <Text style={styles.sectionTitle}>Bookmarks</Text>
+            <Text style={styles.sectionTitle}>{t('profile.bookmarksTitle')}</Text>
             <Card style={styles.linkCard} padding="sm">
               <TouchableOpacity
                 style={styles.legalRow}
                 onPress={() => navigation.navigate('SavedInternships')}
                 accessibilityRole="button"
-                accessibilityLabel={`Saved Internships, ${savedIds.size} saved`}
+                accessibilityLabel={`${t('profile.savedInternships')}, ${savedIds.size}`}
               >
                 <View style={styles.legalRowLeft}>
                   <Ionicons
@@ -395,7 +399,7 @@ export default function ProfileScreen({ navigation }) {
                     color={colors.accent || colors.teal}
                     style={styles.linkIcon}
                   />
-                  <Text style={styles.linkText}>Saved Internships</Text>
+                  <Text style={styles.linkText}>{t('profile.savedInternships')}</Text>
                 </View>
                 <View style={styles.badgeRowRight}>
                   {savedIds.size > 0 ? (
@@ -404,7 +408,7 @@ export default function ProfileScreen({ navigation }) {
                     </View>
                   ) : null}
                   <Ionicons
-                    name="chevron-forward"
+                    name={isRTL ? "chevron-back" : "chevron-forward"}
                     size={16}
                     color={colors.textTertiary || colors.textMuted}
                   />
@@ -413,13 +417,13 @@ export default function ProfileScreen({ navigation }) {
             </Card>
 
             {/* Legal & About Section */}
-            <Text style={styles.sectionTitle}>Legal & About</Text>
+            <Text style={styles.sectionTitle}>{t('profile.legalTitle')}</Text>
             <Card style={styles.linkCard} padding="sm">
               <TouchableOpacity
                 style={styles.legalRow}
                 onPress={() => navigation.navigate('PrivacyPolicy')}
                 accessibilityRole="button"
-                accessibilityLabel="Privacy Policy"
+                accessibilityLabel={t('profile.privacyPolicy')}
               >
                 <View style={styles.legalRowLeft}>
                   <Ionicons
@@ -428,10 +432,10 @@ export default function ProfileScreen({ navigation }) {
                     color={colors.accent || colors.teal}
                     style={styles.linkIcon}
                   />
-                  <Text style={styles.linkText}>Privacy Policy</Text>
+                  <Text style={styles.linkText}>{t('profile.privacyPolicy')}</Text>
                 </View>
                 <Ionicons
-                  name="chevron-forward"
+                  name={isRTL ? "chevron-back" : "chevron-forward"}
                   size={16}
                   color={colors.textTertiary || colors.textMuted}
                 />
@@ -441,7 +445,7 @@ export default function ProfileScreen({ navigation }) {
                 style={[styles.legalRow, styles.linkRowBorder]}
                 onPress={() => navigation.navigate('TermsOfUse')}
                 accessibilityRole="button"
-                accessibilityLabel="Terms of Use"
+                accessibilityLabel={t('profile.termsOfUse')}
               >
                 <View style={styles.legalRowLeft}>
                   <Ionicons
@@ -450,10 +454,10 @@ export default function ProfileScreen({ navigation }) {
                     color={colors.accent || colors.teal}
                     style={styles.linkIcon}
                   />
-                  <Text style={styles.linkText}>Terms of Use</Text>
+                  <Text style={styles.linkText}>{t('profile.termsOfUse')}</Text>
                 </View>
                 <Ionicons
-                  name="chevron-forward"
+                  name={isRTL ? "chevron-back" : "chevron-forward"}
                   size={16}
                   color={colors.textTertiary || colors.textMuted}
                 />
@@ -467,7 +471,7 @@ export default function ProfileScreen({ navigation }) {
                     color={colors.textSecondary || colors.textMuted}
                     style={styles.linkIcon}
                   />
-                  <Text style={styles.linkText}>App Version</Text>
+                  <Text style={styles.linkText}>{t('profile.appVersion')}</Text>
                 </View>
                 <Text style={styles.versionText}>{appVersion}</Text>
               </View>
@@ -475,12 +479,12 @@ export default function ProfileScreen({ navigation }) {
           </>
         ) : (
           <Card style={styles.emptyWrap} padding="lg">
-            <Text style={styles.name}>No Profile Yet</Text>
+            <Text style={styles.name}>{t('profile.noProfileTitle')}</Text>
             <Text style={styles.subtitle}>
-              Create your profile to start matching with internships.
+              {t('profile.noProfileSubtitle')}
             </Text>
             <GradientButton
-              title="Create Profile"
+              title={t('profile.createProfile')}
               color={colors.accent || colors.teal}
               onPress={() => navigation.navigate('EditProfile')}
               style={{ marginTop: spacing.lg, width: '100%' }}
@@ -500,7 +504,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: 104,
+    paddingBottom: 128,
   },
   settingsBtn: {
     width: 36,

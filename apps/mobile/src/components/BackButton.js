@@ -1,5 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { StyleSheet } from 'react-native';
+import { useLocalization } from '../localization/LocalizationContext';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -11,9 +13,14 @@ export default function BackButton({
   onPress,
   color = colors.textPrimary || colors.textDark,
   style,
-  accessibilityLabel = 'Go back',
-  accessibilityHint = 'Navigates to the previous screen',
+  accessibilityLabel,
+  accessibilityHint,
 }) {
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
+  const resolvedAccessibilityLabel = accessibilityLabel ?? t('navigation.back.label');
+  const resolvedAccessibilityHint = accessibilityHint ?? t('navigation.back.hint');
+
   const handlePress = () => {
     if (onPress) {
       onPress();
@@ -30,11 +37,11 @@ export default function BackButton({
       activeOpacity={0.7}
       haptic="none"
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
+      accessibilityLabel={resolvedAccessibilityLabel}
+      accessibilityHint={resolvedAccessibilityHint}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <Ionicons name="arrow-back" size={22} color={color} />
+      <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={22} color={color} />
     </PressableScale>
   );
 }

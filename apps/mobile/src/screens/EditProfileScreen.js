@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -25,10 +26,10 @@ import { useProfile } from '../context/ProfileContext';
 import { upsertProfile, uploadAvatar, deleteAvatar } from '../services/api';
 import haptics from '../services/haptics';
 
-const WORK_TYPE_OPTIONS = [
-  { id: 'remote', label: 'Remote' },
-  { id: 'hybrid', label: 'Hybrid' },
-  { id: 'onsite', label: 'On-site' },
+const WORK_TYPE_KEYS = [
+  { id: 'remote' },
+  { id: 'hybrid' },
+  { id: 'onsite' },
 ];
 
 function getInitials(name) {
@@ -76,6 +77,7 @@ function normalizeUrl(rawUrl) {
 }
 
 export default function EditProfileScreen({ navigation }) {
+  const { t } = useTranslation();
   const { profile, setProfile, refreshProfile } = useProfile();
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
@@ -133,8 +135,8 @@ export default function EditProfileScreen({ navigation }) {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          'Permission Required',
-          'Please allow photo library access to choose a profile picture.'
+          t('editProfile.permissionRequiredTitle'),
+          t('editProfile.permissionRequiredMsg')
         );
         return;
       }
@@ -165,8 +167,8 @@ export default function EditProfileScreen({ navigation }) {
         haptics.success();
       } catch (err) {
         setAvatarUri(profile?.avatar_url || null);
-        const msg = err instanceof Error ? err.message : 'Failed to upload profile picture.';
-        Alert.alert('Upload Failed', msg);
+        console.warn('Avatar upload failed:', err);
+        Alert.alert(t('common.error'), t('editProfile.uploadFailed'));
         haptics.error();
       } finally {
         setUploadingAvatar(false);
@@ -185,8 +187,8 @@ export default function EditProfileScreen({ navigation }) {
       await refreshProfile();
       haptics.success();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to remove profile picture.';
-      Alert.alert('Remove Failed', msg);
+      console.warn('Avatar remove failed:', err);
+      Alert.alert(t('common.error'), t('editProfile.removeFailed'));
       haptics.error();
     } finally {
       setUploadingAvatar(false);
@@ -197,10 +199,10 @@ export default function EditProfileScreen({ navigation }) {
     if (uploadingAvatar) return;
 
     if (currentAvatar) {
-      Alert.alert('Profile Picture', 'Choose an option', [
-        { text: 'Choose from Library', onPress: handlePickImage },
-        { text: 'Remove Photo', style: 'destructive', onPress: handleRemoveAvatar },
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t('editProfile.avatarOptionsTitle'), t('editProfile.avatarOptionsSubtitle'), [
+        { text: t('editProfile.chooseFromLibrary'), onPress: handlePickImage },
+        { text: t('editProfile.removePhoto'), style: 'destructive', onPress: handleRemoveAvatar },
+        { text: t('common.cancel'), style: 'cancel' },
       ]);
     } else {
       handlePickImage();
@@ -218,13 +220,13 @@ export default function EditProfileScreen({ navigation }) {
 
     if (clean.length > 80) {
       haptics.error();
-      Alert.alert('Skill Too Long', 'Each skill must be 80 characters or fewer.');
+      Alert.alert(t('common.error'), t('editProfile.skillTooLong'));
       return;
     }
 
     if (skills.length >= 50) {
       haptics.error();
-      Alert.alert('Maximum Skills Reached', 'You can add up to 50 skills to your profile.');
+      Alert.alert(t('common.error'), t('editProfile.maxSkillsReached'));
       return;
     }
 
@@ -267,13 +269,13 @@ export default function EditProfileScreen({ navigation }) {
 
     if (clean.length > 80) {
       haptics.error();
-      Alert.alert('Location Too Long', 'Each location must be 80 characters or fewer.');
+      Alert.alert(t('common.error'), t('editProfile.locationTooLong'));
       return;
     }
 
     if (desiredLocations.length >= 10) {
       haptics.error();
-      Alert.alert('Limit Reached', 'You can add up to 10 desired locations.');
+      Alert.alert(t('common.error'), t('editProfile.limitLocations'));
       return;
     }
 
@@ -308,13 +310,13 @@ export default function EditProfileScreen({ navigation }) {
 
     if (clean.length > 80) {
       haptics.error();
-      Alert.alert('Role Too Long', 'Each target role must be 80 characters or fewer.');
+      Alert.alert(t('common.error'), t('editProfile.roleTooLong'));
       return;
     }
 
     if (targetRoles.length >= 10) {
       haptics.error();
-      Alert.alert('Limit Reached', 'You can add up to 10 target roles.');
+      Alert.alert(t('common.error'), t('editProfile.limitRoles'));
       return;
     }
 
@@ -342,7 +344,7 @@ export default function EditProfileScreen({ navigation }) {
     const trimmedName = fullName.trim();
     if (!trimmedName) {
       haptics.error();
-      Alert.alert('Edit Profile', 'Please enter your full name.');
+      Alert.alert(t('common.error'), t('editProfile.enterFullName'));
       return;
     }
 
@@ -354,17 +356,17 @@ export default function EditProfileScreen({ navigation }) {
 
     if (linkedinUrl.trim() && !normalizedLinkedin) {
       haptics.error();
-      Alert.alert('Invalid LinkedIn URL', 'Please enter a valid website address.');
+      Alert.alert(t('common.error'), t('editProfile.invalidUrl'));
       return;
     }
     if (githubUrl.trim() && !normalizedGithub) {
       haptics.error();
-      Alert.alert('Invalid GitHub URL', 'Please enter a valid website address.');
+      Alert.alert(t('common.error'), t('editProfile.invalidUrl'));
       return;
     }
     if (portfolioUrl.trim() && !normalizedPortfolio) {
       haptics.error();
-      Alert.alert('Invalid Portfolio URL', 'Please enter a valid website address.');
+      Alert.alert(t('common.error'), t('editProfile.invalidUrl'));
       return;
     }
 
@@ -391,8 +393,8 @@ export default function EditProfileScreen({ navigation }) {
       haptics.success();
       navigation.goBack();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save profile.';
-      Alert.alert('Save failed', message);
+      console.warn('Profile save failed:', error);
+      Alert.alert(t('common.error'), t('errors.profileSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -401,7 +403,7 @@ export default function EditProfileScreen({ navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Edit Profile"
+        title={t('editProfile.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -423,8 +425,8 @@ export default function EditProfileScreen({ navigation }) {
               onPress={handleAvatarPress}
               disabled={uploadingAvatar}
               accessibilityRole="button"
-              accessibilityLabel="Change profile picture"
-              accessibilityHint="Tap to choose or remove profile photo"
+              accessibilityLabel={currentAvatar ? t('editProfile.changePhoto') : t('editProfile.addPhoto')}
+              accessibilityHint={t('editProfile.avatarOptionsSubtitle')}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <View style={styles.avatarContainer}>
@@ -451,45 +453,45 @@ export default function EditProfileScreen({ navigation }) {
               </View>
             </TouchableOpacity>
             <Text style={styles.avatarLabel}>
-              {currentAvatar ? 'Change Photo' : 'Add Photo'}
+              {currentAvatar ? t('editProfile.changePhoto') : t('editProfile.addPhoto')}
             </Text>
           </View>
 
-          <Text style={styles.sectionTitle}>Basic Information</Text>
+          <Text style={styles.sectionTitle}>{t('editProfile.basicInfo')}</Text>
 
-          <Text style={styles.label}>Full Name</Text>
+          <Text style={styles.label}>{t('editProfile.fullName')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Full Name"
+            placeholder={t('editProfile.fullName')}
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={fullName}
             onChangeText={setFullName}
           />
 
-          <Text style={styles.label}>Headline</Text>
+          <Text style={styles.label}>{t('editProfile.headline')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Computer Science Student"
+            placeholder={t('editProfile.headlinePlaceholder', { defaultValue: 'e.g. Computer Science Student' })}
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={headline}
             onChangeText={setHeadline}
           />
 
-          <Text style={styles.label}>Department / Major</Text>
+          <Text style={styles.label}>{t('editProfile.department')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Computer Engineering"
+            placeholder={t('editProfile.departmentPlaceholder', { defaultValue: 'e.g. Computer Engineering' })}
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={department}
             onChangeText={setDepartment}
           />
 
           {/* Editable Skills Section */}
-          <Text style={styles.sectionTitle}>Skills</Text>
+          <Text style={styles.sectionTitle}>{t('editProfile.skills')}</Text>
           <View style={styles.chipInputRow}>
             <TextInput
               style={[styles.input, styles.chipInput]}
-              placeholder="Add a skill (e.g. Python, React)"
+              placeholder={t('editProfile.addSkillPlaceholder')}
               placeholderTextColor={colors.textTertiary || colors.textMuted}
               value={newSkill}
               onChangeText={setNewSkill}
@@ -501,7 +503,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.addChipBtn}
               onPress={handleAddSkill}
               accessibilityRole="button"
-              accessibilityLabel="Add skill"
+              accessibilityLabel={t('editProfile.addSkillPlaceholder')}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Ionicons name="add" size={20} color="#FFFFFF" />
@@ -521,21 +523,22 @@ export default function EditProfileScreen({ navigation }) {
             </View>
           ) : (
             <Text style={styles.emptyItemsText}>
-              No skills added yet. Add your top skills to stand out to employers.
+              {t('editProfile.noSkills')}
             </Text>
           )}
 
           {/* Career Preferences Section */}
-          <Text style={styles.sectionTitle}>Career Preferences</Text>
+          <Text style={styles.sectionTitle}>{t('editProfile.careerPreferences')}</Text>
 
-          <Text style={styles.label}>Work Style</Text>
+          <Text style={styles.label}>{t('editProfile.workStyle')}</Text>
           <View style={styles.chipRow}>
-            {WORK_TYPE_OPTIONS.map((opt) => {
+            {WORK_TYPE_KEYS.map((opt) => {
               const isSelected = workTypes.includes(opt.id);
+              const label = t(`editProfile.workTypes.${opt.id}`, { defaultValue: opt.id });
               return (
                 <Chip
                   key={opt.id}
-                  label={opt.label}
+                  label={label}
                   variant={isSelected ? 'skill' : 'neutral'}
                   selected={isSelected}
                   onPress={() => toggleWorkType(opt.id)}
@@ -544,11 +547,11 @@ export default function EditProfileScreen({ navigation }) {
             })}
           </View>
 
-          <Text style={styles.label}>Desired Locations</Text>
+          <Text style={styles.label}>{t('editProfile.desiredLocations')}</Text>
           <View style={styles.chipInputRow}>
             <TextInput
               style={[styles.input, styles.chipInput]}
-              placeholder="Add location (e.g. Istanbul, London, Remote)"
+              placeholder={t('editProfile.addLocationPlaceholder')}
               placeholderTextColor={colors.textTertiary || colors.textMuted}
               value={newLocation}
               onChangeText={setNewLocation}
@@ -560,7 +563,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.addChipBtn}
               onPress={handleAddLocation}
               accessibilityRole="button"
-              accessibilityLabel="Add desired location"
+              accessibilityLabel={t('editProfile.addLocationPlaceholder')}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Ionicons name="add" size={20} color="#FFFFFF" />
@@ -580,15 +583,15 @@ export default function EditProfileScreen({ navigation }) {
             </View>
           ) : (
             <Text style={styles.emptyItemsText}>
-              No desired locations set.
+              {t('editProfile.noLocations')}
             </Text>
           )}
 
-          <Text style={styles.label}>Target Roles</Text>
+          <Text style={styles.label}>{t('editProfile.targetRoles')}</Text>
           <View style={styles.chipInputRow}>
             <TextInput
               style={[styles.input, styles.chipInput]}
-              placeholder="Add role (e.g. Frontend Developer, Data Intern)"
+              placeholder={t('editProfile.addRolePlaceholder')}
               placeholderTextColor={colors.textTertiary || colors.textMuted}
               value={newRole}
               onChangeText={setNewRole}
@@ -600,7 +603,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.addChipBtn}
               onPress={handleAddRole}
               accessibilityRole="button"
-              accessibilityLabel="Add target role"
+              accessibilityLabel={t('editProfile.addRolePlaceholder')}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <Ionicons name="add" size={20} color="#FFFFFF" />
@@ -620,13 +623,13 @@ export default function EditProfileScreen({ navigation }) {
             </View>
           ) : (
             <Text style={styles.emptyItemsText}>
-              No target roles set.
+              {t('editProfile.noRoles')}
             </Text>
           )}
 
-          <Text style={styles.sectionTitle}>Social & Portfolio Links</Text>
+          <Text style={styles.sectionTitle}>{t('editProfile.socialLinks')}</Text>
 
-          <Text style={styles.label}>LinkedIn URL</Text>
+          <Text style={styles.label}>{t('editProfile.linkedin')}</Text>
           <TextInput
             style={styles.input}
             placeholder="https://linkedin.com/in/username"
@@ -638,7 +641,7 @@ export default function EditProfileScreen({ navigation }) {
             keyboardType="url"
           />
 
-          <Text style={styles.label}>GitHub URL</Text>
+          <Text style={styles.label}>{t('editProfile.github')}</Text>
           <TextInput
             style={styles.input}
             placeholder="https://github.com/username"
@@ -650,7 +653,7 @@ export default function EditProfileScreen({ navigation }) {
             keyboardType="url"
           />
 
-          <Text style={styles.label}>Portfolio Website</Text>
+          <Text style={styles.label}>{t('editProfile.portfolio')}</Text>
           <TextInput
             style={styles.input}
             placeholder="https://yourportfolio.com"
@@ -663,7 +666,7 @@ export default function EditProfileScreen({ navigation }) {
           />
 
           <GradientButton
-            title={saving ? 'Saving...' : 'Save'}
+            title={saving ? t('common.saving') : t('common.save')}
             color={colors.accent || colors.teal}
             onPress={handleSave}
             style={{ marginTop: spacing.lg }}

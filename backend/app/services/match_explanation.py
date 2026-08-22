@@ -3,11 +3,16 @@ Grounded Match Explanation Service
 Generates grounded LLM explanations ('Why You Match') and skill gap
 recommendations using Google Gemini Structured Outputs based strictly on persisted
 candidate and internship data.
+Supports locale-safe English DB persistence and Turkish/Arabic Redis caching.
 """
 
+import hashlib
+import json
+import logging
 from typing import List, Optional
 from uuid import UUID
 
+import redis
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,6 +26,13 @@ from app.schemas.match import (
     MatchExplanationResponse,
     SkillGapAnalysisResponse,
 )
+
+logger = logging.getLogger(__name__)
+
+CACHE_VERSION = "v1"
+CACHE_TTL_SECONDS = 30 * 86400        # 30 days
+LOCK_TTL_SECONDS = 120                # 120 seconds TTL stampede lock
+FAILURE_SENTINEL_TTL_SECONDS = 300    # 5 minutes failure cooldown
 
 
 class LLMMatchExplanation(BaseModel):
@@ -49,6 +61,71 @@ class LLMMatchExplanation(BaseModel):
             "List of 1-3 actionable learning recommendations to address "
             "missing skills."
         ),
+    )
+
+
+class LocalizedMatchExplanationPayload(BaseModel):
+    """Structured model for caching localized narrative only (skills/scores are authoritative)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    why_you_match: str = Field(..., min_length=1)
+    skill_gap_summary: str = Field(...)
+    recommendations: List[str] = Field(default_factory=list)
+
+
+def compute_match_explanation_context_hash(
+    match_id: UUID,
+    overall_score: int,
+    matching_skills: List[str],
+    missing_skills: List[str],
+    candidate_skills: Optional[List[str]] = None,
+    education_entries: Optional[List[str]] = None,
+    experience_entries: Optional[List[str]] = None,
+    project_entries: Optional[List[str]] = None,
+    candidate_name: Optional[str] = None,
+    candidate_headline: Optional[str] = None,
+    internship_title: Optional[str] = None,
+    internship_company: Optional[str] = None,
+    internship_location: Optional[str] = None,
+    internship_description: Optional[str] = None,
+    internship_required_skills: Optional[List[str]] = None,
+    internship_preferred_skills: Optional[List[str]] = None,
+) -> str:
+    """
+    Compute a deterministic SHA-256 fingerprint from the authoritative inputs
+    that materially affect Gemini grounded match explanation generation.
+    """
+    payload = {
+        "version": CACHE_VERSION,
+        "match_id": str(match_id),
+        "overall_score": overall_score,
+        "matching_skills": sorted(matching_skills or []),
+        "missing_skills": sorted(missing_skills or []),
+        "candidate_skills": sorted(candidate_skills or []),
+        "education_entries": education_entries or [],
+        "experience_entries": experience_entries or [],
+        "project_entries": project_entries or [],
+        "candidate_name": candidate_name or "",
+        "candidate_headline": candidate_headline or "",
+        "internship_title": (internship_title or "").strip(),
+        "internship_company": (internship_company or "").strip(),
+        "internship_location": (internship_location or "").strip(),
+        "internship_description": (internship_description or "").strip(),
+        "internship_required_skills": sorted(internship_required_skills or []),
+        "internship_preferred_skills": sorted(internship_preferred_skills or []),
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _get_redis_client() -> redis.Redis:
+    """Create Redis client with short connection/socket timeout for request protection."""
+    return redis.Redis.from_url(
+        settings.REDIS_URL,
+        socket_connect_timeout=2.0,
+        socket_timeout=2.0,
+        decode_responses=True,
     )
 
 
@@ -191,9 +268,21 @@ def get_or_create_match_explanation(
     content_locale: str = "en",
 ) -> Optional[MatchExplanationResponse]:
     """
-    Fetch an existing grounded match explanation or generate and persist one.
+    Fetch an existing grounded match explanation or generate and cache one.
     Enforces tenant isolation: returns None if match is not found or not owned.
     Derives matching_skills and missing_skills strictly from canonical data.
+
+    Locale safety rules:
+    - content_locale == 'en':
+      Uses canonical DB fields as cache hit; persists new English narrative to DB.
+    - content_locale in ('tr', 'ar'):
+      - NEVER treats English DB narrative as a locale cache hit.
+      - Checks localized Redis cache first.
+      - On cache miss, acquires TTL stampede lock (120s), generates via Gemini with
+        target locale, caches in Redis (30d).
+      - NEVER mutates or persists localized narrative to canonical DB fields.
+      - If localized generation/Redis fails, returns complete canonical English DB narrative
+        as graceful fallback if available.
     """
     record = MatchRepository.get_match_with_details_for_user(
         db=db, match_id=match_id, user_id=user_id
@@ -215,17 +304,20 @@ def get_or_create_match_explanation(
     if not isinstance(missing_skills, list):
         missing_skills = []
 
-    # Check if explanation is already cached on the Match record
+    # Check canonical English DB narrative cache
     cached_why = match.why_you_match
     cached_summary = raw_gap.get("summary")
     cached_recs = raw_gap.get("recommendations")
 
-    if (
+    has_valid_english_db_cache = (
         isinstance(cached_why, str)
         and cached_why.strip()
         and isinstance(cached_summary, str)
         and cached_summary.strip()
-    ):
+        and isinstance(cached_recs, list)
+    )
+
+    def _build_canonical_english_response() -> MatchExplanationResponse:
         recs_list = cached_recs if isinstance(cached_recs, list) else []
         return MatchExplanationResponse(
             match_id=match.id,
@@ -239,7 +331,76 @@ def get_or_create_match_explanation(
             ),
         )
 
-    # Gather grounded context for the LLM
+    # -----------------------------------------------------------------------
+    # 1. ENGLISH LOCALE PATH (Preserve DB persistence behavior)
+    # -----------------------------------------------------------------------
+    if content_locale == "en":
+        if has_valid_english_db_cache:
+            return _build_canonical_english_response()
+
+        # Gather grounded context for English generation
+        candidate_skills = MatchingDataRepository.get_skill_names_for_student(
+            db, profile.id
+        )
+        edu_list = [
+            f"{e.degree} at {e.institution} ({e.start_year or ''}-{e.end_year or ''})"
+            for e in MatchingDataRepository.get_education_for_student(
+                db, profile.id
+            )
+        ]
+        exp_list = [
+            f"{e.role} at {e.company}: {e.description or ''}"
+            for e in MatchingDataRepository.get_experience_for_student(
+                db, profile.id
+            )
+        ]
+        proj_list = [
+            f"{p.title} ({', '.join(p.tech_stack or [])}): {p.description or ''}"
+            for p in MatchingDataRepository.get_projects_for_student(
+                db, profile.id
+            )
+        ]
+
+        explanation = generate_grounded_match_explanation(
+            profile=profile,
+            internship=internship,
+            overall_score=match.overall_score,
+            matching_skills=matching_skills,
+            missing_skills=missing_skills,
+            candidate_skills=candidate_skills,
+            education_entries=edu_list,
+            experience_entries=exp_list,
+            project_entries=proj_list,
+            content_locale="en",
+        )
+
+        # Persist English narrative to DB
+        match.why_you_match = explanation.why_you_match
+        updated_gap = dict(raw_gap)
+        updated_gap["matching_skills"] = matching_skills  # PRESERVED
+        updated_gap["missing_skills"] = missing_skills    # PRESERVED
+        updated_gap["summary"] = explanation.skill_gap_summary
+        updated_gap["recommendations"] = explanation.recommendations
+        match.skill_gap_analysis = updated_gap
+
+        db.commit()
+        db.refresh(match)
+
+        return MatchExplanationResponse(
+            match_id=match.id,
+            overall_score=match.overall_score,
+            why_you_match=explanation.why_you_match,
+            matching_skills=matching_skills,
+            missing_skills=missing_skills,
+            skill_gap_analysis=SkillGapAnalysisResponse(
+                summary=explanation.skill_gap_summary,
+                recommendations=explanation.recommendations,
+            ),
+        )
+
+    # -----------------------------------------------------------------------
+    # 2. TURKISH / ARABIC LOCALE PATH (Redis cached, strictly zero DB mutations)
+    # -----------------------------------------------------------------------
     candidate_skills = MatchingDataRepository.get_skill_names_for_student(
         db, profile.id
     )
@@ -262,9 +423,8 @@ def get_or_create_match_explanation(
         )
     ]
 
-    explanation = generate_grounded_match_explanation(
-        profile=profile,
-        internship=internship,
+    context_hash = compute_match_explanation_context_hash(
+        match_id=match.id,
         overall_score=match.overall_score,
         matching_skills=matching_skills,
         missing_skills=missing_skills,
@@ -272,21 +432,170 @@ def get_or_create_match_explanation(
         education_entries=edu_list,
         experience_entries=exp_list,
         project_entries=proj_list,
-        content_locale=content_locale,
+        candidate_name=profile.full_name,
+        candidate_headline=profile.headline,
+        internship_title=internship.title,
+        internship_company=internship.company,
+        internship_location=f"{internship.location} ({internship.work_type})",
+        internship_description=internship.description,
+        internship_required_skills=internship.required_skills,
+        internship_preferred_skills=internship.preferred_skills,
     )
 
-    # Persist generated narrative fields while preserving scores & skills
-    match.why_you_match = explanation.why_you_match
+    cache_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:"
+        f"{match.id}:{content_locale}:{context_hash}"
+    )
+    lock_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:lock:"
+        f"{match.id}:{content_locale}:{context_hash}"
+    )
+    failure_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:failure:"
+        f"{match.id}:{content_locale}:{context_hash}"
+    )
 
-    updated_gap = dict(raw_gap)
-    updated_gap["matching_skills"] = matching_skills  # PRESERVED
-    updated_gap["missing_skills"] = missing_skills    # PRESERVED
-    updated_gap["summary"] = explanation.skill_gap_summary
-    updated_gap["recommendations"] = explanation.recommendations
-    match.skill_gap_analysis = updated_gap
+    # A. Check localized Redis cache first
+    try:
+        client = _get_redis_client()
+        cached_data = client.get(cache_key)
+        if cached_data:
+            try:
+                validated = LocalizedMatchExplanationPayload.model_validate_json(cached_data)
+                return MatchExplanationResponse(
+                    match_id=match.id,
+                    overall_score=match.overall_score,
+                    why_you_match=validated.why_you_match,
+                    matching_skills=matching_skills,
+                    missing_skills=missing_skills,
+                    skill_gap_analysis=SkillGapAnalysisResponse(
+                        summary=validated.skill_gap_summary,
+                        recommendations=validated.recommendations,
+                    ),
+                )
+            except Exception as parse_err:
+                logger.warning(
+                    "Corrupted localized match explanation cache; clearing: %s",
+                    parse_err,
+                )
+                try:
+                    client.delete(cache_key)
+                except Exception:
+                    pass
+    except Exception as redis_err:
+        logger.warning(
+            "Redis unavailable for localized match explanation (%s); falling back to canonical.",
+            type(redis_err).__name__,
+        )
+        if has_valid_english_db_cache:
+            return _build_canonical_english_response()
+        raise ValueError("Match explanation service is temporarily unavailable.") from redis_err
 
-    db.commit()
-    db.refresh(match)
+    # B. Check provider-failure sentinel
+    try:
+        if client.get(failure_key):
+            logger.warning(
+                "Provider failure sentinel active for %s; skipping Gemini call.",
+                cache_key,
+            )
+            if has_valid_english_db_cache:
+                return _build_canonical_english_response()
+            raise ValueError("Match explanation service is temporarily unavailable.")
+    except ValueError:
+        raise
+    except Exception as redis_err:
+        logger.warning("Redis failure checking sentinel (%s)", type(redis_err).__name__)
+        if has_valid_english_db_cache:
+            return _build_canonical_english_response()
+        raise ValueError("Match explanation service is temporarily unavailable.") from redis_err
+
+    # C. Attempt TTL Stampede Lock (120s TTL, expires naturally without blind delete)
+    try:
+        lock_acquired = client.set(lock_key, "1", nx=True, ex=LOCK_TTL_SECONDS)
+    except Exception as redis_err:
+        logger.warning("Redis failure acquiring stampede lock (%s)", type(redis_err).__name__)
+        if has_valid_english_db_cache:
+            return _build_canonical_english_response()
+        raise ValueError("Match explanation service is temporarily unavailable.") from redis_err
+
+    if not lock_acquired:
+        # Lock loser: do not call Gemini; re-check cache once
+        try:
+            cached_data = client.get(cache_key)
+            if cached_data:
+                validated = LocalizedMatchExplanationPayload.model_validate_json(cached_data)
+                return MatchExplanationResponse(
+                    match_id=match.id,
+                    overall_score=match.overall_score,
+                    why_you_match=validated.why_you_match,
+                    matching_skills=matching_skills,
+                    missing_skills=missing_skills,
+                    skill_gap_analysis=SkillGapAnalysisResponse(
+                        summary=validated.skill_gap_summary,
+                        recommendations=validated.recommendations,
+                    ),
+                )
+        except Exception:
+            pass
+        if has_valid_english_db_cache:
+            return _build_canonical_english_response()
+        raise ValueError("Match explanation service is temporarily unavailable.")
+
+    # D. Lock Winner: Re-check cache once, then generate with Gemini
+    try:
+        cached_data = client.get(cache_key)
+        if cached_data:
+            try:
+                validated = LocalizedMatchExplanationPayload.model_validate_json(cached_data)
+                return MatchExplanationResponse(
+                    match_id=match.id,
+                    overall_score=match.overall_score,
+                    why_you_match=validated.why_you_match,
+                    matching_skills=matching_skills,
+                    missing_skills=missing_skills,
+                    skill_gap_analysis=SkillGapAnalysisResponse(
+                        summary=validated.skill_gap_summary,
+                        recommendations=validated.recommendations,
+                    ),
+                )
+            except Exception:
+                pass
+
+        explanation = generate_grounded_match_explanation(
+            profile=profile,
+            internship=internship,
+            overall_score=match.overall_score,
+            matching_skills=matching_skills,
+            missing_skills=missing_skills,
+            candidate_skills=candidate_skills,
+            education_entries=edu_list,
+            experience_entries=exp_list,
+            project_entries=proj_list,
+            content_locale=content_locale,
+        )
+    except Exception as gen_err:
+        logger.warning(
+            "Localized match explanation generation failed (%s); storing failure sentinel.",
+            type(gen_err).__name__,
+        )
+        try:
+            client.set(failure_key, "1", ex=FAILURE_SENTINEL_TTL_SECONDS)
+        except Exception:
+            pass
+        if has_valid_english_db_cache:
+            return _build_canonical_english_response()
+        raise ValueError(f"Failed to generate match explanation: {gen_err}") from gen_err
+
+    # E. Store localized narrative in Redis (NO DB MUTATION!)
+    payload = LocalizedMatchExplanationPayload(
+        why_you_match=explanation.why_you_match,
+        skill_gap_summary=explanation.skill_gap_summary,
+        recommendations=explanation.recommendations,
+    )
+    try:
+        client.set(cache_key, payload.model_dump_json(), ex=CACHE_TTL_SECONDS)
+    except Exception as cache_err:
+        logger.warning("Failed to store localized match explanation in Redis: %s", cache_err)
 
     return MatchExplanationResponse(
         match_id=match.id,

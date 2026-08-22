@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -29,6 +30,7 @@ import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
 
 export default function SignUpScreen({ navigation }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [accountType, setAccountType] = useState('intern'); // 'intern' | 'employer'
   const [fullName, setFullName] = useState('');
@@ -46,13 +48,13 @@ export default function SignUpScreen({ navigation }) {
 
     if (!normalizedName || !normalizedEmail || !password) {
       haptics.error();
-      Alert.alert('Create Account', 'Please enter your full name, email, and password.');
+      Alert.alert(t('common.error'), t('auth.enterSignUpFields'));
       return;
     }
 
     if (password.length < 6) {
       haptics.error();
-      Alert.alert('Create Account', 'Password must contain at least 6 characters.');
+      Alert.alert(t('common.error'), t('auth.passwordMinLength'));
       return;
     }
 
@@ -75,8 +77,8 @@ export default function SignUpScreen({ navigation }) {
 
       if (!data.session?.access_token) {
         Alert.alert(
-          'Check your email',
-          'Your account was created. Please confirm your email address, then sign in.'
+          t('auth.checkEmailTitle'),
+          t('auth.checkEmailMessage')
         );
         navigation.replace('SignIn');
         return;
@@ -97,8 +99,17 @@ export default function SignUpScreen({ navigation }) {
 
       navigation.replace('MainTabs');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to create account.';
-      Alert.alert('Sign up failed', message);
+      console.warn('Sign-up failed:', error);
+      let errorKey = 'errors.authSignUpFailed';
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (msg.includes('already registered') || msg.includes('email in use') || msg.includes('user already exists')) {
+        errorKey = 'errors.authEmailInUse';
+      } else if (msg.includes('weak') || msg.includes('password should be')) {
+        errorKey = 'errors.authWeakPassword';
+      } else if (msg.includes('invalid email')) {
+        errorKey = 'errors.authInvalidEmail';
+      }
+      Alert.alert(t('common.error'), t(errorKey));
     } finally {
       setLoading(false);
     }
@@ -107,15 +118,15 @@ export default function SignUpScreen({ navigation }) {
   const handleGoogle = async () => {
     try {
       await signInWithGoogle();
-      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
+      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     } catch (e) {
       console.warn('Google sign-in failed', e);
-      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
+      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     }
   };
 
   const handleApple = () => {
-    Alert.alert('Apple Sign-In', 'Apple Sign-In is not available in this build yet.');
+    Alert.alert(t('auth.appleSignIn'), t('auth.appleNotAvailable'));
   };
 
   return (
@@ -145,9 +156,9 @@ export default function SignUpScreen({ navigation }) {
 
           {/* Heading Zone */}
           <View style={styles.headingZone}>
-            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.title}>{t('auth.createAccountTitle')}</Text>
             <Text style={styles.subtitle}>
-              Join InternMatch to discover your ideal internship
+              {t('auth.signUpSubtitle')}
             </Text>
           </View>
 
@@ -165,7 +176,7 @@ export default function SignUpScreen({ navigation }) {
 
             {/* Role / Account Type Selector */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Account Type</Text>
+              <Text style={styles.fieldLabel}>{t('auth.accountType')}</Text>
               <View style={styles.typeRow} accessibilityRole="radiogroup">
                 {/* Intern Option */}
                 <PressableScale
@@ -179,7 +190,7 @@ export default function SignUpScreen({ navigation }) {
                   haptic="selection"
                   accessibilityRole="radio"
                   accessibilityState={{ selected: accountType === 'intern' }}
-                  accessibilityLabel="Account type: Intern"
+                  accessibilityLabel={`${t('auth.accountType')}: ${t('auth.intern')}`}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Ionicons
@@ -197,7 +208,7 @@ export default function SignUpScreen({ navigation }) {
                       accountType === 'intern' ? styles.typeTextActive : styles.typeTextInactive,
                     ]}
                   >
-                    Intern
+                    {t('auth.intern')}
                   </Text>
                 </PressableScale>
 
@@ -213,7 +224,7 @@ export default function SignUpScreen({ navigation }) {
                   haptic="selection"
                   accessibilityRole="radio"
                   accessibilityState={{ selected: accountType === 'employer' }}
-                  accessibilityLabel="Account type: Employer"
+                  accessibilityLabel={`${t('auth.accountType')}: ${t('auth.employer')}`}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <Ionicons
@@ -231,7 +242,7 @@ export default function SignUpScreen({ navigation }) {
                       accountType === 'employer' ? styles.typeTextActive : styles.typeTextInactive,
                     ]}
                   >
-                    Employer
+                    {t('auth.employer')}
                   </Text>
                 </PressableScale>
               </View>
@@ -239,31 +250,31 @@ export default function SignUpScreen({ navigation }) {
 
             {/* Full Name */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Full Name</Text>
+              <Text style={styles.fieldLabel}>{t('auth.fullName')}</Text>
               <TextInput
                 style={[
                   styles.input,
                   focusedField === 'fullName' && styles.inputFocused,
                 ]}
-                placeholder="Jane Doe"
+                placeholder={t('auth.fullNamePlaceholder')}
                 placeholderTextColor="rgba(22, 35, 46, 0.40)"
                 value={fullName}
                 onChangeText={setFullName}
                 onFocus={() => setFocusedField('fullName')}
                 onBlur={() => setFocusedField(null)}
-                accessibilityLabel="Full name input"
+                accessibilityLabel={t('auth.fullName')}
               />
             </View>
 
             {/* Email Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>E-Mail</Text>
+              <Text style={styles.fieldLabel}>{t('auth.email')}</Text>
               <TextInput
                 style={[
                   styles.input,
                   focusedField === 'email' && styles.inputFocused,
                 ]}
-                placeholder="name@example.com"
+                placeholder={t('auth.emailPlaceholder')}
                 placeholderTextColor="rgba(22, 35, 46, 0.40)"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -272,50 +283,50 @@ export default function SignUpScreen({ navigation }) {
                 onChangeText={setEmail}
                 onFocus={() => setFocusedField('email')}
                 onBlur={() => setFocusedField(null)}
-                accessibilityLabel="Email address input"
+                accessibilityLabel={t('auth.email')}
               />
             </View>
 
             {/* Password Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Password</Text>
+              <Text style={styles.fieldLabel}>{t('auth.password')}</Text>
               <TextInput
                 style={[
                   styles.input,
                   focusedField === 'password' && styles.inputFocused,
                 ]}
-                placeholder="At least 6 characters"
+                placeholder={t('auth.passwordMin')}
                 placeholderTextColor="rgba(22, 35, 46, 0.40)"
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
                 onFocus={() => setFocusedField('password')}
                 onBlur={() => setFocusedField(null)}
-                accessibilityLabel="Password input"
+                accessibilityLabel={t('auth.password')}
               />
             </View>
 
             {/* Department Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Department / Field</Text>
+              <Text style={styles.fieldLabel}>{t('auth.departmentField')}</Text>
               <TextInput
                 style={[
                   styles.input,
                   focusedField === 'department' && styles.inputFocused,
                 ]}
-                placeholder="e.g. Computer Science, Marketing"
+                placeholder={t('auth.departmentPlaceholder')}
                 placeholderTextColor="rgba(22, 35, 46, 0.40)"
                 value={department}
                 onChangeText={setDepartment}
                 onFocus={() => setFocusedField('department')}
                 onBlur={() => setFocusedField(null)}
-                accessibilityLabel="Department input"
+                accessibilityLabel={t('auth.departmentField')}
               />
             </View>
 
             {/* Primary CTA */}
             <GradientButton
-              title={loading ? 'Creating account...' : 'Create Account'}
+              title={loading ? t('auth.creatingAccount') : t('auth.createAccount')}
               color={colors.accent || colors.teal}
               onPress={handleCreateAccount}
               disabled={loading}
@@ -325,7 +336,7 @@ export default function SignUpScreen({ navigation }) {
             {/* Divider */}
             <View style={styles.dividerRow}>
               <View style={styles.divider} />
-              <Text style={styles.dividerText}>or</Text>
+              <Text style={styles.dividerText}>{t('auth.or')}</Text>
               <View style={styles.divider} />
             </View>
 
@@ -348,13 +359,13 @@ export default function SignUpScreen({ navigation }) {
                 activeOpacity={motionTokens.opacities.pressed}
                 haptic="none"
                 accessibilityRole="button"
-                accessibilityLabel="Privacy Policy"
+                accessibilityLabel={t('auth.privacyPolicy')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.legalLink}>Privacy Policy</Text>
+                <Text style={styles.legalLink}>{t('auth.privacyPolicy')}</Text>
               </PressableScale>
 
-              <Text style={styles.legalDot}>·</Text>
+              <Text style={styles.legalDot}>{'\u00b7'}</Text>
 
               <PressableScale
                 onPress={() => navigation.navigate('TermsOfUse')}
@@ -362,10 +373,10 @@ export default function SignUpScreen({ navigation }) {
                 activeOpacity={motionTokens.opacities.pressed}
                 haptic="none"
                 accessibilityRole="button"
-                accessibilityLabel="Terms of Use"
+                accessibilityLabel={t('auth.termsOfUse')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.legalLink}>Terms of Use</Text>
+                <Text style={styles.legalLink}>{t('auth.termsOfUse')}</Text>
               </PressableScale>
             </View>
           </AuthGlassPanel>

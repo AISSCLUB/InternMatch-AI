@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -26,25 +27,31 @@ import {
 } from '../services/api';
 import haptics from '../services/haptics';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
+import { useLocalization } from '../localization/LocalizationContext';
+import { formatLocalizedDate } from '../localization/formatters';
 
-const STATUS_CONFIG = {
-  saved: { bg: colors.surfaceMuted || '#F1F5F9', fg: colors.textSecondary || '#475569', label: 'Saved' },
-  applied: { bg: colors.infoSoft || '#E0F2FE', fg: colors.info || '#0284C7', label: 'Applied' },
-  interviewing: { bg: colors.warningSoft || '#FEF3C7', fg: colors.warning || '#D97706', label: 'Interviewing' },
-  rejected: { bg: colors.dangerSoft || '#FEE2E2', fg: colors.danger || '#DC2626', label: 'Rejected' },
-  accepted: { bg: colors.successSoft || '#DCFCE7', fg: colors.success || '#16A34A', label: 'Accepted' },
+const STATUS_THEME = {
+  saved: { bg: colors.surfaceMuted || '#F1F5F9', fg: colors.textSecondary || '#475569' },
+  applied: { bg: colors.infoSoft || '#E0F2FE', fg: colors.info || '#0284C7' },
+  interviewing: { bg: colors.warningSoft || '#FEF3C7', fg: colors.warning || '#D97706' },
+  rejected: { bg: colors.dangerSoft || '#FEE2E2', fg: colors.danger || '#DC2626' },
+  accepted: { bg: colors.successSoft || '#DCFCE7', fg: colors.success || '#16A34A' },
 };
 
 function StatusPill({ status }) {
-  const config = STATUS_CONFIG[status] || STATUS_CONFIG.saved;
+  const { t } = useTranslation();
+  const theme = STATUS_THEME[status] || STATUS_THEME.saved;
+  const label = t(`applications.statuses.${status}`, { defaultValue: status });
   return (
-    <View style={[styles.pill, { backgroundColor: config.bg }]}>
-      <Text style={[styles.pillText, { color: config.fg }]}>{config.label}</Text>
+    <View style={[styles.pill, { backgroundColor: theme.bg }]}>
+      <Text style={[styles.pillText, { color: theme.fg }]}>{label}</Text>
     </View>
   );
 }
 
 export default function ApplicationsScreen({ navigation }) {
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
   const scrollViewRef = useRef(null);
   useTabScroll('Applications', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -67,17 +74,11 @@ export default function ApplicationsScreen({ navigation }) {
     } catch (err) {
       if (generation !== requestGenerationRef.current) return;
       console.warn('Failed to fetch applications:', err);
-      let msg = 'Unable to load applications.';
-      if (err instanceof ApiError) {
-        if (err.status === 401) {
-          msg = 'Session expired. Please sign in again.';
-        } else {
-          msg = err.message || msg;
-        }
-      } else if (err instanceof Error) {
-        msg = err.message;
+      if (err instanceof ApiError && err.status === 401) {
+        setError('UNAUTHENTICATED');
+      } else {
+        setError('APPLICATIONS_LOAD_FAILED');
       }
-      setError(msg);
     } finally {
       if (generation !== requestGenerationRef.current) return;
       setLoading(false);
@@ -109,28 +110,19 @@ export default function ApplicationsScreen({ navigation }) {
       await updateApplicationStatus(applicationId, { status: 'applied' });
       haptics.success();
       await fetchApplicationsData();
-      Alert.alert('Updated', 'Application marked as applied in your tracker.');
+      Alert.alert(t('applications.markedAppliedAlertTitle'), t('applications.markedAppliedAlertBody'));
     } catch (err) {
       console.warn('Failed to update status:', err);
-      const msg = err instanceof Error ? err.message : 'Failed to update status.';
-      Alert.alert('Error', msg);
+      Alert.alert(t('common.error'), t('errors.applicationStatusUpdateFailed'));
     } finally {
       setStatusUpdatingId(null);
     }
   };
 
-  const formatDate = (dateString) => {
+  const formatDateString = (dateString) => {
     if (!dateString) return null;
-    try {
-      const d = new Date(dateString);
-      return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
+    const formatted = formatLocalizedDate(dateString, locale);
+    return formatted ? t('applications.appliedDate', { date: formatted }) : null;
   };
 
   const renderCountBadge = () => {
@@ -146,7 +138,7 @@ export default function ApplicationsScreen({ navigation }) {
     <ScreenContainer edges={['top']}>
       <AppChromeHeader />
       <ScreenHeader
-        title="Application Tracker"
+        title={t('applications.title')}
         alignment="start"
         rightAction={renderCountBadge()}
       />
@@ -171,7 +163,7 @@ export default function ApplicationsScreen({ navigation }) {
         {loading && !refreshing && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
-            <Text style={styles.loadingText}>Loading applications...</Text>
+            <Text style={styles.loadingText}>{t('applications.loading')}</Text>
           </View>
         )}
 
@@ -179,15 +171,19 @@ export default function ApplicationsScreen({ navigation }) {
         {!loading && error && (
           <Card style={styles.errorCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={40} color={colors.danger || '#EF4444'} />
-            <Text style={styles.errorTitle}>Could Not Load Tracker</Text>
-            <Text style={styles.errorSubtitle}>{error}</Text>
+            <Text style={styles.errorTitle}>{t('applications.errorTitle')}</Text>
+            <Text style={styles.errorSubtitle}>
+              {error === 'UNAUTHENTICATED'
+                ? t('errors.unauthenticated')
+                : t('errors.applicationsLoadFailed', { defaultValue: t('applications.errorSubtitle', { defaultValue: t('applications.errorTitle') }) })}
+            </Text>
             <TouchableOpacity
               style={styles.retryBtn}
               onPress={fetchApplicationsData}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.retryBtnText}>Try Again</Text>
+              <Text style={styles.retryBtnText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -196,12 +192,12 @@ export default function ApplicationsScreen({ navigation }) {
         {!loading && !error && applications.length === 0 && (
           <Card style={styles.emptyCard} padding="lg">
             <Ionicons name="briefcase-outline" size={48} color={colors.accent || colors.teal} />
-            <Text style={styles.emptyTitle}>No Tracked Applications Yet</Text>
+            <Text style={styles.emptyTitle}>{t('applications.emptyTitle')}</Text>
             <Text style={styles.emptySubtitle}>
-              When you generate personalized cover letters for your matchups, they will appear here as saved applications.
+              {t('applications.emptySubtitle')}
             </Text>
             <GradientButton
-              title="Explore Matchups"
+              title={t('applications.exploreMatchups')}
               color={colors.accent || colors.teal}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
               style={{ marginTop: spacing.xl, width: '100%' }}
@@ -215,6 +211,7 @@ export default function ApplicationsScreen({ navigation }) {
             {applications.map((app) => {
               const hasCoverLetter = Boolean(app.generated_cover_letter);
               const isUpdatingThis = statusUpdatingId === app.id;
+              const appliedDateText = formatDateString(app.applied_date);
 
               return (
                 <Card
@@ -225,7 +222,7 @@ export default function ApplicationsScreen({ navigation }) {
                   <View style={styles.cardHeader}>
                     <View style={styles.cardTitleWrap}>
                       <Text style={styles.jobTitle}>
-                        {app.job_title || 'Internship Application'}
+                        {app.job_title || t('applications.defaultJobTitle')}
                       </Text>
                       {app.company_name ? (
                         <Text style={styles.companyName}>{app.company_name}</Text>
@@ -235,7 +232,7 @@ export default function ApplicationsScreen({ navigation }) {
                   </View>
 
                   {/* Applied Date */}
-                  {app.applied_date ? (
+                  {appliedDateText ? (
                     <View style={styles.metaRow}>
                       <Ionicons
                         name="calendar-outline"
@@ -244,7 +241,7 @@ export default function ApplicationsScreen({ navigation }) {
                         style={styles.metaIcon}
                       />
                       <Text style={styles.metaText}>
-                        Applied on {formatDate(app.applied_date)}
+                        {appliedDateText}
                       </Text>
                     </View>
                   ) : null}
@@ -266,7 +263,7 @@ export default function ApplicationsScreen({ navigation }) {
                         })
                       }
                       accessibilityRole="button"
-                      accessibilityLabel="View Application Details"
+                      accessibilityLabel={t('applications.timelineBtn')}
                       hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                     >
                       <Ionicons
@@ -275,7 +272,7 @@ export default function ApplicationsScreen({ navigation }) {
                         color={colors.textPrimary || colors.textDark}
                         style={styles.actionIcon}
                       />
-                      <Text style={styles.detailBtnText}>Timeline</Text>
+                      <Text style={styles.detailBtnText} numberOfLines={2}>{t('applications.timelineBtn')}</Text>
                     </TouchableOpacity>
 
                     {hasCoverLetter && (
@@ -292,7 +289,7 @@ export default function ApplicationsScreen({ navigation }) {
                           })
                         }
                         accessibilityRole="button"
-                        accessibilityLabel="View Cover Letter"
+                        accessibilityLabel={t('applications.coverLetterBtn')}
                         hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                       >
                         <Ionicons
@@ -301,7 +298,7 @@ export default function ApplicationsScreen({ navigation }) {
                           color={colors.accentStrong || colors.tealDark}
                           style={styles.actionIcon}
                         />
-                        <Text style={styles.letterBtnText}>Cover Letter</Text>
+                        <Text style={styles.letterBtnText} numberOfLines={2}>{t('applications.coverLetterBtn')}</Text>
                       </TouchableOpacity>
                     )}
 
@@ -314,7 +311,7 @@ export default function ApplicationsScreen({ navigation }) {
                           })
                         }
                         accessibilityRole="button"
-                        accessibilityLabel="View Internship Listing"
+                        accessibilityLabel={t('applications.listingBtn')}
                         hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                       >
                         <Ionicons
@@ -323,7 +320,7 @@ export default function ApplicationsScreen({ navigation }) {
                           color={colors.textSecondary || colors.textMuted}
                           style={styles.actionIcon}
                         />
-                        <Text style={styles.listingBtnText}>Listing</Text>
+                        <Text style={styles.listingBtnText} numberOfLines={2}>{t('applications.listingBtn')}</Text>
                       </TouchableOpacity>
                     )}
 
@@ -333,7 +330,7 @@ export default function ApplicationsScreen({ navigation }) {
                         onPress={() => handleQuickMarkApplied(app.id)}
                         disabled={isUpdatingThis}
                         accessibilityRole="button"
-                        accessibilityLabel="Mark as Applied"
+                        accessibilityLabel={t('applications.markAppliedBtn')}
                         hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                       >
                         {isUpdatingThis ? (
@@ -349,7 +346,7 @@ export default function ApplicationsScreen({ navigation }) {
                               color={colors.textInverse || colors.white}
                               style={styles.actionIcon}
                             />
-                            <Text style={styles.markAppliedBtnText}>Mark Applied</Text>
+                            <Text style={styles.markAppliedBtnText} numberOfLines={2}>{t('applications.markAppliedBtn')}</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -373,7 +370,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: 104,
+    paddingBottom: 128,
   },
   countBadge: {
     backgroundColor: colors.accentSoft || '#E6F4F6',
@@ -506,6 +503,7 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     marginTop: spacing.md,
     paddingTop: spacing.sm,
@@ -516,63 +514,82 @@ const styles = StyleSheet.create({
   letterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.accentSoft || '#E6F4F6',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
     borderRadius: spacing.radii.sm,
     minHeight: 36,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 120,
   },
   letterBtnText: {
     ...typography.caption,
     fontWeight: '600',
     color: colors.accentStrong || colors.tealDark,
+    textAlign: 'center',
   },
   detailBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.surface || colors.cardBg,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
     borderRadius: spacing.radii.sm,
     borderWidth: 1,
     borderColor: colors.borderSubtle || colors.border,
     minHeight: 36,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 120,
   },
   detailBtnText: {
     ...typography.caption,
     fontWeight: '600',
     color: colors.textPrimary || colors.textDark,
+    textAlign: 'center',
   },
   listingBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.surfaceSubtle || '#F8FAFC',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
     borderRadius: spacing.radii.sm,
     borderWidth: 1,
     borderColor: colors.borderSubtle || colors.border,
     minHeight: 36,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 120,
   },
   listingBtnText: {
     ...typography.caption,
     fontWeight: '600',
     color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
   },
   markAppliedBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.accent || colors.teal,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.xs + 2,
     borderRadius: spacing.radii.sm,
-    marginStart: 'auto',
     minHeight: 36,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 120,
   },
   markAppliedBtnText: {
     ...typography.caption,
     fontWeight: '600',
     color: colors.textInverse || colors.white,
+    textAlign: 'center',
   },
   actionIcon: {
     marginEnd: spacing.xs,

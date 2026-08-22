@@ -15,6 +15,7 @@ import {
 } from '../services/api';
 import { supabase } from '../lib/supabase';
 import haptics from '../services/haptics';
+import i18n from '../localization/i18n';
 
 const SavedInternshipsContext = createContext(null);
 
@@ -80,9 +81,8 @@ export function SavedInternshipsProvider({ children }) {
         clearSavedInternships();
         return null;
       }
-      const msg =
-        err instanceof Error ? err.message : 'Unable to load saved internships.';
-      setError(msg);
+      console.warn('Failed to load saved internships:', err);
+      setError('SAVED_LOAD_FAILED');
       throw err;
     } finally {
       if (currentUserIdRef.current === activeUserId && refreshGenerationRef.current === requestGeneration) {
@@ -154,7 +154,10 @@ export function SavedInternshipsProvider({ children }) {
       }
 
       if (!currentUserIdRef.current) {
-        Alert.alert('Sign In Required', 'Please sign in to save internships.');
+        Alert.alert(
+          i18n.t('auth.signInRequiredTitle', { defaultValue: 'Sign In Required' }),
+          i18n.t('auth.signInRequiredMessage', { defaultValue: 'Please sign in to save internships.' })
+        );
         return;
       }
 
@@ -203,11 +206,11 @@ export function SavedInternshipsProvider({ children }) {
             }
             setTotal((prev) => prev + 1);
             haptics.error();
-            const msg =
-              err instanceof Error
-                ? err.message
-                : 'Unable to remove saved internship.';
-            Alert.alert('Unable to Unsave', msg);
+            console.warn('Failed to unsave internship:', err);
+            Alert.alert(
+              i18n.t('savedInternships.unsaveFailedTitle', { defaultValue: 'Unable to Unsave' }),
+              i18n.t('errors.savedUnsaveFailed', { defaultValue: 'Unable to remove saved internship.' })
+            );
           }
         } finally {
           mutatingIdsRef.current.delete(id);
@@ -283,11 +286,11 @@ export function SavedInternshipsProvider({ children }) {
               setTotal((prev) => Math.max(0, prev - 1));
             }
             haptics.error();
-            const msg =
-              err instanceof Error
-                ? err.message
-                : 'Unable to save internship.';
-            Alert.alert('Unable to Save', msg);
+            console.warn('Failed to save internship:', err);
+            Alert.alert(
+              i18n.t('savedInternships.saveFailedTitle', { defaultValue: 'Unable to Save' }),
+              i18n.t('errors.savedSaveFailed', { defaultValue: 'Unable to save internship.' })
+            );
           }
         } finally {
           mutatingIdsRef.current.delete(id);

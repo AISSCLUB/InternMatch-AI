@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
@@ -17,12 +18,23 @@ import GlassSurface from '../components/GlassSurface';
 import { signOut, getCurrentUser, sendPasswordResetEmail } from '../services/auth';
 import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
+import { useTranslation } from 'react-i18next';
+import { useLocalization } from '../localization/LocalizationContext';
+import { getLocalizedErrorMessage } from '../localization/errorMessages';
+import LocaleFlag from '../components/LocaleFlag';
 
 const appVersion = require('../../app.json').expo.version || '1.0.0';
+
+const LANGUAGE_OPTIONS = [
+  { code: 'en', label: 'English' },
+  { code: 'tr', label: 'T\u00fcrk\u00e7e' },
+  { code: 'ar', label: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629' },
+];
 
 function SettingsRow({
   icon,
   iconColor,
+  flagLocale,
   label,
   value,
   onPress,
@@ -32,10 +44,11 @@ function SettingsRow({
 }) {
   const isPressable = typeof onPress === 'function';
   const Wrapper = isPressable ? TouchableOpacity : View;
+  const { isRTL } = useLocalization();
 
   return (
     <Wrapper
-      style={[styles.row, isLast && styles.rowLast]}
+      style={[styles.row, isRTL && styles.rowRTL, isLast && styles.rowLast]}
       onPress={
         isPressable
           ? () => {
@@ -48,9 +61,13 @@ function SettingsRow({
       accessibilityRole={isPressable ? 'button' : undefined}
       accessibilityLabel={accessibilityLabel || (typeof label === 'string' ? label : undefined)}
     >
-      <View style={styles.rowLeft}>
-        {icon ? (
-          <View style={styles.iconContainer}>
+      <View style={[styles.rowLeft, isRTL && styles.rowLeftRTL]}>
+        {flagLocale ? (
+          <View style={[styles.iconContainer, styles.flagIconContainer, isRTL && styles.iconContainerRTL]}>
+            <LocaleFlag locale={flagLocale} width={24} height={16} />
+          </View>
+        ) : icon ? (
+          <View style={[styles.iconContainer, isRTL && styles.iconContainerRTL]}>
             <Ionicons
               name={icon}
               size={18}
@@ -58,13 +75,13 @@ function SettingsRow({
             />
           </View>
         ) : null}
-        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={[styles.rowLabel, isRTL && styles.textRTL]}>{label}</Text>
       </View>
-      <View style={styles.rowRight}>
-        {value ? <Text style={styles.valueText}>{value}</Text> : null}
+      <View style={[styles.rowRight, isRTL && styles.rowRightRTL]}>
+        {value ? <Text style={[styles.valueText, isRTL && styles.alignRTL]}>{value}</Text> : null}
         {showChevron && isPressable ? (
           <Ionicons
-            name="chevron-forward"
+            name={isRTL ? 'chevron-back' : 'chevron-forward'}
             size={16}
             color={colors.textTertiary || colors.textMuted}
             style={styles.chevron}
@@ -79,6 +96,10 @@ export default function SettingsScreen({ navigation }) {
   const [userEmail, setUserEmail] = useState('');
   const [signingOut, setSigningOut] = useState(false);
   const { clearProfile } = useProfile();
+  const { t } = useTranslation();
+  const { locale, isRTL, setLocale } = useLocalization();
+  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
+  const [changingLanguage, setChangingLanguage] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -96,52 +117,76 @@ export default function SettingsScreen({ navigation }) {
     };
   }, []);
 
+  const handleLanguageChange = async (nextLocale) => {
+    if (changingLanguage || nextLocale === locale) {
+      setLanguagePickerVisible(false);
+      return;
+    }
+
+    setLanguagePickerVisible(false);
+    setChangingLanguage(true);
+
+    try {
+      const changed = await setLocale(nextLocale);
+      if (!changed) throw new Error('LANGUAGE_CHANGE_REJECTED');
+      haptics.success();
+    } catch (error) {
+      console.warn('Language change failed:', error);
+      Alert.alert(
+        t('settings.languagePicker.changeFailedTitle'),
+        t('settings.languagePicker.changeFailedMessage')
+      );
+    } finally {
+      setChangingLanguage(false);
+    }
+  };
+
   const handlePasswordReset = async () => {
     try {
       const email = userEmail.trim();
       if (!email) {
-        Alert.alert('Change Password', 'No authenticated email address found.');
+        Alert.alert(t('settings.password.noEmailTitle'), t('settings.password.noEmailMessage'));
         return;
       }
 
       Alert.alert(
-        'Change Password',
-        `Send a secure password reset link to ${email}?`,
+        t('settings.password.confirmTitle'),
+        t('settings.password.confirmMessage', { email }),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Send Link',
+            text: t('settings.password.sendLink'),
             onPress: async () => {
               try {
                 const { error } = await sendPasswordResetEmail(email);
                 if (error) {
-                  Alert.alert('Reset Failed', error.message);
+                  Alert.alert(t('settings.password.resetFailedTitle'), getLocalizedErrorMessage(error, t));
                 } else {
                   haptics.success();
                   Alert.alert(
-                    'Password Reset Sent',
-                    `A password reset link has been sent to ${email}. Please check your inbox.`
+                    t('settings.password.resetSentTitle'),
+                    t('settings.password.resetSentMessage', { email })
                   );
                 }
               } catch (err) {
-                const msg = err instanceof Error ? err.message : 'Unable to send reset email.';
-                Alert.alert('Error', msg);
+                const msg = getLocalizedErrorMessage(err, t);
+                Alert.alert(t('common.error'), msg);
               }
             },
           },
         ]
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to initiate password reset.';
-      Alert.alert('Error', msg);
+      const msg = getLocalizedErrorMessage(err, t);
+      Alert.alert(t('common.error'), msg);
     }
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out of your account?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('settings.signOutDialog.title'), t('settings.signOutDialog.message'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Sign Out',
+        text: t('settings.signOut'),
         style: 'destructive',
         onPress: async () => {
           if (signingOut) return;
@@ -158,8 +203,8 @@ export default function SettingsScreen({ navigation }) {
               routes: [{ name: 'SignIn' }],
             });
           } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unable to sign out.';
-            Alert.alert('Sign Out Failed', message);
+            const message = getLocalizedErrorMessage(error, t);
+            Alert.alert(t('settings.signOutDialog.failedTitle'), message);
           } finally {
             setSigningOut(false);
           }
@@ -171,7 +216,7 @@ export default function SettingsScreen({ navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Settings"
+        title={t('settings.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -182,77 +227,84 @@ export default function SettingsScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Account Section */}
-        <Text style={styles.sectionHeader}>ACCOUNT</Text>
+        <Text style={[styles.sectionHeader, isRTL && styles.textRTL]}>{t('settings.sections.account')}</Text>
         <GlassSurface variant="card" style={styles.glassCard}>
           <SettingsRow
             icon="school-outline"
-            label="Account Type"
-            value="Intern"
+            label={t('settings.accountType')}
+            value={t('settings.accountTypeIntern')}
             showChevron={false}
           />
           <SettingsRow
             icon="mail-outline"
-            label="Email Address"
-            value={userEmail || 'Authenticated'}
+            label={t('settings.emailAddress')}
+            value={userEmail || t('settings.authenticated')}
             showChevron={false}
           />
           <SettingsRow
+            flagLocale={locale}
+            label={t('settings.language')}
+            value={LANGUAGE_OPTIONS.find((option) => option.code === locale)?.label || LANGUAGE_OPTIONS[0].label}
+            onPress={() => setLanguagePickerVisible(true)}
+            accessibilityLabel={t('settings.accessibility.language')}
+          />
+          <SettingsRow
             icon="key-outline"
-            label="Change Password"
+            label={t('settings.changePassword')}
             onPress={handlePasswordReset}
             isLast={true}
-            accessibilityLabel="Send password reset link"
+            accessibilityLabel={t('settings.accessibility.passwordReset')}
           />
         </GlassSurface>
 
         {/* Profile & Career Section */}
-        <Text style={styles.sectionHeader}>PROFILE & CAREER</Text>
+        <Text style={[styles.sectionHeader, isRTL && styles.textRTL]}>{t('settings.sections.profileCareer')}</Text>
         <GlassSurface variant="card" style={styles.glassCard}>
           <SettingsRow
             icon="person-outline"
-            label="Edit Profile"
+            label={t('settings.editProfile')}
             onPress={() => navigation.navigate('EditProfile')}
-            accessibilityLabel="Navigate to Edit Profile"
+            accessibilityLabel={t('settings.accessibility.editProfile')}
           />
           <SettingsRow
             icon="document-text-outline"
-            label="Manage CV / Resume"
+            label={t('settings.manageCv')}
             onPress={() => navigation.navigate('CVUpload')}
             isLast={true}
-            accessibilityLabel="Navigate to CV Upload"
+            accessibilityLabel={t('settings.accessibility.manageCv')}
           />
         </GlassSurface>
 
         {/* Privacy & Legal Section */}
-        <Text style={styles.sectionHeader}>PRIVACY & LEGAL</Text>
+        <Text style={[styles.sectionHeader, isRTL && styles.textRTL]}>{t('settings.sections.privacyLegal')}</Text>
         <GlassSurface variant="card" style={styles.glassCard}>
           <SettingsRow
             icon="shield-checkmark-outline"
-            label="Privacy Policy"
+            label={t('settings.privacyPolicy')}
             onPress={() => navigation.navigate('PrivacyPolicy')}
-            accessibilityLabel="Navigate to Privacy Policy"
+            accessibilityLabel={t('settings.accessibility.privacyPolicy')}
           />
           <SettingsRow
             icon="document-outline"
-            label="Terms of Use"
+            label={t('settings.termsOfUse')}
             onPress={() => navigation.navigate('TermsOfUse')}
             isLast={true}
-            accessibilityLabel="Navigate to Terms of Use"
+            accessibilityLabel={t('settings.accessibility.termsOfUse')}
           />
         </GlassSurface>
 
         {/* About Section */}
-        <Text style={styles.sectionHeader}>ABOUT</Text>
+        <Text style={[styles.sectionHeader, isRTL && styles.textRTL]}>{t('settings.sections.about')}</Text>
         <GlassSurface variant="card" style={styles.glassCard}>
           <SettingsRow
             icon="information-circle-outline"
             label="InternMatch AI"
-            value="AI Internship Matching"
+            value={t('settings.productTagline')}
             showChevron={false}
           />
           <SettingsRow
             icon="code-slash-outline"
-            label="App Version"
+            label={t('settings.appVersion')}
             value={`v${appVersion}`}
             showChevron={false}
             isLast={true}
@@ -265,7 +317,7 @@ export default function SettingsScreen({ navigation }) {
           onPress={handleSignOut}
           disabled={signingOut}
           accessibilityRole="button"
-          accessibilityLabel="Sign out of your account"
+          accessibilityLabel={t('settings.accessibility.signOut')}
           activeOpacity={0.75}
         >
           <Ionicons
@@ -274,11 +326,74 @@ export default function SettingsScreen({ navigation }) {
             color={colors.danger || colors.red}
             style={styles.signOutIcon}
           />
-          <Text style={styles.signOutText}>
-            {signingOut ? 'Signing Out...' : 'Sign Out'}
+          <Text style={[styles.signOutText, isRTL && styles.textRTL]}>
+            {signingOut ? t('settings.signingOut') : t('settings.signOut')}
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <Modal
+        visible={languagePickerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setLanguagePickerVisible(false)}
+      >
+        <View style={styles.languageModalBackdrop}>
+          <GlassSurface variant="card" style={styles.languageSheet}>
+            <Text style={[styles.languageTitle, isRTL && styles.textRTL]}>{t('settings.languagePicker.title')}</Text>
+            <Text style={[styles.languageMessage, isRTL && styles.textRTL]}>{t('settings.languagePicker.message')}</Text>
+
+            {LANGUAGE_OPTIONS.map((option) => {
+              const selected = option.code === locale;
+              const optionIsRTL = option.code === 'ar';
+
+              return (
+                <TouchableOpacity
+                  key={option.code}
+                  style={[styles.languageOption, selected && styles.languageOptionSelected]}
+                  onPress={() => handleLanguageChange(option.code)}
+                  disabled={changingLanguage}
+                  accessibilityRole="radio"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected, disabled: changingLanguage }}
+                  activeOpacity={0.72}
+                >
+                  <View style={styles.languageFlagCol}>
+                    <LocaleFlag locale={option.code} width={26} height={18} />
+                  </View>
+                  <View style={styles.languageNameCol}>
+                    <Text
+                      style={[
+                        styles.languageOptionText,
+                        optionIsRTL ? { writingDirection: 'rtl' } : { writingDirection: 'ltr' },
+                        selected && styles.languageOptionTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </View>
+                  <View style={styles.languageCheckCol}>
+                    {selected ? (
+                      <Ionicons name="checkmark-circle" size={20} color={colors.accent || colors.teal} />
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            <TouchableOpacity
+              style={styles.languageCancel}
+              onPress={() => setLanguagePickerVisible(false)}
+              disabled={changingLanguage}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.cancel')}
+              activeOpacity={0.72}
+            >
+              <Text style={[styles.languageCancelText, isRTL && styles.textRTL]}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+          </GlassSurface>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -335,6 +450,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginEnd: spacing.md,
   },
+  flagIconContainer: {
+    backgroundColor: 'transparent',
+  },
   rowLabel: {
     ...typography.body,
     fontWeight: '500',
@@ -352,6 +470,109 @@ const styles = StyleSheet.create({
   },
   chevron: {
     marginStart: spacing.xs,
+  },
+  languageModalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    backgroundColor: 'rgba(2, 8, 23, 0.46)',
+  },
+  languageSheet: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    padding: spacing.lg,
+    borderRadius: spacing.radii.lg,
+    overflow: 'hidden',
+  },
+  languageTitle: {
+    ...typography.body,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary || colors.textDark,
+    marginBottom: spacing.xs,
+  },
+  languageMessage: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginBottom: spacing.md,
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 50,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle || 'rgba(14, 116, 144, 0.12)',
+    marginBottom: spacing.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+  },
+  languageOptionSelected: {
+    borderColor: colors.accent || colors.teal,
+    backgroundColor: 'rgba(14, 116, 144, 0.10)',
+  },
+  languageFlagCol: {
+    width: 36,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  languageNameCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  languageCheckCol: {
+    width: 36,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  languageOptionText: {
+    ...typography.bodyEmphasis,
+    fontSize: 15,
+    color: colors.textPrimary || colors.textDark,
+    textAlign: 'center',
+  },
+  languageOptionTextSelected: {
+    color: colors.accent || colors.teal,
+    fontWeight: '700',
+  },
+  languageCancel: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+  },
+  languageCancelText: {
+    ...typography.button,
+    color: colors.textSecondary || colors.textMuted,
+    fontWeight: '600',
+  },
+  rowRTL: {
+    flexDirection: 'row-reverse',
+  },
+  rowLeftRTL: {
+    flexDirection: 'row-reverse',
+    marginEnd: 0,
+    marginStart: spacing.sm,
+  },
+  rowRightRTL: {
+    flexDirection: 'row-reverse',
+  },
+  iconContainerRTL: {
+    marginEnd: 0,
+    marginStart: spacing.md,
+  },
+  textRTL: {
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  textLTR: {
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  alignRTL: {
+    textAlign: 'right',
   },
   signOutButton: {
     flexDirection: 'row',

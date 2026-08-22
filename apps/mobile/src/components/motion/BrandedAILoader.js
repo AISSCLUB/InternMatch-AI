@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Line } from 'react-native-svg';
 import Animated, {
   useSharedValue,
@@ -20,6 +21,7 @@ export default function BrandedAILoader({
   duration = motionTokens.durations.loaderRotation,
   style,
 }) {
+  const { t } = useTranslation();
   const isReducedMotion = useReducedMotion();
   const rotation = useSharedValue(0);
 
@@ -60,7 +62,7 @@ export default function BrandedAILoader({
     <View
       style={[styles.container, { width: size, height: size }, style]}
       accessibilityRole="progressbar"
-      accessibilityLabel="AI processing indicator"
+      accessibilityLabel={t('components.aiLoaderA11y', { defaultValue: 'AI processing indicator' })}
     >
       <Animated.View style={animatedStyle}>
         <Svg width={size} height={size} viewBox="0 0 32 32">

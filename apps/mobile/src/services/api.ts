@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { normalizeLocale, DEFAULT_LOCALE } from '../localization/i18n';
 
 const apiBaseUrl = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 
@@ -312,12 +313,17 @@ export async function getInternships(
 }
 
 export async function getInternshipDetail(
-  id: string
+  id: string,
+  locale?: string
 ): Promise<InternshipDetail> {
-  return apiRequest<InternshipDetail>(`/internships/${encodeURIComponent(id)}`, {
-    method: 'GET',
-    authenticated: false,
-  });
+  const normalizedLocale = normalizeLocale(locale) || DEFAULT_LOCALE;
+  return apiRequest<InternshipDetail>(
+    `/internships/${encodeURIComponent(id)}?locale=${encodeURIComponent(normalizedLocale)}`,
+    {
+      method: 'GET',
+      authenticated: false,
+    }
+  );
 }
 
 export type SavedInternshipItem = {
@@ -447,10 +453,12 @@ export async function calculateMatches(): Promise<MatchCalculationAcceptedRespon
 }
 
 export async function getMatchExplanation(
-  matchId: string
+  matchId: string,
+  contentLocale?: string
 ): Promise<MatchExplanationResponse> {
+  const normalizedLocale = normalizeLocale(contentLocale) || DEFAULT_LOCALE;
   return apiRequest<MatchExplanationResponse>(
-    `/matches/${encodeURIComponent(matchId)}/explanation`,
+    `/matches/${encodeURIComponent(matchId)}/explanation?content_locale=${encodeURIComponent(normalizedLocale)}`,
     {
       method: 'GET',
     }

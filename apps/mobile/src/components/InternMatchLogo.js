@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Svg, { Circle, Line } from 'react-native-svg';
 import Animated, {
   useSharedValue,
@@ -13,6 +14,7 @@ import { typography } from '../theme/typography';
 import useReducedMotion from '../hooks/useReducedMotion';
 
 export default function InternMatchLogo({ style }) {
+  const { t } = useTranslation();
   const isReducedMotion = useReducedMotion();
   const rotation = useSharedValue(0);
 
@@ -22,7 +24,7 @@ export default function InternMatchLogo({ style }) {
       return;
     }
 
-    // Run exactly ONE 360-degree rotation on initial mount
+    // Run practical ONE 360-degree rotation on initial mount
     rotation.value = withTiming(360, {
       duration: 800,
       easing: Easing.out(Easing.cubic),
@@ -55,7 +57,7 @@ export default function InternMatchLogo({ style }) {
       onPress={handlePress}
       style={[styles.container, style]}
       accessibilityRole="button"
-      accessibilityLabel="InternMatch brand logo"
+      accessibilityLabel={t('components.logoA11y', { defaultValue: 'InternMatch brand logo' })}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <Text style={styles.brandText}>InternMatch</Text>

@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -26,6 +27,7 @@ const MAX_POLL_DURATION_MS = 60000;
 const POLL_INTERVAL_MS = 1500;
 
 export default function CVUploadScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState(null);
   const [status, setStatus] = useState('idle'); // 'idle' | 'uploading' | 'queued' | 'processing' | 'completed' | 'failed' | 'timeout'
   const [progressPercent, setProgressPercent] = useState(0);
@@ -77,7 +79,7 @@ export default function CVUploadScreen({ route, navigation }) {
       const fileAsset = result.assets[0];
 
       if (fileAsset.size && fileAsset.size > 10 * 1024 * 1024) {
-        Alert.alert('File too large', 'Please choose a document smaller than 10MB.');
+        Alert.alert(t('cvUpload.fileTooLargeTitle'), t('cvUpload.fileTooLargeMsg'));
         return;
       }
 
@@ -85,8 +87,7 @@ export default function CVUploadScreen({ route, navigation }) {
       await startUploadAndPolling(fileAsset);
     } catch (err) {
       console.warn('Document picker error:', err);
-      const msg = err instanceof Error ? err.message : 'Unable to select document.';
-      setErrorMessage(msg);
+      setErrorMessage('CV_PICKER_ERROR');
       setStatus('failed');
       haptics.error();
     }
@@ -115,8 +116,7 @@ export default function CVUploadScreen({ route, navigation }) {
     } catch (err) {
       if (!isMountedRef.current) return;
       console.warn('CV upload failed:', err);
-      const msg = err instanceof Error ? err.message : 'CV upload failed. Please check connection.';
-      setErrorMessage(msg);
+      setErrorMessage('CV_UPLOAD_FAILED');
       setStatus('failed');
       haptics.error();
     }
@@ -136,7 +136,7 @@ export default function CVUploadScreen({ route, navigation }) {
 
     if (Date.now() - startTimeRef.current > MAX_POLL_DURATION_MS) {
       setStatus('timeout');
-      setErrorMessage('Processing is taking longer than expected. You can check your profile later.');
+      setErrorMessage('CV_TIMEOUT');
       clearPolling();
       return;
     }
@@ -168,7 +168,7 @@ export default function CVUploadScreen({ route, navigation }) {
           console.warn('Profile refresh after CV completion failed:', profileErr);
           if (isMountedRef.current) {
             setStatus('failed');
-            setErrorMessage('CV processing completed, but the updated profile could not be loaded. Please try again.');
+            setErrorMessage('PROFILE_REFRESH_FAILED');
             haptics.error();
           }
           return;
@@ -182,8 +182,7 @@ export default function CVUploadScreen({ route, navigation }) {
         clearPolling();
         setStatus('failed');
         setProgressPercent(100);
-        const serverError = job.error || 'CV processing failed on the server.';
-        setErrorMessage(serverError);
+        setErrorMessage('CV_EXTRACTION_FAILED');
         haptics.error();
       }
     } catch (err) {
@@ -193,7 +192,7 @@ export default function CVUploadScreen({ route, navigation }) {
 
       if (err instanceof ApiError && err.status === 401) {
         setStatus('failed');
-        setErrorMessage('Session expired. Please sign in again.');
+        setErrorMessage('UNAUTHENTICATED');
         haptics.error();
       } else {
         // Transient network failure; schedule retry
@@ -223,7 +222,7 @@ export default function CVUploadScreen({ route, navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="CV Upload & Analysis"
+        title={t('cvUpload.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -234,7 +233,7 @@ export default function CVUploadScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.subtitle}>
-          Upload your PDF or Word resume. Our AI extracts your skills, education, and experience to calculate personalized internship matches.
+          {t('cvUpload.subtitle')}
         </Text>
 
         {/* Upload Drop Zone */}
@@ -243,7 +242,7 @@ export default function CVUploadScreen({ route, navigation }) {
             style={styles.dropZone}
             onPress={pickFileAndUpload}
             accessibilityRole="button"
-            accessibilityLabel="Select document to upload"
+            accessibilityLabel={t('cvUpload.dropZoneDefault')}
             activeOpacity={0.7}
           >
             <Ionicons
@@ -252,9 +251,9 @@ export default function CVUploadScreen({ route, navigation }) {
               color={colors.accent || colors.teal}
             />
             <Text style={styles.dropText}>
-              {selectedFile ? selectedFile.name : 'Tap to select PDF or DOCX (max 10MB)'}
+              {selectedFile ? selectedFile.name : t('cvUpload.dropZoneDefault')}
             </Text>
-            <Text style={styles.dropHint}>Supports .pdf and .docx documents</Text>
+            <Text style={styles.dropHint}>{t('cvUpload.dropHint')}</Text>
           </TouchableOpacity>
         )}
 
@@ -270,10 +269,10 @@ export default function CVUploadScreen({ route, navigation }) {
             </View>
             <Text style={styles.workingTitle}>
               {status === 'uploading'
-                ? 'Uploading Document...'
+                ? t('cvUpload.uploading')
                 : status === 'queued'
-                ? 'Queued for AI Processing...'
-                : 'Extracting Profile & Skills...'}
+                ? t('cvUpload.queued')
+                : t('cvUpload.extracting')}
             </Text>
             <Text style={styles.workingFileName}>{selectedFile?.name}</Text>
 
@@ -283,16 +282,16 @@ export default function CVUploadScreen({ route, navigation }) {
             <Text style={styles.percentText}>{progressPercent}%</Text>
 
             <Text style={styles.workingNotice}>
-              Gemini is validating and structuring your candidate profile. This typically takes 10-20 seconds.
+              {t('cvUpload.geminiNotice')}
             </Text>
 
             <TouchableOpacity
               style={styles.cancelBtn}
               onPress={handleStopPolling}
               accessibilityRole="button"
-              accessibilityLabel="Cancel Polling"
+              accessibilityLabel={t('cvUpload.cancelPolling')}
             >
-              <Text style={styles.cancelText}>Cancel Polling</Text>
+              <Text style={styles.cancelText}>{t('cvUpload.cancelPolling')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -305,13 +304,13 @@ export default function CVUploadScreen({ route, navigation }) {
               size={48}
               color={colors.success || '#10B981'}
             />
-            <Text style={styles.successTitle}>CV Analyzed Successfully!</Text>
+            <Text style={styles.successTitle}>{t('cvUpload.successTitle')}</Text>
             <Text style={styles.successDescription}>
-              Your candidate profile, verified skills, and background have been extracted and embedded for matching.
+              {t('cvUpload.successDescription')}
             </Text>
 
             <GradientButton
-              title="View Updated Profile"
+              title={t('cvUpload.viewProfile')}
               color={colors.accent || colors.teal}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
               style={{ marginTop: spacing.xl, width: '100%' }}
@@ -321,9 +320,9 @@ export default function CVUploadScreen({ route, navigation }) {
               style={styles.secondaryBtn}
               onPress={handleFinish}
               accessibilityRole="button"
-              accessibilityLabel="Back to Dashboard"
+              accessibilityLabel={t('cvUpload.backToDashboard')}
             >
-              <Text style={styles.secondaryBtnText}>Back to Dashboard</Text>
+              <Text style={styles.secondaryBtnText}>{t('cvUpload.backToDashboard')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -336,13 +335,23 @@ export default function CVUploadScreen({ route, navigation }) {
               size={48}
               color={colors.danger || '#EF4444'}
             />
-            <Text style={styles.errorTitle}>Analysis Could Not Complete</Text>
+            <Text style={styles.errorTitle}>{t('cvUpload.errorTitle')}</Text>
             <Text style={styles.errorMessage}>
-              {errorMessage || 'An error occurred during CV analysis.'}
+              {errorMessage === 'CV_TIMEOUT'
+                ? t('cvUpload.timeoutMessage')
+                : errorMessage === 'UNAUTHENTICATED'
+                  ? t('errors.unauthenticated')
+                  : errorMessage === 'CV_PICKER_ERROR'
+                    ? t('cvUpload.errors.selectDoc', { defaultValue: t('cvUpload.errorTitle') })
+                    : errorMessage === 'CV_EXTRACTION_FAILED'
+                      ? t('cvUpload.errors.serverProcessingFailed', { defaultValue: t('errors.cvUploadFailed') })
+                      : errorMessage === 'PROFILE_REFRESH_FAILED'
+                        ? t('cvUpload.errors.profileLoadFailed', { defaultValue: t('cvUpload.errorTitle') })
+                        : t('errors.cvUploadFailed')}
             </Text>
 
             <GradientButton
-              title="Choose Another Document"
+              title={t('cvUpload.chooseAnother')}
               color={colors.primaryBlue}
               onPress={pickFileAndUpload}
               style={{ marginTop: spacing.xl, width: '100%' }}
@@ -358,11 +367,11 @@ export default function CVUploadScreen({ route, navigation }) {
               size={48}
               color={colors.warning || '#F59E0B'}
             />
-            <Text style={styles.errorTitle}>Processing Still in Progress</Text>
-            <Text style={styles.errorMessage}>{errorMessage}</Text>
+            <Text style={styles.errorTitle}>{t('cvUpload.timeoutTitle')}</Text>
+            <Text style={styles.errorMessage}>{t('cvUpload.timeoutMessage')}</Text>
 
             <GradientButton
-              title="Check Profile"
+              title={t('cvUpload.checkProfile')}
               color={colors.accent || colors.teal}
               onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
               style={{ marginTop: spacing.xl, width: '100%' }}
@@ -372,9 +381,9 @@ export default function CVUploadScreen({ route, navigation }) {
               style={styles.secondaryBtn}
               onPress={pickFileAndUpload}
               accessibilityRole="button"
-              accessibilityLabel="Upload Again"
+              accessibilityLabel={t('cvUpload.uploadAgain')}
             >
-              <Text style={styles.secondaryBtnText}>Upload Again</Text>
+              <Text style={styles.secondaryBtnText}>{t('cvUpload.uploadAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}

@@ -617,3 +617,924 @@ def test_get_match_explanation_rate_limited_returns_429(client: TestClient, monk
     data = response.json()
     assert data["detail"]["error"]["code"] == "RATE_LIMITED"
     assert llm_called == []
+
+
+# ---------------------------------------------------------------------------
+# 3. LOCALE-SAFE WHY YOU MATCH TESTS (GATE 2.38F-C5E2)
+# ---------------------------------------------------------------------------
+
+
+class FakeMatchExplanationRedis:
+    """In-memory Redis fake for match explanation locale caching tests."""
+
+    def __init__(self, should_fail: bool = False):
+        self.store = {}
+        self.ttls = {}
+        self.should_fail = should_fail
+        self.set_calls = []
+        self.delete_calls = []
+
+    def get(self, key: str):
+        if self.should_fail:
+            import redis
+            raise redis.ConnectionError("Simulated Redis connection failure")
+        return self.store.get(key)
+
+    def set(self, key: str, value: str, ex=None, nx=False):
+        if self.should_fail:
+            import redis
+            raise redis.ConnectionError("Simulated Redis connection failure")
+        self.set_calls.append({"key": key, "value": value, "ex": ex, "nx": nx})
+        if nx and key in self.store:
+            return False
+        self.store[key] = str(value)
+        if ex:
+            self.ttls[key] = ex
+        return True
+
+    def delete(self, *keys: str):
+        if self.should_fail:
+            import redis
+            raise redis.ConnectionError("Simulated Redis connection failure")
+        deleted = 0
+        for k in keys:
+            self.delete_calls.append(k)
+            if k in self.store:
+                del self.store[k]
+                deleted += 1
+        return deleted
+
+
+def test_get_match_explanation_backward_compatible_default_locale(
+    client: TestClient, monkeypatch
+):
+    """Verify endpoint without content_locale defaults to English behavior."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Candidate")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=85,
+            skill_score=85,
+            vector_score=85,
+            attribute_score=85,
+            why_you_match="Persisted English narrative.",
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": [],
+                "summary": "Persisted English summary.",
+                "recommendations": ["Persisted English Rec"],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    # 1. No content_locale parameter
+    res_default = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_default.status_code == 200
+    assert res_default.json()["why_you_match"] == "Persisted English narrative."
+
+    # 2. Explicit content_locale=en
+    res_en = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=en",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_en.status_code == 200
+    assert res_en.json()["why_you_match"] == "Persisted English narrative."
+    gemini_mock.assert_not_called()
+
+    # Malformed recommendations must invalidate the canonical English cache.
+    repair_output = LLMMatchExplanation(
+        why_you_match="Regenerated English narrative.",
+        skill_gap_summary="Regenerated English summary.",
+        recommendations=["Regenerated English Rec"],
+    )
+    gemini_mock.return_value = repair_output
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Match).filter_by(id=target_match_id).first()
+        persisted.skill_gap_analysis = {
+            **persisted.skill_gap_analysis,
+            "recommendations": "malformed-not-a-list",
+        }
+        db.commit()
+    finally:
+        db.close()
+
+    res_repaired = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=en",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_repaired.status_code == 200
+    assert res_repaired.json()["why_you_match"] == repair_output.why_you_match
+    assert (
+        res_repaired.json()["skill_gap_analysis"]["recommendations"]
+        == repair_output.recommendations
+    )
+    assert gemini_mock.call_count == 1
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Match).filter_by(id=target_match_id).first()
+        assert persisted.skill_gap_analysis["recommendations"] == repair_output.recommendations
+    finally:
+        db.close()
+
+
+def test_get_match_explanation_invalid_locale_returns_422(client: TestClient):
+    """Verify non-supported content_locale returns HTTP 422."""
+    user_id = uuid4()
+    match_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    response = client.get(
+        f"/api/v1/matches/{match_id}/explanation?content_locale=fr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+    response_malformed = client.get(
+        f"/api/v1/matches/{match_id}/explanation?content_locale=invalid",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response_malformed.status_code == 422
+
+
+def test_get_match_explanation_tr_does_not_use_english_db_cache_and_does_not_mutate_db(
+    client: TestClient, monkeypatch
+):
+    """
+    CRITICAL INVARIANTS:
+    1. Turkish request must NOT treat existing English DB narrative as a cache hit.
+    2. Turkish generation must NOT overwrite match.why_you_match in DB.
+    3. Turkish generation must NOT overwrite skill_gap_analysis summary/recs in DB.
+    4. matching_skills and missing_skills remain strictly canonical technical identifiers.
+    """
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Jane Doe")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="AI Engineer Intern",
+            company="NexaAI",
+            location="Istanbul, Turkey",
+            work_type="hybrid",
+            description="Build LLMs.",
+            required_skills=["Python", "PyTorch"],
+            preferred_skills=["Docker"],
+        )
+        db.add(listing)
+        db.flush()
+
+        canonical_matching = ["Python", "PyTorch"]
+        canonical_missing = ["Docker"]
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=90,
+            skill_score=95,
+            vector_score=85,
+            attribute_score=90,
+            why_you_match="Canonical English why you match narrative.",
+            skill_gap_analysis={
+                "matching_skills": canonical_matching,
+                "missing_skills": canonical_missing,
+                "summary": "Canonical English summary.",
+                "recommendations": ["Canonical English Rec 1"],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    mock_llm_output = LLMMatchExplanation(
+        why_you_match="Python ve PyTorch deneyiminiz NexaAI icin mukemmel bir eslesmedir.",
+        skill_gap_summary="Docker becerisinde eksiklik var.",
+        recommendations=["Temel Docker egitimini tamamlayin."],
+    )
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    # Response contains Turkish localized narrative
+    assert data["why_you_match"] == mock_llm_output.why_you_match
+    assert data["skill_gap_analysis"]["summary"] == mock_llm_output.skill_gap_summary
+    assert data["skill_gap_analysis"]["recommendations"] == mock_llm_output.recommendations
+
+    # Response contains canonical skills & score
+    assert data["overall_score"] == 90
+    assert data["matching_skills"] == canonical_matching
+    assert data["missing_skills"] == canonical_missing
+
+    # PROOF: DB was NOT mutated by TR generation!
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Match).filter_by(id=target_match_id).first()
+        assert persisted.why_you_match == "Canonical English why you match narrative."
+        assert persisted.skill_gap_analysis["summary"] == "Canonical English summary."
+        assert persisted.skill_gap_analysis["recommendations"] == ["Canonical English Rec 1"]
+        assert persisted.skill_gap_analysis["matching_skills"] == canonical_matching
+        assert persisted.skill_gap_analysis["missing_skills"] == canonical_missing
+    finally:
+        db.close()
+
+
+def test_get_match_explanation_ar_does_not_use_english_db_cache_and_does_not_mutate_db(
+    client: TestClient, monkeypatch
+):
+    """
+    Verify Arabic request generates and returns Arabic narrative without mutating DB.
+    """
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Ahmad")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="AlphaCorp",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+            preferred_skills=["Redis"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=88,
+            skill_score=90,
+            vector_score=85,
+            attribute_score=90,
+            why_you_match="English DB narrative.",
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": ["Redis"],
+                "summary": "English DB summary.",
+                "recommendations": ["English Rec 1"],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    mock_llm_output = LLMMatchExplanation(
+        why_you_match="\u0646\u0635 \u0639\u0631\u0628\u064a.",
+        skill_gap_summary="\u0645\u0644\u062e\u0635 \u0639\u0631\u0628\u064a.",
+        recommendations=["\u062a\u0648\u0635\u064a\u0629 \u0639\u0631\u0628\u064a\u0629."],
+    )
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=ar",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["why_you_match"] == mock_llm_output.why_you_match
+    assert data["skill_gap_analysis"]["summary"] == mock_llm_output.skill_gap_summary
+    assert data["matching_skills"] == ["Python"]
+    assert data["missing_skills"] == ["Redis"]
+
+    # PROOF: DB was NOT mutated by AR generation!
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Match).filter_by(id=target_match_id).first()
+        assert persisted.why_you_match == "English DB narrative."
+        assert persisted.skill_gap_analysis["summary"] == "English DB summary."
+    finally:
+        db.close()
+
+
+def test_get_match_explanation_tr_redis_cache_hit_avoids_second_gemini_call(
+    client: TestClient, monkeypatch
+):
+    """Verify Turkish cache hit returns cached translation without second Gemini call."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Student")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=80,
+            skill_score=80,
+            vector_score=80,
+            attribute_score=80,
+            why_you_match="English text",
+            skill_gap_analysis={"matching_skills": ["Python"], "missing_skills": []},
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    mock_llm_output = LLMMatchExplanation(
+        why_you_match="Turkce aciklama.",
+        skill_gap_summary="Eksik beceri yok.",
+        recommendations=["Ileri konular."],
+    )
+    mock_client = _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
+
+    # 1. First call triggers Gemini
+    res1 = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res1.status_code == 200
+    assert mock_client.models.generate_content.call_count == 1
+
+    # 2. Second call uses Redis cache (Gemini not called again)
+    res2 = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res2.status_code == 200
+    assert res2.json()["why_you_match"] == "Turkce aciklama."
+    assert mock_client.models.generate_content.call_count == 1
+
+
+def test_get_match_explanation_tr_and_ar_cache_keys_are_independent(
+    client: TestClient, monkeypatch
+):
+    """Verify Turkish and Arabic maintain isolated Redis cache keys."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Student")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=80,
+            skill_score=80,
+            vector_score=80,
+            attribute_score=80,
+            why_you_match="English text",
+            skill_gap_analysis={"matching_skills": ["Python"], "missing_skills": []},
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    def dynamic_mock_gemini(
+        profile, internship, overall_score, matching_skills, missing_skills, **kwargs
+    ):
+        loc = kwargs.get("content_locale", "en")
+        if loc == "tr":
+            return LLMMatchExplanation(
+                why_you_match="Turkce metin",
+                skill_gap_summary="Turkce ozet",
+                recommendations=[],
+            )
+        elif loc == "ar":
+            return LLMMatchExplanation(
+                why_you_match="\u0646\u0635 \u0639\u0631\u0628\u064a",
+                skill_gap_summary="\u0645\u0644\u062e\u0635 \u0639\u0631\u0628\u064a",
+                recommendations=[],
+            )
+        return LLMMatchExplanation(
+            why_you_match="English text",
+            skill_gap_summary="English summary",
+            recommendations=[],
+        )
+
+    gemini_mock = MagicMock(side_effect=dynamic_mock_gemini)
+
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    res_tr = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_tr.status_code == 200
+    assert res_tr.json()["why_you_match"] == "Turkce metin"
+
+    res_ar = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=ar",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_ar.status_code == 200
+    assert res_ar.json()["why_you_match"] == "\u0646\u0635 \u0639\u0631\u0628\u064a"
+    assert gemini_mock.call_count == 2
+
+    # Second Arabic request must hit Redis and must not call Gemini again.
+    res_ar_cached = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=ar",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res_ar_cached.status_code == 200
+    assert res_ar_cached.json()["why_you_match"] == res_ar.json()["why_you_match"]
+    assert gemini_mock.call_count == 2
+
+
+    # Verify 2 distinct content cache keys exist in Redis store (1 for TR, 1 for AR)
+    content_cache_keys = [
+        k for k in fake_redis.store.keys()
+        if ":lock:" not in k and (":tr:" in k or ":ar:" in k)
+    ]
+    assert len(content_cache_keys) == 2
+    assert any(":tr:" in k for k in content_cache_keys)
+    assert any(":ar:" in k for k in content_cache_keys)
+
+
+def test_get_match_explanation_redis_unavailable_fallback_to_english_and_zero_gemini(
+    client: TestClient, monkeypatch
+):
+    """
+    CRITICAL COST SAFETY: When Redis fails, return canonical English DB fallback
+    if available, and DO NOT make uncached Gemini calls.
+    """
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Student")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=85,
+            skill_score=85,
+            vector_score=85,
+            attribute_score=85,
+            why_you_match="Canonical English DB Fallback Narrative.",
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": [],
+                "summary": "Canonical English DB Summary.",
+                "recommendations": ["Canonical English Rec."],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_failing_redis = FakeMatchExplanationRedis(should_fail=True)
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_failing_redis,
+    )
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["why_you_match"] == "Canonical English DB Fallback Narrative."
+    assert data["skill_gap_analysis"]["summary"] == "Canonical English DB Summary."
+    gemini_mock.assert_not_called()
+
+
+def test_get_match_explanation_active_failure_sentinel_prevents_gemini_retry(
+    client: TestClient, monkeypatch
+):
+    """Verify active failure sentinel in Redis skips Gemini and returns English fallback."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Student")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=85,
+            skill_score=85,
+            vector_score=85,
+            attribute_score=85,
+            why_you_match="English DB Narrative.",
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": [],
+                "summary": "English DB Summary.",
+                "recommendations": [],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    from app.services.match_explanation import (
+        CACHE_VERSION,
+        compute_match_explanation_context_hash,
+    )
+    exact_hash = compute_match_explanation_context_hash(
+        match_id=target_match_id,
+        overall_score=85,
+        matching_skills=["Python"],
+        missing_skills=[],
+        candidate_name="Student",
+        internship_title="Intern",
+        internship_company="Co",
+        internship_location="Remote (remote)",
+        internship_description="Dev.",
+        internship_required_skills=["Python"],
+        internship_preferred_skills=[],
+    )
+    sentinel_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:"
+        f"failure:{target_match_id}:tr:{exact_hash}"
+    )
+    fake_redis.store[sentinel_key] = "1"
+
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["why_you_match"] == "English DB Narrative."
+    gemini_mock.assert_not_called()
+
+
+def test_get_match_explanation_stampede_lock_loser_does_not_call_gemini(
+    client: TestClient, monkeypatch
+):
+    """Verify concurrent request that loses stampede lock does not call Gemini."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Student")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=85,
+            skill_score=85,
+            vector_score=85,
+            attribute_score=85,
+            why_you_match="English DB Narrative.",
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": [],
+                "summary": "English DB Summary.",
+                "recommendations": [],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    from app.services.match_explanation import (
+        CACHE_VERSION,
+        compute_match_explanation_context_hash,
+    )
+    exact_hash = compute_match_explanation_context_hash(
+        match_id=target_match_id,
+        overall_score=85,
+        matching_skills=["Python"],
+        missing_skills=[],
+        candidate_name="Student",
+        internship_title="Intern",
+        internship_company="Co",
+        internship_location="Remote (remote)",
+        internship_description="Dev.",
+        internship_required_skills=["Python"],
+        internship_preferred_skills=[],
+    )
+    # Lock is held
+    lock_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:"
+        f"lock:{target_match_id}:tr:{exact_hash}"
+    )
+    fake_redis.store[lock_key] = "1"
+
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["why_you_match"] == "English DB Narrative."
+    gemini_mock.assert_not_called()
+
+
+def test_get_match_explanation_corrupted_redis_cache_is_discarded_and_repaired(
+    client: TestClient, monkeypatch
+):
+    """Verify malformed JSON in Redis is safely deleted and recovered cleanly."""
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(id=uuid4(), user_id=user_id, full_name="Student")
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Intern",
+            company="Co",
+            location="Remote",
+            work_type="remote",
+            description="Dev.",
+            required_skills=["Python"],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=85,
+            skill_score=85,
+            vector_score=85,
+            attribute_score=85,
+            why_you_match="English DB Narrative.",
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": [],
+                "summary": "English DB Summary.",
+                "recommendations": [],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+    from app.services.match_explanation import (
+        CACHE_VERSION,
+        compute_match_explanation_context_hash,
+    )
+    exact_hash = compute_match_explanation_context_hash(
+        match_id=target_match_id,
+        overall_score=85,
+        matching_skills=["Python"],
+        missing_skills=[],
+        candidate_name="Student",
+        internship_title="Intern",
+        internship_company="Co",
+        internship_location="Remote (remote)",
+        internship_description="Dev.",
+        internship_required_skills=["Python"],
+        internship_preferred_skills=[],
+    )
+    cache_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:"
+        f"{target_match_id}:tr:{exact_hash}"
+    )
+    fake_redis.store[cache_key] = "MALFORMED_JSON_STRING {{"
+
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    mock_llm_output = LLMMatchExplanation(
+        why_you_match="Repaired Turkish narrative.",
+        skill_gap_summary="Repaired summary.",
+        recommendations=["Repaired Rec"],
+    )
+    _mock_gemini_explanation_generate(monkeypatch, mock_llm_output)
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=tr",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["why_you_match"] == "Repaired Turkish narrative."
+
+
+def test_match_explanation_context_hash_changes_when_authoritative_context_changes():
+    from app.services.match_explanation import compute_match_explanation_context_hash
+
+    match_id = uuid4()
+    first_hash = compute_match_explanation_context_hash(
+        match_id=match_id,
+        overall_score=85,
+        matching_skills=["Python"],
+        missing_skills=["Redis"],
+        internship_description="Build backend APIs.",
+    )
+    identical_hash = compute_match_explanation_context_hash(
+        match_id=match_id,
+        overall_score=85,
+        matching_skills=["Python"],
+        missing_skills=["Redis"],
+        internship_description="Build backend APIs.",
+    )
+    changed_hash = compute_match_explanation_context_hash(
+        match_id=match_id,
+        overall_score=85,
+        matching_skills=["Python"],
+        missing_skills=["Redis"],
+        internship_description="Build backend APIs and Redis systems.",
+    )
+
+    assert first_hash == identical_hash
+    assert first_hash != changed_hash

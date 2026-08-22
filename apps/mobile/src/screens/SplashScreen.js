@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { gradientColors, colors } from '../theme/colors';
 import { getCurrentSession, signOut } from '../services/auth';
 import { syncAuthenticatedUser, upsertProfile, ApiError } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 
 export default function SplashScreen({ navigation }) {
+  const { t } = useTranslation();
   const { refreshProfile, setProfile, clearProfile } = useProfile();
   const [checking, setChecking] = useState(true);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -94,20 +96,22 @@ export default function SplashScreen({ navigation }) {
           <Text style={styles.logo}>InternMatch</Text>
           <Ionicons name="locate" size={26} color={colors.white} style={{ marginLeft: 6 }} />
         </View>
-        <Text style={styles.tagline}>Right Internship, Bright Future</Text>
+        <Text style={styles.tagline}>Right internship, bright future</Text>
         {checking && !connectionError && (
           <ActivityIndicator size="small" color={colors.white} style={{ marginTop: 24 }} />
         )}
 
         {connectionError && (
           <View style={styles.retryBox}>
-            <Text style={styles.retryText}>We couldn't reach InternMatch services.</Text>
-            <Text style={styles.retrySubtext}>Your signed-in session is preserved.</Text>
+            <Text style={styles.retryText}>{t('splash.reachServices')}</Text>
+            <Text style={styles.retrySubtext}>{t('splash.sessionPreserved')}</Text>
             <TouchableOpacity
               style={styles.retryButton}
               onPress={() => setRetryNonce((value) => value + 1)}
+              accessibilityRole="button"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.retryButtonText}>Try Again</Text>
+              <Text style={styles.retryButtonText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </View>
         )}

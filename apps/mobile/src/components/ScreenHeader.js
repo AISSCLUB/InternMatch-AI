@@ -4,6 +4,7 @@ import BackButton from './BackButton';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { useLocalization } from '../localization/LocalizationContext';
 
 export default function ScreenHeader({
   title,
@@ -18,18 +19,20 @@ export default function ScreenHeader({
   bordered = false,
 }) {
   const isStart = alignment === 'start';
+  const { isRTL } = useLocalization();
 
   return (
     <View
       style={[
         styles.header,
+        isRTL && styles.headerRTL,
         bordered && styles.bordered,
         style,
       ]}
     >
       {/* Left Slot: Back button or empty spacer */}
       {showBack ? (
-        <View style={styles.leftSlot}>
+        <View style={[styles.leftSlot, isRTL && styles.leftSlotRTL]}>
           <BackButton navigation={navigation} onPress={onBackPress} />
         </View>
       ) : isStart ? null : (
@@ -41,6 +44,7 @@ export default function ScreenHeader({
         style={[
           styles.titleContainer,
           isStart && styles.titleContainerStart,
+          isStart && isRTL && styles.titleContainerStartRTL,
           !showBack && isStart && styles.titleContainerStartNoBack,
         ]}
       >
@@ -49,6 +53,8 @@ export default function ScreenHeader({
             style={[
               styles.title,
               isStart && styles.titleStart,
+              isRTL && styles.titleRTL,
+              isStart && isRTL && styles.titleStartRTL,
               titleStyle,
             ]}
             numberOfLines={1}
@@ -62,6 +68,8 @@ export default function ScreenHeader({
             style={[
               styles.subtitle,
               isStart && styles.subtitleStart,
+              isRTL && styles.subtitleRTL,
+              isStart && isRTL && styles.subtitleStartRTL,
             ]}
             numberOfLines={1}
           >
@@ -72,9 +80,9 @@ export default function ScreenHeader({
 
       {/* Right Slot: Custom action or balancing spacer */}
       {rightAction ? (
-        <View style={styles.rightSlot}>{rightAction}</View>
+        <View style={[styles.rightSlot, isRTL && styles.rightSlotRTL]}>{rightAction}</View>
       ) : isStart ? null : (
-        <View style={styles.rightSlotSpacer} />
+        <View style={[styles.rightSlotSpacer, isRTL && styles.rightSlotSpacerRTL]} />
       )}
     </View>
   );
@@ -89,6 +97,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screenHorizontalPadding,
     backgroundColor: colors.background || colors.screenBg,
   },
+  headerRTL: {
+    flexDirection: 'row-reverse',
+  },
   bordered: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.glass?.borderHairline || colors.borderSubtle || colors.border,
@@ -99,6 +110,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     marginEnd: spacing.xs,
+  },
+  leftSlotRTL: {
+    alignItems: 'flex-end',
+    marginEnd: 0,
+    marginStart: spacing.xs,
   },
   titleContainer: {
     flex: 1,
@@ -113,6 +129,9 @@ const styles = StyleSheet.create({
   titleContainerStartNoBack: {
     paddingStart: 0,
   },
+  titleContainerStartRTL: {
+    alignItems: 'flex-end',
+  },
   rightSlot: {
     minWidth: spacing.minimumTouchTarget,
     minHeight: spacing.minimumTouchTarget,
@@ -120,18 +139,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginStart: spacing.xs,
   },
+  rightSlotRTL: {
+    alignItems: 'flex-start',
+    marginStart: 0,
+    marginEnd: spacing.xs,
+  },
   rightSlotSpacer: {
     width: spacing.minimumTouchTarget,
     height: spacing.minimumTouchTarget,
     marginStart: spacing.xs,
+  },
+  rightSlotSpacerRTL: {
+    marginStart: 0,
+    marginEnd: spacing.xs,
   },
   title: {
     ...typography.screenTitle,
     color: colors.textPrimary || colors.textDark,
     textAlign: 'center',
   },
+  titleRTL: {
+    writingDirection: 'rtl',
+  },
   titleStart: {
     textAlign: 'left',
+  },
+  titleStartRTL: {
+    textAlign: 'right',
   },
   subtitle: {
     ...typography.caption,
@@ -139,7 +173,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xxs,
   },
+  subtitleRTL: {
+    writingDirection: 'rtl',
+  },
   subtitleStart: {
     textAlign: 'left',
+  },
+  subtitleStartRTL: {
+    textAlign: 'right',
   },
 });

@@ -1,4 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { getLocalizedErrorMessage } from '../localization/errorMessages';
+import { useLocalization } from '../localization/LocalizationContext';
 import {
   View,
   Text,
@@ -31,7 +34,9 @@ import { useMatchCalculation } from '../hooks/useMatchCalculation';
 
 export default function HomeScreen({ navigation }) {
   const { profile, refreshProfile } = useProfile();
-  const displayName = profile?.full_name?.trim() || 'Student';
+  const { t } = useTranslation();
+  const { isRTL } = useLocalization();
+  const displayName = profile?.full_name?.trim() || t('home.studentFallback');
 
   const scrollViewRef = useRef(null);
   useTabScroll('Home', scrollViewRef);
@@ -50,6 +55,8 @@ export default function HomeScreen({ navigation }) {
     startCalculation,
     cancelCalculation,
   } = useMatchCalculation();
+  const calculationErrorMessage = calculationError ? getLocalizedErrorMessage({ code: calculationError }, t) : null;
+  const matchesErrorMessage = matchesError ? getLocalizedErrorMessage({ code: matchesError }, t) : null;
 
   // Derived from real backend profile state
   const hasAnalyzedCV = Boolean(
@@ -71,8 +78,8 @@ export default function HomeScreen({ navigation }) {
       setMatches(res.matches || []);
     } catch (err) {
       console.warn('Failed to load matches on Home:', err);
-      const msg = err instanceof Error ? err.message : 'Unable to load matches.';
-      setMatchesError(msg);
+      const errorCode = 'MATCHES_LOAD_FAILED';
+      setMatchesError(errorCode);
     } finally {
       setMatchesLoading(false);
     }
@@ -131,9 +138,17 @@ export default function HomeScreen({ navigation }) {
         {/* Sequence 1: Greeting */}
         <Reveal delay={0}>
           <View style={styles.headerBlock}>
-            <Text style={styles.hello} numberOfLines={2}>
-              Hello, {displayName} 👋
-            </Text>
+            {isRTL ? (
+              <Text style={[styles.hello, styles.rtlText]} numberOfLines={2}>
+                <Text style={styles.rtlWriting}>{t('home.greetingHello', { defaultValue: 'أهلاً' })}, </Text>
+                <Text style={{ writingDirection: 'ltr' }}>{displayName}</Text>
+                <Text> {'\u{1F44B}'}</Text>
+              </Text>
+            ) : (
+              <Text style={styles.hello} numberOfLines={2}>
+                {t('home.greeting', { name: displayName })} {'\u{1F44B}'}
+              </Text>
+            )}
           </View>
         </Reveal>
 
@@ -156,12 +171,12 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.uploadIconCircle}>
                   <Ionicons name="arrow-up" size={22} color={colors.accent || colors.teal} />
                 </View>
-                <Text style={styles.uploadTitle}>Upload your CV and let the matches begin.</Text>
-                <Text style={styles.uploadSubtitle}>
-                  Drag and drop or select a PDF — AI analyzes your skills and matches you with internships.
+                <Text style={[styles.uploadTitle, isRTL && styles.rtlWriting]}>{t('home.upload.title')}</Text>
+                <Text style={[styles.uploadSubtitle, isRTL && styles.rtlWriting]}>
+                  {t('home.upload.subtitle')}
                 </Text>
                 <GradientButton
-                  title="Upload CV"
+                  title={t('home.upload.button')}
                   color={colors.accent || colors.teal}
                   onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}
                   style={{ marginTop: spacing.lg, width: '100%' }}
@@ -171,24 +186,24 @@ export default function HomeScreen({ navigation }) {
 
             {/* Sequence 4: Recommendation browsing card */}
             <Reveal delay={motionTokens.stagger.slow}>
-              <Text style={styles.sectionEyebrow}>RECOMMENDATIONS FOR YOU</Text>
+              <Text style={[styles.sectionEyebrow, isRTL && styles.rtlText]}>{t('home.recommendations.eyebrow')}</Text>
               <Card style={styles.infoCard} padding="md">
-                <Text style={styles.infoTitle}>You can browse even without a CV.</Text>
-                <Text style={styles.infoSubtitle}>
-                  Discover open internships across companies. Once you upload your CV, personalized compatibility fit scores will be calculated automatically.
+                <Text style={[styles.infoTitle, isRTL && styles.rtlText]}>{t('home.recommendations.title')}</Text>
+                <Text style={[styles.infoSubtitle, isRTL && styles.rtlText]}>
+                  {t('home.recommendations.subtitle')}
                 </Text>
                 <TouchableOpacity
-                  style={styles.browseButton}
+                  style={[styles.browseButton, isRTL && styles.rowRTL]}
                   onPress={() => navigation.navigate('MainTabs', { screen: 'Internships' })}
                   accessibilityRole="button"
-                  accessibilityLabel="Explore Internship Catalog"
+                  accessibilityLabel={t('home.recommendations.explore')}
                 >
-                  <Text style={styles.browseButtonText}>Explore Internship Catalog</Text>
+                  <Text style={[styles.browseButtonText, isRTL && styles.rtlText]}>{t('home.recommendations.explore')}</Text>
                   <Ionicons
-                    name="arrow-forward"
+                    name={isRTL ? 'arrow-back' : 'arrow-forward'}
                     size={16}
                     color={colors.accentStrong || colors.tealDark}
-                    style={styles.browseIcon}
+                    style={[styles.browseIcon, isRTL && styles.browseIconRTL]}
                   />
                 </TouchableOpacity>
               </Card>
@@ -199,17 +214,17 @@ export default function HomeScreen({ navigation }) {
             {/* Sequence 3: CV Analyzed Status Card */}
             <Reveal delay={motionTokens.stagger.normal}>
               <Card style={styles.statusCard} padding="md">
-                <Text style={styles.statusLabel}>CV STATUS</Text>
-                <Text style={styles.statusTitle}>Your profile has been analyzed.</Text>
-                <View style={styles.statusFileRow}>
-                  <Text style={styles.statusFileName}>CV Document</Text>
+                <Text style={[styles.statusLabel, isRTL && styles.rtlText]}>{t('home.cvStatus.eyebrow')}</Text>
+                <Text style={[styles.statusTitle, isRTL && styles.rtlText]}>{t('home.cvStatus.analyzed')}</Text>
+                <View style={[styles.statusFileRow, isRTL && styles.rowRTL]}>
+                  <Text style={[styles.statusFileName, isRTL && styles.rtlText]}>{t('home.cvStatus.document')}</Text>
                   <TouchableOpacity
                     onPress={() => navigation.navigate('CVUpload', { origin: 'Home' })}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     accessibilityRole="button"
-                    accessibilityLabel="Reload CV Document"
+                    accessibilityLabel={t('home.cvStatus.reloadA11y')}
                   >
-                    <Text style={styles.reloadLink}>Reload</Text>
+                    <Text style={[styles.reloadLink, isRTL && styles.rtlText]}>{t('home.cvStatus.reload')}</Text>
                   </TouchableOpacity>
                 </View>
               </Card>
@@ -217,16 +232,16 @@ export default function HomeScreen({ navigation }) {
 
             {/* Sequence 4: Today's Matchups Section */}
             <Reveal delay={motionTokens.stagger.slow}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionEyebrow}>TODAY'S MATCHUPS</Text>
+              <View style={[styles.sectionHeaderRow, isRTL && styles.rowRTL]}>
+                <Text style={[styles.sectionEyebrow, isRTL && styles.rtlText]}>{t('home.matchups.eyebrow')}</Text>
                 {matches.length > 3 ? (
                   <TouchableOpacity
                     onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     accessibilityRole="button"
-                    accessibilityLabel={`See all ${matches.length} matches`}
+                    accessibilityLabel={t('home.matchups.seeAllA11y', { total: matches.length })}
                   >
-                    <Text style={styles.seeAllLink}>See all ({matches.length})</Text>
+                    <Text style={[styles.seeAllLink, isRTL && styles.rtlText]}>{t('home.matchups.seeAll', { total: matches.length })}</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -236,9 +251,9 @@ export default function HomeScreen({ navigation }) {
                 <AIPulse active={isCalculating} style={styles.calculatingPulseWrap}>
                   <Card style={styles.calculatingCard} padding="md">
                     <ActivityIndicator size="small" color={colors.accent || colors.teal} />
-                    <Text style={styles.calculatingTitle}>Finding Your Matches...</Text>
-                    <Text style={styles.calculatingSubtitle}>
-                      Evaluating skills fit and semantic profile match ({progressPercent}%)
+                    <Text style={[styles.calculatingTitle, isRTL && styles.rtlWriting]}>{t('home.calculation.finding')}</Text>
+                    <Text style={[styles.calculatingSubtitle, isRTL && styles.rtlWriting]}>
+                      {t('home.calculation.evaluating', { progress: progressPercent })}
                     </Text>
                     <View style={styles.progressTrack}>
                       <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
@@ -247,9 +262,9 @@ export default function HomeScreen({ navigation }) {
                       style={styles.cancelCalcBtn}
                       onPress={cancelCalculation}
                       accessibilityRole="button"
-                      accessibilityLabel="Stop Checking"
+                      accessibilityLabel={t('home.calculation.stop')}
                     >
-                      <Text style={styles.cancelCalcText}>Stop Checking</Text>
+                      <Text style={[styles.cancelCalcText, isRTL && styles.rtlWriting]}>{t('home.calculation.stop')}</Text>
                     </TouchableOpacity>
                   </Card>
                 </AIPulse>
@@ -259,14 +274,14 @@ export default function HomeScreen({ navigation }) {
               {calculationError && (
                 <Card style={styles.errorCard} padding="md">
                   <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
-                  <Text style={styles.errorText}>{calculationError}</Text>
+                  <Text style={[styles.errorText, isRTL && styles.rtlWriting]}>{calculationErrorMessage}</Text>
                   <TouchableOpacity
                     style={styles.retryBtn}
                     onPress={handleStartCalculation}
                     accessibilityRole="button"
-                    accessibilityLabel="Try Again"
+                    accessibilityLabel={t('home.calculation.tryAgain')}
                   >
-                    <Text style={styles.retryBtnText}>Try Again</Text>
+                    <Text style={[styles.retryBtnText, isRTL && styles.rtlWriting]}>{t('home.calculation.tryAgain')}</Text>
                   </TouchableOpacity>
                 </Card>
               )}
@@ -275,7 +290,7 @@ export default function HomeScreen({ navigation }) {
               {matchesLoading && !isCalculating && (
                 <View style={styles.centerLoading}>
                   <ActivityIndicator size="small" color={colors.accent || colors.teal} />
-                  <Text style={styles.loadingText}>Loading top matches...</Text>
+                  <Text style={[styles.loadingText, isRTL && styles.rtlWriting]}>{t('home.matches.loading')}</Text>
                 </View>
               )}
 
@@ -283,14 +298,14 @@ export default function HomeScreen({ navigation }) {
               {matchesError && !matchesLoading && !isCalculating && (
                 <Card style={styles.errorCard} padding="md">
                   <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
-                  <Text style={styles.errorText}>{matchesError}</Text>
+                  <Text style={[styles.errorText, isRTL && styles.rtlWriting]}>{matchesErrorMessage}</Text>
                   <TouchableOpacity
                     style={styles.retryBtn}
                     onPress={fetchMatchesData}
                     accessibilityRole="button"
-                    accessibilityLabel="Retry"
+                    accessibilityLabel={t('home.matches.retry')}
                   >
-                    <Text style={styles.retryBtnText}>Retry</Text>
+                    <Text style={[styles.retryBtnText, isRTL && styles.rtlWriting]}>{t('home.matches.retry')}</Text>
                   </TouchableOpacity>
                 </Card>
               )}
@@ -299,12 +314,12 @@ export default function HomeScreen({ navigation }) {
               {!matchesLoading && !isCalculating && !matchesError && matches.length === 0 && (
                 <Card style={styles.emptyMatchesCard} padding="lg">
                   <Ionicons name="sparkles-outline" size={36} color={colors.accent || colors.teal} />
-                  <Text style={styles.emptyMatchesTitle}>No Calculated Matches Yet</Text>
-                  <Text style={styles.emptyMatchesSubtitle}>
-                    Run our AI matching algorithm to calculate your personalized fit scores against available internships.
+                  <Text style={[styles.emptyMatchesTitle, isRTL && styles.rtlWriting]}>{t('home.matches.emptyTitle')}</Text>
+                  <Text style={[styles.emptyMatchesSubtitle, isRTL && styles.rtlWriting]}>
+                    {t('home.matches.emptySubtitle')}
                   </Text>
                   <GradientButton
-                    title="Find My Matches"
+                    title={t('home.matches.find')}
                     color={colors.accent || colors.teal}
                     onPress={handleStartCalculation}
                     style={{ marginTop: spacing.lg, width: '100%' }}
@@ -327,20 +342,20 @@ export default function HomeScreen({ navigation }) {
                         scaleTo={0.985}
                         activeOpacity={0.85}
                         accessibilityRole="button"
-                        accessibilityLabel={`${firstMatch.internship.title} at ${firstMatch.internship.company}`}
+                        accessibilityLabel={t('home.matches.internshipAtCompany', { title: firstMatch.internship.title, company: firstMatch.internship.company })}
                       >
-                        <View style={styles.highlightTop}>
-                          <Ionicons name="flame" size={16} color="#F2812B" style={styles.flameIcon} />
-                          <Text style={styles.highlightTitle}>{firstMatch.internship.title}</Text>
+                        <View style={[styles.highlightTop, isRTL && styles.rowRTL]}>
+                          <Ionicons name="flame" size={16} color="#F2812B" style={[styles.flameIcon, isRTL && styles.flameIconRTL]} />
+                          <Text style={[styles.highlightTitle, isRTL && styles.highlightTitleRTL]}>{firstMatch.internship.title}</Text>
                           <MatchBadge score={firstMatch.overall_score} />
                         </View>
                         <Text style={styles.highlightMeta}>
-                          {firstMatch.internship.company} · {firstMatch.internship.location}
+                          {firstMatch.internship.company} {'\u00b7'} {firstMatch.internship.location}
                         </Text>
                       </PressableScale>
 
                       <PressableScale
-                        style={styles.whyLinkWrap}
+                        style={[styles.whyLinkWrap, isRTL && styles.rowRTL]}
                         onPress={() =>
                           navigation.navigate('WhyYouMatch', {
                             matchId: firstMatch.match_id,
@@ -350,14 +365,14 @@ export default function HomeScreen({ navigation }) {
                         scaleTo={0.98}
                         activeOpacity={0.8}
                         accessibilityRole="button"
-                        accessibilityLabel="Why You Match breakdown"
+                        accessibilityLabel={t('home.matches.whyA11y')}
                       >
-                        <Text style={styles.whyLink}>Why You Match</Text>
+                        <Text style={[styles.whyLink, isRTL && styles.rtlText]}>{t('home.matches.why')}</Text>
                         <Ionicons
-                          name="chevron-forward"
+                          name={isRTL ? 'chevron-back' : 'chevron-forward'}
                           size={14}
                           color={colors.primaryBlue}
-                          style={styles.chevronIcon}
+                          style={[styles.chevronIcon, isRTL && styles.chevronIconRTL]}
                         />
                       </PressableScale>
                     </Card>
@@ -377,13 +392,13 @@ export default function HomeScreen({ navigation }) {
                           internshipId: item.internship.id,
                         })
                       }
-                      accessibilityLabel={`${item.internship.title} at ${item.internship.company}`}
+                      accessibilityLabel={t('home.matches.internshipAtCompany', { title: item.internship.title, company: item.internship.company })}
                     >
-                      <View style={styles.plainRow}>
-                        <View style={styles.plainRowMain}>
+                      <View style={[styles.plainRow, isRTL && styles.rowRTL]}>
+                        <View style={[styles.plainRowMain, isRTL && styles.plainRowMainRTL]}>
                           <Text style={styles.plainTitle}>{item.internship.title}</Text>
                           <Text style={styles.plainMeta}>
-                            {item.internship.company} · {item.internship.location}
+                            {item.internship.company} {'\u00b7'} {item.internship.location}
                           </Text>
                         </View>
                         <MatchBadge score={item.overall_score} />
@@ -393,17 +408,17 @@ export default function HomeScreen({ navigation }) {
 
                   {matches.length > 3 && (
                     <TouchableOpacity
-                      style={styles.viewAllMatchupsBtn}
+                      style={[styles.viewAllMatchupsBtn, isRTL && styles.rowRTL]}
                       onPress={() => navigation.navigate('MainTabs', { screen: 'Matchups' })}
                       accessibilityRole="button"
-                      accessibilityLabel={`View all ${matches.length} matches`}
+                      accessibilityLabel={t('home.matches.viewAll', { total: matches.length })}
                     >
-                      <Text style={styles.viewAllMatchupsText}>View all {matches.length} matches</Text>
+                      <Text style={[styles.viewAllMatchupsText, isRTL && styles.rtlText]}>{t('home.matches.viewAll', { total: matches.length })}</Text>
                       <Ionicons
-                        name="arrow-forward"
+                        name={isRTL ? 'arrow-back' : 'arrow-forward'}
                         size={16}
                         color={colors.accentStrong || colors.tealDark}
-                        style={styles.arrowIcon}
+                        style={[styles.arrowIcon, isRTL && styles.arrowIconRTL]}
                       />
                     </TouchableOpacity>
                   )}
@@ -425,7 +440,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.xs,
-    paddingBottom: 104,
+    paddingBottom: 128,
   },
   headerBlock: {
     marginBottom: spacing.md,
@@ -701,5 +716,39 @@ const styles = StyleSheet.create({
   },
   arrowIcon: {
     marginStart: spacing.xs,
+  },
+  rtlWriting: {
+    writingDirection: 'rtl',
+  },
+  rowRTL: {
+    flexDirection: 'row-reverse',
+  },
+  rtlText: {
+    writingDirection: 'rtl',
+    textAlign: 'right',
+  },
+  browseIconRTL: {
+    marginStart: 0,
+    marginEnd: spacing.xs,
+  },
+  flameIconRTL: {
+    marginEnd: 0,
+    marginStart: spacing.xs,
+  },
+  highlightTitleRTL: {
+    marginEnd: 0,
+    marginStart: spacing.sm,
+  },
+  chevronIconRTL: {
+    marginStart: 0,
+    marginEnd: spacing.xxs,
+  },
+  plainRowMainRTL: {
+    marginEnd: 0,
+    marginStart: spacing.md,
+  },
+  arrowIconRTL: {
+    marginStart: 0,
+    marginEnd: spacing.xs,
   },
 });

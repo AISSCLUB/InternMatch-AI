@@ -4,6 +4,7 @@ Provides authenticated read access for pre-calculated internship matches
 and POST trigger to enqueue match calculation.
 """
 
+from typing import Literal
 from uuid import UUID
 
 from app.core.rate_limit import enforce_rate_limit
@@ -19,7 +20,7 @@ from app.schemas.match import (
 )
 from app.services.match_enqueue import enqueue_match_calculation
 from app.services.match_explanation import get_or_create_match_explanation
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -113,12 +114,15 @@ def calculate_matches(
 )
 def get_match_explanation(
     id: UUID,
+    content_locale: Literal["en", "tr", "ar"] = Query(
+        "en", description="Target content display locale ('en', 'tr', 'ar')"
+    ),
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Retrieve grounded LLM explanation ('Why You Match') and skill gap
-    analysis for a match.
+    analysis for a match in target content_locale.
     Requires valid Supabase Bearer JWT authentication token.
     Identity is strictly derived from the validated JWT subject UUID.
     Returns 404 if match is not found or owned by another user.
@@ -132,6 +136,7 @@ def get_match_explanation(
             db=db,
             match_id=id,
             user_id=current_user.user_id,
+            content_locale=content_locale,
         )
     except ValueError as exc:
         raise HTTPException(

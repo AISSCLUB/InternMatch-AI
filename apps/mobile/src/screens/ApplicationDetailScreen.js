@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -26,6 +27,8 @@ import {
   ApiError,
 } from '../services/api';
 import haptics from '../services/haptics';
+import { useLocalization } from '../localization/LocalizationContext';
+import { formatLocalizedDate, formatLocalizedDateTime } from '../localization/formatters';
 
 const CANONICAL_STATUSES = [
   'saved',
@@ -40,36 +43,33 @@ const STATUS_CONFIG = {
     bg: colors.surfaceMuted || '#F1F5F9',
     fg: colors.textSecondary || '#475569',
     icon: 'bookmark-outline',
-    label: 'Saved',
   },
   applied: {
     bg: colors.infoSoft || '#E0F2FE',
     fg: colors.info || '#0284C7',
     icon: 'send-outline',
-    label: 'Applied',
   },
   interviewing: {
     bg: colors.warningSoft || '#FEF3C7',
     fg: colors.warning || '#D97706',
     icon: 'chatbubbles-outline',
-    label: 'Interviewing',
   },
   rejected: {
     bg: colors.dangerSoft || '#FEE2E2',
     fg: colors.danger || '#DC2626',
     icon: 'close-circle-outline',
-    label: 'Rejected',
   },
   accepted: {
     bg: colors.successSoft || '#DCFCE7',
     fg: colors.success || '#16A34A',
     icon: 'checkmark-circle-outline',
-    label: 'Accepted',
   },
 };
 
 function StatusPill({ status }) {
+  const { t } = useTranslation();
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.saved;
+  const label = t(`applications.statuses.${status}`, { defaultValue: status });
   return (
     <View style={[styles.statusPill, { backgroundColor: config.bg }]}>
       <Ionicons
@@ -79,13 +79,15 @@ function StatusPill({ status }) {
         style={styles.pillIcon}
       />
       <Text style={[styles.statusPillText, { color: config.fg }]}>
-        {config.label}
+        {label}
       </Text>
     </View>
   );
 }
 
 export default function ApplicationDetailScreen({ route, navigation }) {
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
   const applicationId =
     route?.params?.applicationId ||
     route?.params?.id ||
@@ -131,11 +133,8 @@ export default function ApplicationDetailScreen({ route, navigation }) {
       if (err instanceof ApiError && err.status === 404) {
         setIsNotFound(true);
       } else {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : 'Unable to load application details.';
-        setError(msg);
+        console.warn('Failed to fetch application detail:', err);
+        setError('APPLICATION_LOAD_FAILED');
       }
     } finally {
       if (generation !== requestGenerationRef.current) return;
@@ -174,9 +173,11 @@ export default function ApplicationDetailScreen({ route, navigation }) {
       await fetchDetail(true);
     } catch (err) {
       haptics.error();
-      const msg =
-        err instanceof Error ? err.message : 'Failed to update application status.';
-      Alert.alert('Status Update Failed', msg);
+      console.warn('Failed to update status:', err);
+      Alert.alert(
+        t('applicationDetail.statusUpdateFailedTitle', { defaultValue: t('common.error') }),
+        t('errors.applicationStatusUpdateFailed')
+      );
     } finally {
       mutationLockRef.current = false;
       setMutatingStatus(false);
@@ -201,9 +202,11 @@ export default function ApplicationDetailScreen({ route, navigation }) {
       await fetchDetail(true);
     } catch (err) {
       haptics.error();
-      const msg =
-        err instanceof Error ? err.message : 'Failed to save application notes.';
-      Alert.alert('Notes Update Failed', msg);
+      console.warn('Failed to save notes:', err);
+      Alert.alert(
+        t('applicationDetail.notesUpdateFailedTitle', { defaultValue: t('common.error') }),
+        t('errors.applicationNotesSaveFailed')
+      );
     } finally {
       mutationLockRef.current = false;
       setSavingNotes(false);
@@ -212,41 +215,18 @@ export default function ApplicationDetailScreen({ route, navigation }) {
 
   const formatEventDate = (isoString) => {
     if (!isoString) return '';
-    try {
-      const d = new Date(isoString);
-      const datePart = d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-      const timePart = d.toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      return `${datePart} - ${timePart}`;
-    } catch {
-      return isoString;
-    }
+    return formatLocalizedDateTime(isoString, locale);
   };
 
   const formatAppliedDate = (dateString) => {
     if (!dateString) return null;
-    try {
-      const d = new Date(dateString);
-      return d.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
-    } catch {
-      return dateString;
-    }
+    return formatLocalizedDate(dateString, locale);
   };
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Application Details"
+        title={t('applicationDetail.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -275,7 +255,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 size="large"
                 color={colors.accent || colors.teal}
               />
-              <Text style={styles.loadingText}>Loading application details...</Text>
+              <Text style={styles.loadingText}>{t('applicationDetail.loading')}</Text>
             </View>
           )}
 
@@ -287,17 +267,17 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 size={44}
                 color={colors.danger || '#EF4444'}
               />
-              <Text style={styles.notFoundTitle}>Application Not Found</Text>
+              <Text style={styles.notFoundTitle}>{t('applicationDetail.notFoundTitle')}</Text>
               <Text style={styles.notFoundSubtitle}>
-                This application may have been removed or belongs to another candidate account.
+                {t('applicationDetail.notFoundMessage')}
               </Text>
               <TouchableOpacity
                 style={styles.backBtn}
                 onPress={() => navigation.goBack()}
                 accessibilityRole="button"
-                accessibilityLabel="Back to Applications"
+                accessibilityLabel={t('applicationDetail.backToApplications')}
               >
-                <Text style={styles.backBtnText}>Back to Applications</Text>
+                <Text style={styles.backBtnText}>{t('applicationDetail.backToApplications')}</Text>
               </TouchableOpacity>
             </Card>
           )}
@@ -310,15 +290,17 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 size={40}
                 color={colors.danger || '#EF4444'}
               />
-              <Text style={styles.errorTitle}>Could Not Load Application</Text>
-              <Text style={styles.errorSubtitle}>{error}</Text>
+              <Text style={styles.errorTitle}>{t('applicationDetail.errorTitle')}</Text>
+              <Text style={styles.errorSubtitle}>
+                {t('errors.applicationLoadFailed', { defaultValue: t('applicationDetail.errorSubtitle', { defaultValue: t('applicationDetail.errorTitle') }) })}
+              </Text>
               <TouchableOpacity
                 style={styles.retryBtn}
                 onPress={() => fetchDetail()}
                 accessibilityRole="button"
-                accessibilityLabel="Try Again"
+                accessibilityLabel={t('common.tryAgain')}
               >
-                <Text style={styles.retryBtnText}>Try Again</Text>
+                <Text style={styles.retryBtnText}>{t('common.tryAgain')}</Text>
               </TouchableOpacity>
             </Card>
           )}
@@ -331,7 +313,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 <View style={styles.heroHeader}>
                   <View style={styles.heroTitleWrap}>
                     <Text style={styles.jobTitle}>
-                      {detail.job_title || 'Internship Application'}
+                      {detail.job_title || t('applications.defaultJobTitle')}
                     </Text>
                     {detail.company_name ? (
                       <View style={styles.companyRow}>
@@ -360,7 +342,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                       style={styles.appliedIcon}
                     />
                     <Text style={styles.appliedDateText}>
-                      Applied on {formatAppliedDate(detail.applied_date)}
+                      {t('applications.appliedDate', { date: formatAppliedDate(detail.applied_date) })}
                     </Text>
                   </View>
                 ) : null}
@@ -381,7 +363,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         })
                       }
                       accessibilityRole="button"
-                      accessibilityLabel="View Cover Letter"
+                      accessibilityLabel={t('applications.coverLetterBtn')}
                     >
                       <Ionicons
                         name="document-text"
@@ -390,7 +372,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         style={styles.shortcutIcon}
                       />
                       <Text style={styles.shortcutBtnTextPrimary}>
-                        Cover Letter
+                        {t('applications.coverLetterBtn')}
                       </Text>
                     </PressableScale>
                   ) : null}
@@ -404,7 +386,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         })
                       }
                       accessibilityRole="button"
-                      accessibilityLabel="View Internship Listing"
+                      accessibilityLabel={t('applications.listingBtn')}
                     >
                       <Ionicons
                         name="open-outline"
@@ -413,7 +395,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         style={styles.shortcutIcon}
                       />
                       <Text style={styles.shortcutBtnTextSecondary}>
-                        View Listing
+                        {t('applications.listingBtn')}
                       </Text>
                     </PressableScale>
                   ) : null}
@@ -423,7 +405,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
               {/* Status Selector Card */}
               <Card style={styles.sectionCard} padding="md">
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Update Status</Text>
+                  <Text style={styles.sectionTitle}>{t('applicationDetail.updateStatusTitle')}</Text>
                   {mutatingStatus && (
                     <ActivityIndicator
                       size="small"
@@ -432,13 +414,14 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                   )}
                 </View>
                 <Text style={styles.sectionSubtitle}>
-                  Select your current progress with this application:
+                  {t('applicationDetail.updateStatusSubtitle')}
                 </Text>
 
                 <View style={styles.statusChipsGrid}>
                   {CANONICAL_STATUSES.map((statusKey) => {
                     const isSelected = detail.status === statusKey;
                     const config = STATUS_CONFIG[statusKey] || STATUS_CONFIG.saved;
+                    const label = t(`applications.statuses.${statusKey}`, { defaultValue: statusKey });
 
                     return (
                       <PressableScale
@@ -451,7 +434,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         onPress={() => handleStatusChange(statusKey)}
                         disabled={mutatingStatus || savingNotes || isEditingNotes || refreshing}
                         accessibilityRole="button"
-                        accessibilityLabel={`Change status to ${config.label}`}
+                        accessibilityLabel={t('applicationDetail.changeStatusA11y', { status: label })}
                         accessibilityState={{ selected: isSelected }}
                       >
                         <Ionicons
@@ -473,7 +456,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                             },
                           ]}
                         >
-                          {config.label}
+                          {label}
                         </Text>
                       </PressableScale>
                     );
@@ -483,9 +466,9 @@ export default function ApplicationDetailScreen({ route, navigation }) {
 
               {/* Status Timeline Card */}
               <Card style={styles.sectionCard} padding="md">
-                <Text style={styles.sectionTitle}>Status Timeline</Text>
+                <Text style={styles.sectionTitle}>{t('applicationDetail.timelineTitle')}</Text>
                 <Text style={styles.sectionSubtitle}>
-                  Chronological record of status transitions:
+                  {t('applicationDetail.timelineSubtitle')}
                 </Text>
 
                 {detail.timeline && detail.timeline.length > 0 ? (
@@ -493,6 +476,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                     {detail.timeline.map((event, index) => {
                       const config =
                         STATUS_CONFIG[event.status] || STATUS_CONFIG.saved;
+                      const label = t(`applications.statuses.${event.status}`, { defaultValue: event.status });
                       const isLast = index === detail.timeline.length - 1;
 
                       return (
@@ -521,7 +505,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                           <View style={styles.timelineContentWrap}>
                             <View style={styles.timelineHeaderRow}>
                               <Text style={styles.timelineStatusTitle}>
-                                {config.label}
+                                {label}
                               </Text>
                             </View>
                             <Text style={styles.timelineTimestamp}>
@@ -541,10 +525,10 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                       style={styles.emptyTimelineIcon}
                     />
                     <Text style={styles.emptyTimelineTitle}>
-                      No recorded status changes yet.
+                      {t('applicationDetail.emptyTimelineTitle')}
                     </Text>
                     <Text style={styles.emptyTimelineSubtitle}>
-                      When you update this application's status, events will appear here in chronological order.
+                      {t('applicationDetail.emptyTimelineSubtitle')}
                     </Text>
                   </View>
                 )}
@@ -553,21 +537,21 @@ export default function ApplicationDetailScreen({ route, navigation }) {
               {/* Notes Card */}
               <Card style={styles.sectionCard} padding="md">
                 <View style={styles.notesHeaderRow}>
-                  <Text style={styles.sectionTitle}>Personal Notes</Text>
+                  <Text style={styles.sectionTitle}>{t('applicationDetail.personalNotesTitle')}</Text>
                   {!isEditingNotes ? (
                     <TouchableOpacity
                       style={styles.editNotesToggle}
                       onPress={() => setIsEditingNotes(true)}
                       disabled={mutatingStatus || savingNotes || refreshing}
                       accessibilityRole="button"
-                      accessibilityLabel="Edit notes"
+                      accessibilityLabel={t('common.edit')}
                     >
                       <Ionicons
                         name="create-outline"
                         size={15}
                         color={colors.accent || colors.teal}
                       />
-                      <Text style={styles.editNotesToggleText}>Edit</Text>
+                      <Text style={styles.editNotesToggleText}>{t('common.edit')}</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -579,12 +563,12 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                       value={notesText}
                       onChangeText={setNotesText}
                       editable={!savingNotes && !mutatingStatus && !refreshing}
-                      placeholder="Add private notes about interviews, contacts, or follow-ups..."
+                      placeholder={t('applicationDetail.notesPlaceholder')}
                       placeholderTextColor={colors.textTertiary || '#94A3B8'}
                       multiline={true}
                       numberOfLines={4}
                       textAlignVertical="top"
-                      accessibilityLabel="Personal notes input"
+                      accessibilityLabel={t('applicationDetail.personalNotesTitle')}
                     />
                     <View style={styles.notesActionsRow}>
                       <TouchableOpacity
@@ -595,9 +579,9 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         }}
                         disabled={savingNotes || mutatingStatus || refreshing}
                         accessibilityRole="button"
-                        accessibilityLabel="Cancel editing notes"
+                        accessibilityLabel={t('common.cancel')}
                       >
-                        <Text style={styles.notesCancelBtnText}>Cancel</Text>
+                        <Text style={styles.notesCancelBtnText}>{t('common.cancel')}</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -605,7 +589,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                         onPress={handleSaveNotes}
                         disabled={savingNotes || mutatingStatus || refreshing}
                         accessibilityRole="button"
-                        accessibilityLabel="Save notes"
+                        accessibilityLabel={t('applicationDetail.saveNotes')}
                       >
                         {savingNotes ? (
                           <ActivityIndicator
@@ -613,7 +597,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                             color={colors.textInverse || colors.white}
                           />
                         ) : (
-                          <Text style={styles.notesSaveBtnText}>Save Notes</Text>
+                          <Text style={styles.notesSaveBtnText}>{t('applicationDetail.saveNotes')}</Text>
                         )}
                       </TouchableOpacity>
                     </View>
@@ -624,7 +608,7 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                       <Text style={styles.notesDisplayText}>{detail.notes}</Text>
                     ) : (
                       <Text style={styles.notesEmptyText}>
-                        No notes added yet. Tap Edit to add details like interview dates or interviewers.
+                        {t('applicationDetail.noNotesText')}
                       </Text>
                     )}
                   </View>

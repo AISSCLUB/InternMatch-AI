@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -22,15 +23,8 @@ import GradientButton from '../components/GradientButton';
 import { updateApplicationStatus, ApiError } from '../services/api';
 import haptics from '../services/haptics';
 
-const STATUS_LABELS = {
-  saved: 'Saved',
-  applied: 'Applied',
-  interviewing: 'Interviewing',
-  rejected: 'Rejected',
-  accepted: 'Accepted',
-};
-
 export default function CoverLetterScreen({ route, navigation }) {
+  const { t } = useTranslation();
   const applicationId = route?.params?.applicationId;
   const initialDraft = route?.params?.draft ?? '';
   const initialStatus = route?.params?.currentStatus ?? 'saved';
@@ -45,8 +39,8 @@ export default function CoverLetterScreen({ route, navigation }) {
   const handleMarkAsApplied = async () => {
     if (!applicationId) {
       Alert.alert(
-        'Missing Reference',
-        'Application record not found. Please navigate from the Application Tracker.'
+        t('coverLetter.missingRefTitle'),
+        t('coverLetter.missingRefMsg')
       );
       return;
     }
@@ -63,36 +57,32 @@ export default function CoverLetterScreen({ route, navigation }) {
       setCurrentStatus(updated.status);
 
       Alert.alert(
-        'Tracker Updated',
-        'Application marked as applied in your tracker.',
+        t('coverLetter.trackerUpdatedTitle'),
+        t('coverLetter.trackerUpdatedMsg'),
         [
           {
-            text: 'Go to Applications',
+            text: t('coverLetter.goToApplications'),
             onPress: () =>
               navigation.navigate('MainTabs', { screen: 'Applications' }),
           },
-          { text: 'Stay Here', style: 'cancel' },
+          { text: t('coverLetter.stayHere'), style: 'cancel' },
         ]
       );
     } catch (err) {
       console.warn('Failed to update application status:', err);
-      let msg = 'Unable to update application status.';
-      if (err instanceof ApiError) {
-        msg = err.message || msg;
-      } else if (err instanceof Error) {
-        msg = err.message;
-      }
-      setUpdateError(msg);
-      Alert.alert('Update Failed', msg);
+      setUpdateError('APPLICATION_STATUS_UPDATE_FAILED');
+      Alert.alert(t('common.error'), t('errors.applicationStatusUpdateFailed'));
     } finally {
       setIsUpdating(false);
     }
   };
 
+  const statusLabel = t(`applications.statuses.${currentStatus}`, { defaultValue: currentStatus });
+
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Cover Letter"
+        title={t('coverLetter.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -110,7 +100,7 @@ export default function CoverLetterScreen({ route, navigation }) {
           {/* Role & Company Header */}
           {(jobTitle || companyName) && (
             <Card style={styles.roleCard} padding="md">
-              <Text style={styles.roleTitle}>{jobTitle || 'Internship'}</Text>
+              <Text style={styles.roleTitle}>{jobTitle || t('applications.defaultJobTitle')}</Text>
               {companyName ? (
                 <Text style={styles.companyName}>{companyName}</Text>
               ) : null}
@@ -119,7 +109,7 @@ export default function CoverLetterScreen({ route, navigation }) {
 
           {/* Tracker Status Pill */}
           <View style={styles.statusRow}>
-            <Text style={styles.statusHeading}>TRACKER STATUS:</Text>
+            <Text style={styles.statusHeading}>{t('coverLetter.trackerStatus')}</Text>
             <View
               style={[
                 styles.statusPill,
@@ -136,7 +126,7 @@ export default function CoverLetterScreen({ route, navigation }) {
                   currentStatus === 'accepted' && styles.statusTextAccepted,
                 ]}
               >
-                {STATUS_LABELS[currentStatus] || currentStatus}
+                {statusLabel}
               </Text>
             </View>
           </View>
@@ -150,7 +140,7 @@ export default function CoverLetterScreen({ route, navigation }) {
               style={styles.noticeIcon}
             />
             <Text style={styles.noticeText}>
-              You can customize this draft below for external submission. Generating this draft created a tracker record.
+              {t('coverLetter.notice')}
             </Text>
           </View>
 
@@ -162,13 +152,13 @@ export default function CoverLetterScreen({ route, navigation }) {
               onChangeText={setText}
               multiline
               textAlignVertical="top"
-              placeholder="Your generated cover letter will appear here..."
+              placeholder={t('coverLetter.placeholder')}
               placeholderTextColor={colors.textTertiary || colors.textMuted}
             />
           </Card>
 
           {updateError && (
-            <Text style={styles.errorBanner}>{updateError}</Text>
+            <Text style={styles.errorBanner}>{t('errors.applicationStatusUpdateFailed')}</Text>
           )}
 
           {/* Actions */}
@@ -182,7 +172,7 @@ export default function CoverLetterScreen({ route, navigation }) {
                 />
               ) : (
                 <GradientButton
-                  title="Mark as Applied"
+                  title={t('coverLetter.markApplied')}
                   color={colors.accent || colors.teal}
                   onPress={handleMarkAsApplied}
                   style={{ marginTop: spacing.lg }}
@@ -197,7 +187,7 @@ export default function CoverLetterScreen({ route, navigation }) {
                   navigation.navigate('MainTabs', { screen: 'Applications' })
                 }
                 accessibilityRole="button"
-                accessibilityLabel="View in Application Tracker"
+                accessibilityLabel={t('coverLetter.viewInTracker')}
               >
                 <Ionicons
                   name="list-outline"
@@ -206,7 +196,7 @@ export default function CoverLetterScreen({ route, navigation }) {
                   style={styles.trackerIcon}
                 />
                 <Text style={styles.trackerBtnText}>
-                  View in Application Tracker
+                  {t('coverLetter.viewInTracker')}
                 </Text>
               </TouchableOpacity>
             </View>

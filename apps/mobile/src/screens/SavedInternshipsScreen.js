@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -16,12 +17,17 @@ import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import PressableCard from '../components/PressableCard';
+import BookmarkButton from '../components/BookmarkButton';
 import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
-import BookmarkButton from '../components/BookmarkButton';
 import { useSavedInternships } from '../context/SavedInternshipsContext';
+import { useLocalization } from '../localization/LocalizationContext';
+import { formatLocalizedDate } from '../localization/formatters';
+import { getLocalizedErrorMessage } from '../localization/errorMessages';
 
 export default function SavedInternshipsScreen({ navigation }) {
+  const { t } = useTranslation();
+  const { locale } = useLocalization();
   const {
     savedItems,
     loading,
@@ -43,21 +49,16 @@ export default function SavedInternshipsScreen({ navigation }) {
 
   const formatWorkType = (wt) => {
     if (!wt) return null;
-    return wt.charAt(0).toUpperCase() + wt.slice(1);
+    const lower = wt.toLowerCase();
+    return t(`internships.workTypes.${lower}`, {
+      defaultValue: wt.charAt(0).toUpperCase() + wt.slice(1),
+    });
   };
 
-  const formatSavedDate = (isoString) => {
+  const formatSavedDateString = (isoString) => {
     if (!isoString) return null;
-    try {
-      const d = new Date(isoString);
-      return `Saved ${d.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })}`;
-    } catch {
-      return null;
-    }
+    const formatted = formatLocalizedDate(isoString, locale);
+    return formatted ? t('savedInternships.savedDate', { date: formatted }) : null;
   };
 
   const hasItems = savedItems.length > 0;
@@ -65,8 +66,8 @@ export default function SavedInternshipsScreen({ navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title="Saved Internships"
-        subtitle={hasItems ? `${total} saved` : undefined}
+        title={t('savedInternships.title')}
+        subtitle={hasItems ? t('savedInternships.subtitle', { count: total }) : undefined}
         showBack={true}
         navigation={navigation}
         alignment="start"
@@ -92,7 +93,7 @@ export default function SavedInternshipsScreen({ navigation }) {
               size="large"
               color={colors.accent}
             />
-            <Text style={styles.loadingText}>Loading saved internships...</Text>
+            <Text style={styles.loadingText}>{t('savedInternships.loading')}</Text>
           </View>
         )}
 
@@ -104,15 +105,15 @@ export default function SavedInternshipsScreen({ navigation }) {
               size={36}
               color={colors.danger}
             />
-            <Text style={styles.errorTitle}>Could Not Load Saved Internships</Text>
-            <Text style={styles.errorMessage}>{error}</Text>
+            <Text style={styles.errorTitle}>{t('savedInternships.errorTitle')}</Text>
+            <Text style={styles.errorMessage}>{getLocalizedErrorMessage(error, t)}</Text>
             <TouchableOpacity
               style={styles.retryButton}
               onPress={() => refreshSavedInternships(true)}
               accessibilityRole="button"
-              accessibilityLabel="Try Again"
+              accessibilityLabel={t('common.tryAgain')}
             >
-              <Text style={styles.retryButtonText}>Try Again</Text>
+              <Text style={styles.retryButtonText}>{t('common.tryAgain')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -127,13 +128,12 @@ export default function SavedInternshipsScreen({ navigation }) {
                 color={colors.accent}
               />
             </View>
-            <Text style={styles.emptyTitle}>No Saved Internships</Text>
+            <Text style={styles.emptyTitle}>{t('savedInternships.emptyTitle')}</Text>
             <Text style={styles.emptySubtitle}>
-              Internships you bookmark from the catalog will appear here so you can
-              easily review and track roles that interest you.
+              {t('savedInternships.emptySubtitle')}
             </Text>
             <GradientButton
-              title="Explore Internships"
+              title={t('savedInternships.exploreButton')}
               onPress={() => {
                 navigation.navigate('MainTabs', { screen: 'Internships' });
               }}
@@ -149,7 +149,10 @@ export default function SavedInternshipsScreen({ navigation }) {
               const internship = item.internship || {};
               const internshipId = item.internship_id || internship.id;
               const mutating = isMutating(internshipId);
-              const savedDate = formatSavedDate(item.saved_at);
+              const savedDate = formatSavedDateString(item.saved_at);
+              const posTitle = internship.title || t('savedInternships.positionFallback');
+              const compName = internship.company || t('savedInternships.companyFallback');
+              const locName = internship.location || t('savedInternships.locationFallback');
 
               return (
                 <PressableCard
@@ -161,18 +164,18 @@ export default function SavedInternshipsScreen({ navigation }) {
                       internshipId,
                     })
                   }
-                  accessibilityLabel={`${internship.title || 'Internship'} at ${
-                    internship.company || 'Company'
-                  }`}
+                  accessibilityLabel={t('savedInternships.cardA11y', {
+                    title: posTitle,
+                    company: compName,
+                  })}
                 >
                   <View style={styles.cardHeaderRow}>
                     <View style={styles.cardTitleWrap}>
                       <Text style={styles.cardTitle} numberOfLines={2}>
-                        {internship.title || 'Internship Position'}
+                        {posTitle}
                       </Text>
                       <Text style={styles.cardMeta} numberOfLines={1}>
-                        {internship.company || 'Company'} -{' '}
-                        {internship.location || 'Location'}
+                        {compName} - {locName}
                       </Text>
                     </View>
                     <BookmarkButton
@@ -229,7 +232,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: spacing.screenHorizontalPadding,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.tabBarBottomPadding || 90,
+    paddingBottom: 128,
   },
   centerContainer: {
     paddingVertical: spacing.xxl,

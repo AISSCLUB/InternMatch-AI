@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -29,6 +30,7 @@ import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
 
 export default function SignInScreen({ navigation }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +43,7 @@ export default function SignInScreen({ navigation }) {
 
     if (!normalizedEmail || !password) {
       haptics.error();
-      Alert.alert('Sign In', 'Please enter your email and password.');
+      Alert.alert(t('common.error'), t('auth.enterEmailPassword'));
       return;
     }
 
@@ -57,7 +59,7 @@ export default function SignInScreen({ navigation }) {
       }
 
       if (!data.session?.access_token) {
-        throw new Error('Authentication succeeded but no active session was returned.');
+        throw new Error(t('errors.unauthorized'));
       }
 
       const syncResult = await syncAuthenticatedUser();
@@ -91,8 +93,15 @@ export default function SignInScreen({ navigation }) {
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign in.';
-      Alert.alert('Sign in failed', message);
+      console.warn('Sign-in failed:', error);
+      let errorKey = 'errors.authSignInFailed';
+      const msg = error instanceof Error ? error.message.toLowerCase() : '';
+      if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('user not found')) {
+        errorKey = 'errors.authInvalidCredentials';
+      } else if (msg.includes('too many requests') || msg.includes('rate limit')) {
+        errorKey = 'errors.authTooManyRequests';
+      }
+      Alert.alert(t('common.error'), t(errorKey));
     } finally {
       setLoading(false);
     }
@@ -101,21 +110,21 @@ export default function SignInScreen({ navigation }) {
   const handleGoogle = async () => {
     try {
       await signInWithGoogle();
-      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
+      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     } catch (e) {
       console.warn('Google sign-in failed', e);
-      Alert.alert('Google Sign-In', 'Google Sign-In is not available in this build yet.');
+      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     }
   };
 
   const handleApple = () => {
-    Alert.alert('Apple Sign-In', 'Apple Sign-In is not available in this build yet.');
+    Alert.alert(t('auth.appleSignIn'), t('auth.appleNotAvailable'));
   };
 
   const handleForgotPassword = () => {
     Alert.alert(
-      'Reset Password',
-      'Password reset instructions will be sent to your registered email address.'
+      t('auth.forgotPassword'),
+      t('auth.resetPasswordInstructions')
     );
   };
 
@@ -146,9 +155,9 @@ export default function SignInScreen({ navigation }) {
 
           {/* Heading Zone */}
           <View style={styles.headingZone}>
-            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.title}>{t('auth.welcomeBack')}</Text>
             <Text style={styles.subtitle}>
-              Sign in to access your internship matches
+              {t('auth.signInSubtitle')}
             </Text>
           </View>
 
@@ -166,7 +175,7 @@ export default function SignInScreen({ navigation }) {
 
             {/* Email Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>E-Mail</Text>
+              <Text style={styles.fieldLabel}>{t('auth.email')}</Text>
               <TextInput
                 style={[
                   styles.input,
@@ -181,13 +190,13 @@ export default function SignInScreen({ navigation }) {
                 keyboardType="email-address"
                 placeholder="name@example.com"
                 placeholderTextColor="rgba(22, 35, 46, 0.40)"
-                accessibilityLabel="Email address input"
+                accessibilityLabel={t('auth.email')}
               />
             </View>
 
             {/* Password Field */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Password</Text>
+              <Text style={styles.fieldLabel}>{t('auth.password')}</Text>
               <TextInput
                 style={[
                   styles.input,
@@ -198,9 +207,9 @@ export default function SignInScreen({ navigation }) {
                 onFocus={() => setFocusedField('password')}
                 onBlur={() => setFocusedField(null)}
                 secureTextEntry
-                placeholder="Enter your password"
+                placeholder={t('auth.passwordPlaceholder')}
                 placeholderTextColor="rgba(22, 35, 46, 0.40)"
-                accessibilityLabel="Password input"
+                accessibilityLabel={t('auth.password')}
               />
             </View>
 
@@ -210,14 +219,14 @@ export default function SignInScreen({ navigation }) {
               onPress={handleForgotPassword}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel="Forgot password"
+              accessibilityLabel={t('auth.forgotPassword')}
             >
-              <Text style={styles.forgotText}>I forgot my password</Text>
+              <Text style={styles.forgotText}>{t('auth.forgotPassword')}</Text>
             </TouchableOpacity>
 
             {/* Primary CTA */}
             <GradientButton
-              title={loading ? 'Signing in...' : 'Sign In'}
+              title={loading ? t('auth.signingIn') : t('auth.signIn')}
               color={colors.accent || colors.teal}
               onPress={handleContinue}
               disabled={loading}
@@ -227,7 +236,7 @@ export default function SignInScreen({ navigation }) {
             {/* Divider */}
             <View style={styles.dividerRow}>
               <View style={styles.divider} />
-              <Text style={styles.dividerText}>or</Text>
+              <Text style={styles.dividerText}>{t('auth.or')}</Text>
               <View style={styles.divider} />
             </View>
 
@@ -250,13 +259,13 @@ export default function SignInScreen({ navigation }) {
                 activeOpacity={motionTokens.opacities.pressed}
                 haptic="none"
                 accessibilityRole="button"
-                accessibilityLabel="Privacy Policy"
+                accessibilityLabel={t('auth.privacyPolicy')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.legalLink}>Privacy Policy</Text>
+                <Text style={styles.legalLink}>{t('auth.privacyPolicy')}</Text>
               </PressableScale>
 
-              <Text style={styles.legalDot}>·</Text>
+              <Text style={styles.legalDot}>{'\u00b7'}</Text>
 
               <PressableScale
                 onPress={() => navigation.navigate('TermsOfUse')}
@@ -264,10 +273,10 @@ export default function SignInScreen({ navigation }) {
                 activeOpacity={motionTokens.opacities.pressed}
                 haptic="none"
                 accessibilityRole="button"
-                accessibilityLabel="Terms of Use"
+                accessibilityLabel={t('auth.termsOfUse')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.legalLink}>Terms of Use</Text>
+                <Text style={styles.legalLink}>{t('auth.termsOfUse')}</Text>
               </PressableScale>
             </View>
           </AuthGlassPanel>

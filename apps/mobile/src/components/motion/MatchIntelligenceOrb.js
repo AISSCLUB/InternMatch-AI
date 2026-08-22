@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ export default function MatchIntelligenceOrb({
   progressPercent = 0,
   style,
 }) {
+  const { t } = useTranslation();
   const isReducedMotion = useReducedMotion();
   const scale = useSharedValue(isReducedMotion ? 1 : motionTokens.scales.orbSettleStart);
   const opacity = useSharedValue(isReducedMotion ? 1 : 0);
@@ -49,55 +51,53 @@ export default function MatchIntelligenceOrb({
   });
 
   // Determine state labels and content
-  let statusEyebrow = 'MATCH INTELLIGENCE';
+  let statusEyebrow = t('home.orb.eyebrow');
   let primaryContent = null;
   let subtitleText = '';
   let accessibilityLabelText = '';
 
   if (isCalculating) {
-    statusEyebrow = 'AI MATCHING IN PROGRESS';
+    statusEyebrow = t('home.orb.progressEyebrow');
     primaryContent = (
       <View style={styles.centerScoreWrap}>
-        <Text style={styles.scoreNumber}>{progressPercent}%</Text>
-        <Text style={styles.scoreUnit}>analyzing</Text>
+        <Text style={[styles.scoreNumber, { writingDirection: 'ltr' }]}>{progressPercent}%</Text>
+        <Text style={styles.scoreUnit}>{t('home.orb.analyzing')}</Text>
       </View>
     );
-    subtitleText = 'Comparing your profile with available internships';
-    accessibilityLabelText = `Match Intelligence. Recalculating matches, ${progressPercent} percent complete.`;
+    subtitleText = t('home.orb.comparing');
+    accessibilityLabelText = t('home.orb.a11yCalculating', { progress: progressPercent });
   } else if (hasAnalyzedCV && typeof score === 'number' && score > 0) {
-    statusEyebrow = 'MATCH INTELLIGENCE';
+    statusEyebrow = t('home.orb.eyebrow');
     primaryContent = (
       <View style={styles.centerScoreWrap}>
-        <Text style={styles.scoreNumber}>{score}%</Text>
-        <Text style={styles.scoreUnit}>top match</Text>
+        <Text style={[styles.scoreNumber, { writingDirection: 'ltr' }]}>{score}%</Text>
+        <Text style={styles.scoreUnit}>{t('home.orb.topMatch')}</Text>
       </View>
     );
     subtitleText = topMatch?.internship
-      ? `${topMatch.internship.title} · ${topMatch.internship.company}`
-      : 'Compatibility calculated against your background';
-    accessibilityLabelText = `Match Intelligence. Top compatibility is ${score} percent${
-      topMatch?.internship ? ` for ${topMatch.internship.title} at ${topMatch.internship.company}` : ''
-    }.`;
+      ? `${topMatch.internship.title} \u00b7 ${topMatch.internship.company}`
+      : t('home.orb.compatibilityBackground');
+    accessibilityLabelText = topMatch?.internship ? t('home.orb.a11yTopWithInternship', { score, title: topMatch.internship.title, company: topMatch.internship.company }) : t('home.orb.a11yTop', { score });
   } else if (hasAnalyzedCV) {
-    statusEyebrow = 'MATCH INTELLIGENCE';
+    statusEyebrow = t('home.orb.eyebrow');
     primaryContent = (
       <View style={styles.centerScoreWrap}>
         <Ionicons name="sparkles" size={32} color={colors.accent || colors.teal} />
-        <Text style={styles.stateLabel}>Ready</Text>
+        <Text style={styles.stateLabel}>{t('home.orb.ready')}</Text>
       </View>
     );
-    subtitleText = 'Run matching calculation to score internships';
-    accessibilityLabelText = 'Match Intelligence. Profile analyzed, ready to calculate internship matches.';
+    subtitleText = t('home.orb.readySubtitle');
+    accessibilityLabelText = t('home.orb.a11yReady');
   } else {
-    statusEyebrow = 'MATCH INTELLIGENCE';
+    statusEyebrow = t('home.orb.eyebrow');
     primaryContent = (
       <View style={styles.centerScoreWrap}>
         <Ionicons name="document-text-outline" size={32} color={colors.accent || colors.teal} />
-        <Text style={styles.stateLabel}>CV Needed</Text>
+        <Text style={styles.stateLabel}>{t('home.orb.cvNeeded')}</Text>
       </View>
     );
-    subtitleText = 'Upload your CV to activate AI matching';
-    accessibilityLabelText = 'Match Intelligence. Upload your CV to calculate compatibility scores.';
+    subtitleText = t('home.orb.cvNeededSubtitle');
+    accessibilityLabelText = t('home.orb.a11yCvNeeded');
   }
 
   return (
