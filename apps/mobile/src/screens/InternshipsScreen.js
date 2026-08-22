@@ -16,7 +16,7 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
-import AppChromeHeader from '../components/AppChromeHeader';
+import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHeader';
 import Card from '../components/Card';
 import PressableCard from '../components/PressableCard';
 import Chip from '../components/Chip';
@@ -204,7 +204,7 @@ export default function InternshipsScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
-      <AppChromeHeader />
+      <AuthenticatedAppChromeHeader />
       <ScreenHeader
         title={t('internships.title')}
         rightAction={savedHeaderAction}

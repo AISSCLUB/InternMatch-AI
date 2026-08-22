@@ -17,7 +17,7 @@ import { typography } from '../theme/typography';
 import motionTokens from '../motion/motionTokens';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
-import AppChromeHeader from '../components/AppChromeHeader';
+import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHeader';
 import Card from '../components/Card';
 import PressableCard from '../components/PressableCard';
 import PressableScale from '../components/PressableScale';
@@ -124,7 +124,7 @@ export default function MatchupsScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
-      <AppChromeHeader />
+      <AuthenticatedAppChromeHeader />
       <ScreenHeader
         title={t('matchups.title')}
         alignment="start"

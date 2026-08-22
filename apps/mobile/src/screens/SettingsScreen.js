@@ -18,6 +18,7 @@ import GlassSurface from '../components/GlassSurface';
 import { signOut, getCurrentUser, sendPasswordResetEmail } from '../services/auth';
 import { PASSWORD_RESET_REDIRECT_URL } from '../services/passwordRecovery';
 import { useProfile } from '../context/ProfileContext';
+import { getSubscriptionSnapshot } from '../services/subscriptionService';
 import haptics from '../services/haptics';
 import { useTranslation } from 'react-i18next';
 import { useLocalization } from '../localization/LocalizationContext';
@@ -96,13 +97,16 @@ function SettingsRow({
 export default function SettingsScreen({ navigation }) {
   const [userEmail, setUserEmail] = useState('');
   const [signingOut, setSigningOut] = useState(false);
-  const { clearProfile } = useProfile();
+  const { profile, clearProfile } = useProfile();
   const { t } = useTranslation();
   const { locale, isRTL, setLocale } = useLocalization();
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const [changingLanguage, setChangingLanguage] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const passwordResetInFlightRef = useRef(false);
+
+  const subscriptionSnapshot = getSubscriptionSnapshot(profile?.preferences?.account_type);
+  const currentPlanLabel = t(subscriptionSnapshot.currentPlan.badgeKey);
 
   useEffect(() => {
     let isMounted = true;
@@ -243,8 +247,15 @@ export default function SettingsScreen({ navigation }) {
           <SettingsRow
             icon="school-outline"
             label={t('settings.accountType')}
-            value={t('settings.accountTypeIntern')}
+            value={subscriptionSnapshot.accountType === 'employer' ? t('plans.badges.employer') : t('settings.accountTypeIntern')}
             showChevron={false}
+          />
+          <SettingsRow
+            icon="sparkles-outline"
+            label={t('settings.plansAndUpgrade')}
+            value={currentPlanLabel}
+            onPress={() => navigation.navigate('Plans')}
+            accessibilityLabel={t('settings.accessibility.plansAndUpgrade')}
           />
           <SettingsRow
             icon="mail-outline"

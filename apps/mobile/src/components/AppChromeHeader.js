@@ -5,13 +5,13 @@ import { spacing } from '../theme/spacing';
 import InternMatchLogo from './InternMatchLogo';
 import PlanBadge from './PlanBadge';
 
-export default function AppChromeHeader({ style, rightAction }) {
+export default function AppChromeHeader({ style, rightAction, plan = 'free', onPlanPress }) {
   return (
     <View style={[styles.headerContainer, style]}>
       <View style={styles.contentRow}>
         <InternMatchLogo style={styles.logoItem} />
         <View style={styles.rightGroup}>
-          <PlanBadge plan="free" style={styles.badgeItem} />
+          <PlanBadge plan={plan} onPress={onPlanPress} style={styles.badgeItem} />
           {rightAction ? <View style={styles.actionItem}>{rightAction}</View> : null}
         </View>
       </View>

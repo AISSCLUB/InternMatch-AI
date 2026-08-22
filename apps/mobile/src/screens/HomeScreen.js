@@ -26,7 +26,7 @@ import MatchBadge from '../components/MatchBadge';
 import Reveal from '../components/motion/Reveal';
 import MatchIntelligenceOrb from '../components/motion/MatchIntelligenceOrb';
 import AIPulse from '../components/motion/AIPulse';
-import AppChromeHeader from '../components/AppChromeHeader';
+import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHeader';
 import { useProfile } from '../context/ProfileContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 import { getMatches } from '../services/api';
@@ -117,7 +117,7 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
-      <AppChromeHeader />
+      <AuthenticatedAppChromeHeader />
 
       <ScrollView
         ref={scrollViewRef}

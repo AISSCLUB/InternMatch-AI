@@ -19,7 +19,7 @@ import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
-import AppChromeHeader from '../components/AppChromeHeader';
+import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHeader';
 import GlassSurface from '../components/GlassSurface';
 import Card from '../components/Card';
 import Chip from '../components/Chip';
@@ -115,8 +115,8 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <ScreenContainer edges={['top']}>
-      {/* Dynamic App Chrome Header with FREE PLAN badge & visibly positioned settings action */}
-      <AppChromeHeader
+      {/* Authenticated App Chrome Header with canonical plan badge & settings action */}
+      <AuthenticatedAppChromeHeader
         rightAction={renderSettingsAction()}
       />
 
