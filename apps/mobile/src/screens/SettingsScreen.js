@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import GlassSurface from '../components/GlassSurface';
 import { signOut, getCurrentUser, sendPasswordResetEmail } from '../services/auth';
+import { PASSWORD_RESET_REDIRECT_URL } from '../services/passwordRecovery';
 import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
 import { useTranslation } from 'react-i18next';
@@ -100,6 +101,8 @@ export default function SettingsScreen({ navigation }) {
   const { locale, isRTL, setLocale } = useLocalization();
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const [changingLanguage, setChangingLanguage] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const passwordResetInFlightRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -142,6 +145,8 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handlePasswordReset = async () => {
+    if (resettingPassword) return;
+
     try {
       const email = userEmail.trim();
       if (!email) {
@@ -157,8 +162,11 @@ export default function SettingsScreen({ navigation }) {
           {
             text: t('settings.password.sendLink'),
             onPress: async () => {
+              if (passwordResetInFlightRef.current) return;
+              passwordResetInFlightRef.current = true;
+              setResettingPassword(true);
               try {
-                const { error } = await sendPasswordResetEmail(email);
+                const { error } = await sendPasswordResetEmail(email, PASSWORD_RESET_REDIRECT_URL);
                 if (error) {
                   Alert.alert(t('settings.password.resetFailedTitle'), getLocalizedErrorMessage(error, t));
                 } else {
@@ -171,6 +179,9 @@ export default function SettingsScreen({ navigation }) {
               } catch (err) {
                 const msg = getLocalizedErrorMessage(err, t);
                 Alert.alert(t('common.error'), msg);
+              } finally {
+                passwordResetInFlightRef.current = false;
+                setResettingPassword(false);
               }
             },
           },

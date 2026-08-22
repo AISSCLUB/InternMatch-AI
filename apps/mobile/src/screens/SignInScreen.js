@@ -122,10 +122,9 @@ export default function SignInScreen({ navigation }) {
   };
 
   const handleForgotPassword = () => {
-    Alert.alert(
-      t('auth.forgotPassword'),
-      t('auth.resetPasswordInstructions')
-    );
+    navigation.navigate('ForgotPassword', {
+      email: email ? email.trim() : undefined,
+    });
   };
 
   return (
