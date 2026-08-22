@@ -57,4 +57,3 @@ export function getErrorTranslationKey(error) {
 export function getLocalizedErrorMessage(error, translate = i18n.t.bind(i18n)) {
   return translate(getErrorTranslationKey(error));
 }
-
