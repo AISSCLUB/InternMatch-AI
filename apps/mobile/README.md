@@ -1,86 +1,78 @@
-# InternMatch — React Native
+# InternMatch AI — Mobile Client (Expo / React Native)
 
-Figma tasarımındaki 18 ekranın tamamının React Native karşılığı. Mevcut bir React Native
-projeniz varsa `src/` klasörünü ve `App.js`'i doğrudan projenize kopyalayıp birleştirebilir,
-ya da bu klasörü olduğu gibi yeni bir repo/branch olarak kullanabilirsiniz.
+This directory contains the cross-platform mobile application for **InternMatch AI**, built with **React Native (0.81.5)** and **Expo SDK 54**.
 
-## Klasör yapısı
+---
 
-```
-internmatch-app/
-├── App.js
-├── package.json
-└── src/
-    ├── theme/colors.js          # ortak renk paleti (gradient, teal, status renkleri)
-    ├── components/
-    │   ├── GradientButton.js    # tüm ekranlardaki CTA butonları
-    │   ├── MatchBadge.js        # %94 / %88 / %71 eşleşme rozetleri
-    │   └── Chip.js              # Python/ML/SQL gibi skill etiketleri
-    ├── services/
-    │   └── googleAuth.js        # "by Google" akışı (native Google Sign-In sarmalayıcı)
-    ├── navigation/
-    │   ├── RootNavigator.js     # tüm ekranları birbirine bağlayan stack
-    │   ├── MainTabs.js          # alt sekmeler: Home / Internships / Matchups / Applications / Profile
-    │   └── CustomTabBar.js      # Figma'daki ikon barı
-    └── screens/                 # 15 ekran dosyası (aşağıdaki eşleştirmeye bakın)
-```
+## Overview
 
-## Figma ekranı → dosya eşleştirmesi
+The mobile client provides the primary candidate interface:
+- **Authentication:** Email/Password authentication & signup confirmation powered by Supabase Auth.
+- **Onboarding & Profile:** Candidate profile creation, headline, skills, education, and experience.
+- **CV Upload & Enrichment:** PDF/DOCX CV parsing for automated profile and skills enrichment.
+- **Internship Discovery & Matching:** Explore curated internships, real-time match scoring, and deep **Why You Match** explanations with skill gap analysis.
+- **Saved Internships & Applications:** Save favorite opportunities and track application lifecycle stages.
+- **AI Cover Letter Drafting:** Tone-adjusted, job-specific cover letter drafts.
+- **RevenueCat Monetization:** Pro Student candidate tier with native RevenueCat Test Store integration, dynamic pricing, purchasing, and entitlement restoration.
+- **Multilingual Support:** Fully localized in English (`en`), Turkish (`tr`), and Arabic (`ar`) with RTL layout support.
 
-| Figma ekranı | Dosya |
-|---|---|
-| Splash Screen | `screens/SplashScreen.js` |
-| Sign In Page | `screens/SignInScreen.js` |
-| Sign Up Page | `screens/SignUpScreen.js` |
-| Login/Register by Google | `services/googleAuth.js` (native OS akışı, ayrıca bkz. not aşağıda) |
-| Home Page (2 durum) | `screens/HomeScreen.js` |
-| Internships | `screens/InternshipsScreen.js` |
-| Internships Detail | `screens/InternshipDetailScreen.js` |
-| Matchups | `screens/MatchupsScreen.js` |
-| Why You Match | `screens/WhyYouMatchScreen.js` |
-| AI Cover Letter Draft | `screens/CoverLetterDraftScreen.js` |
-| Cover Letter | `screens/CoverLetterScreen.js` |
-| Applications | `screens/ApplicationsScreen.js` |
-| Profile | `screens/ProfileScreen.js` |
-| Edit Profile Page | `screens/EditProfileScreen.js` |
-| Settings Page | `screens/SettingsScreen.js` |
-| CV Upload Page | `screens/CVUploadScreen.js` |
+---
 
-> **Not — Google giriş ekranları:** Figma'daki "wants to use google.com to log in" ve
-> "Choose an account" ekranları Google/işletim sistemi tarafından native olarak render edilir;
-> uygulama kodu içinde bunları piksel piksel kopyalamak mümkün değildir ve önerilmez.
-> Bunun yerine `services/googleAuth.js` içinde `@react-native-google-signin/google-signin`
-> paketiyle gerçek OAuth akışı tetiklenir — kullanıcı butona bastığında o native ekranlar
-> otomatik olarak açılır.
+## Prerequisites
 
-## Kurulum
+- **Node.js:** `v20.x` or `v22.x` (LTS recommended)
+- **npm:** `v10.x` or higher
+- **Android Studio & Android SDK:** For native Android development client and emulator testing.
 
+---
+
+## Quick Setup
+
+### 1. Install Dependencies
 ```bash
-npm install
-# iOS
-cd ios && pod install && cd ..
-npm run ios
-# Android
-npm run android
+npm ci
 ```
 
-Ek native kurulum gerektiren paketler:
-- `react-native-vector-icons`: font linkleme (bkz. paketin kendi kurulum talimatları)
-- `@react-native-google-signin/google-signin`: iOS URL scheme + Android SHA-1 + `webClientId`
-- `react-native-linear-gradient`: otomatik link olur, ekstra adım gerekmez (RN ≥0.60)
-
-## Sahte (mock) veriler
-
-Tüm ekranlarda `MOCK_*` sabitleri olarak işaretlenmiş örnek veriler var (örn. `HomeScreen.js`
-içindeki `MOCK_MATCHUPS`). Bunları kendi API/servis katmanınıza bağlamanız yeterli — component
-yapısı ve prop'lar zaten gerçek veriyle çalışacak şekilde kuruldu.
-
-## Git branch'e push etme
-
+### 2. Configure Environment
+Copy the environment template and populate with your Supabase and RevenueCat public keys:
 ```bash
-git checkout -b feature/internmatch-ui
-# bu klasördeki dosyaları projenize kopyaladıktan sonra:
-git add .
-git commit -m "Figma tasarımlarından InternMatch ekranlarının React Native implementasyonu"
-git push origin feature/internmatch-ui
+cp .env.example .env
 ```
+
+Key variables:
+- `EXPO_PUBLIC_SUPABASE_URL`: Your Supabase project URL.
+- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: Your Supabase public/anon API key.
+- `EXPO_PUBLIC_API_URL`: Backend API URL (`http://10.0.2.2:8000/api/v1` for Android Emulator, `http://localhost:8000/api/v1` for iOS/web).
+- `EXPO_PUBLIC_REVENUECAT_API_KEY`: RevenueCat public SDK key for the configured app/store. For the Shipaton Test Store workflow, use the RevenueCat Test Store public SDK key.
+
+---
+
+## Development Runtime & RevenueCat
+
+> [!IMPORTANT]
+> **RevenueCat native in-app purchases require a native development build.**
+> Standard Expo Go does not contain the native `react-native-purchases` binary. For evaluating the full purchase, CustomerInfo entitlement updates, and restoration flow, run the native development client:
+
+### Running with Native Development Client
+```bash
+# Build/run native Android development client locally
+npx expo run:android
+
+# Start the Metro bundler in development client mode
+npx expo start --dev-client
+```
+
+---
+
+## Static Type Checking
+
+Verify TypeScript compilation:
+```bash
+npx tsc --noEmit
+```
+
+---
+
+## Complete Judge & Reproduction Runbook
+
+For end-to-end backend, database, worker, seed data, and evaluator instructions, refer to the root [Judge Reproduction Runbook](../../JUDGE_RUNBOOK.md).
