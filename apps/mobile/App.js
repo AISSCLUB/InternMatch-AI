@@ -5,17 +5,20 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { ProfileProvider } from './src/context/ProfileContext';
 import { SavedInternshipsProvider } from './src/context/SavedInternshipsContext';
 import { LocalizationProvider } from './src/localization/LocalizationContext';
+import { RevenueCatProvider } from './src/context/RevenueCatProvider';
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" />
       <LocalizationProvider>
-      <ProfileProvider>
-        <SavedInternshipsProvider>
-          <RootNavigator />
-        </SavedInternshipsProvider>
-      </ProfileProvider>
+        <RevenueCatProvider>
+          <ProfileProvider>
+            <SavedInternshipsProvider>
+              <RootNavigator />
+            </SavedInternshipsProvider>
+          </ProfileProvider>
+        </RevenueCatProvider>
       </LocalizationProvider>
     </SafeAreaProvider>
   );
