@@ -18,6 +18,7 @@ import GradientButton from '../components/GradientButton';
 import PlanBadge from '../components/PlanBadge';
 import { useProfile } from '../context/ProfileContext';
 import { useLocalization } from '../localization/LocalizationContext';
+import { useRevenueCat } from '../context/RevenueCatProvider';
 import { getSubscriptionSnapshot } from '../services/subscriptionService';
 import haptics from '../services/haptics';
 
@@ -25,13 +26,33 @@ export default function PlansScreen({ navigation }) {
   const { t } = useTranslation();
   const { isRTL } = useLocalization();
   const { profile } = useProfile();
+  const {
+    candidateState,
+    isPurchasing,
+    isRestoring,
+    purchaseProStudent,
+    restorePurchases,
+  } = useRevenueCat();
 
-  const subscriptionSnapshot = getSubscriptionSnapshot(profile?.preferences?.account_type);
-  const { accountType, availablePlans } = subscriptionSnapshot;
+  const subscriptionSnapshot = getSubscriptionSnapshot(
+    profile?.preferences?.account_type,
+    candidateState
+  );
+  const {
+    accountType,
+    availablePlans,
+    dynamicPriceString,
+    purchaseState,
+  } = subscriptionSnapshot;
   const isEmployer = accountType === 'employer';
   const screenSubtitle = isEmployer ? t('plans.employer.subtitle') : t('plans.subtitle');
 
-  const handleUpgradePress = useCallback((planTitle) => {
+  const isPurchaseReady = Boolean(
+    purchaseState?.providerVerified === true &&
+    purchaseState?.purchasesAvailable === true
+  );
+
+  const handleEmployerUpgrade = useCallback((planTitle) => {
     haptics.selection();
     Alert.alert(
       t('plans.previewAlert.title'),
@@ -39,6 +60,87 @@ export default function PlansScreen({ navigation }) {
       [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
     );
   }, [t]);
+
+  const handleCandidateUpgrade = useCallback(async () => {
+    if (isPurchasing || isRestoring || !isPurchaseReady) return;
+    haptics.selection();
+
+    try {
+      const result = await purchaseProStudent();
+      if (result.reason === 'identity_changed') {
+        return;
+      }
+
+      if (result.success) {
+        haptics.notificationSuccess();
+        Alert.alert(
+          t('plans.purchaseSuccess.title'),
+          t('plans.purchaseSuccess.message'),
+          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+        );
+      } else if (result.cancelled) {
+        // Quiet dismissal for user cancellation
+      } else if (result.reason === 'entitlement_not_active') {
+        Alert.alert(
+          t('plans.pendingVerification.title'),
+          t('plans.pendingVerification.message'),
+          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+        );
+      } else {
+        haptics.selection();
+        Alert.alert(
+          t('plans.purchaseFailed.title'),
+          t('plans.purchaseFailed.message'),
+          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+        );
+      }
+    } catch {
+      Alert.alert(
+        t('plans.purchaseFailed.title'),
+        t('plans.purchaseFailed.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+    }
+  }, [isPurchasing, isRestoring, isPurchaseReady, purchaseProStudent, t]);
+
+  const handleRestore = useCallback(async () => {
+    if (isPurchasing || isRestoring) return;
+    haptics.selection();
+
+    try {
+      const result = await restorePurchases();
+      if (result.reason === 'identity_changed') {
+        return;
+      }
+
+      if (result.success && result.proStudentActive) {
+        haptics.notificationSuccess();
+        Alert.alert(
+          t('plans.restoreSuccess.title'),
+          t('plans.restoreSuccess.message'),
+          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+        );
+      } else if (result.success && !result.proStudentActive) {
+        Alert.alert(
+          t('plans.nothingToRestore.title'),
+          t('plans.nothingToRestore.message'),
+          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+        );
+      } else {
+        Alert.alert(
+          t('plans.restoreFailed.title'),
+          t('plans.restoreFailed.message'),
+          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+        );
+      }
+    } catch {
+      Alert.alert(
+        t('plans.restoreFailed.title'),
+        t('plans.restoreFailed.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+    }
+  }, [isPurchasing, isRestoring, restorePurchases, t]);
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
@@ -61,7 +163,7 @@ export default function PlansScreen({ navigation }) {
         </View>
 
         {/* Employer Preview Notice */}
-        {accountType === 'employer' ? (
+        {isEmployer ? (
           <GlassSurface variant="subtle" style={styles.employerNoticeCard}>
             <View style={styles.noticeHeaderRow}>
               <Ionicons
@@ -85,10 +187,24 @@ export default function PlansScreen({ navigation }) {
           {availablePlans.map((plan) => {
             const isHighlighted = plan.isHighlighted || plan.isPaid;
             const planTitle = t(plan.titleKey);
-            const pricingLabel = isEmployer && plan.id === 'employer'
-              ? t('plans.employer.standard.pricingLabel', { defaultValue: t(plan.pricingKey) })
-              : t(plan.pricingKey);
+
+            let pricingLabel = t(plan.pricingKey);
+            if (isEmployer && plan.id === 'employer') {
+              pricingLabel = t('plans.employer.standard.pricingLabel', {
+                defaultValue: t(plan.pricingKey),
+              });
+            } else if (!isEmployer && plan.id === 'pro_student' && dynamicPriceString) {
+              pricingLabel = t('plans.candidate.pro.pricingDynamic', {
+                price: dynamicPriceString,
+                defaultValue: `${dynamicPriceString} ${t('plans.perMonth')}`,
+              });
+            }
+
             const description = t(plan.descriptionKey);
+
+            const showUpgradeBadge = isEmployer
+              ? !plan.isCurrent
+              : !plan.isCurrent && plan.id === 'pro_student';
 
             return (
               <GlassSurface
@@ -116,7 +232,7 @@ export default function PlansScreen({ navigation }) {
                         </Text>
                       </View>
                     </View>
-                  ) : (
+                  ) : showUpgradeBadge ? (
                     <View style={styles.upgradeBadgePill}>
                       <Ionicons
                         name="sparkles"
@@ -127,6 +243,10 @@ export default function PlansScreen({ navigation }) {
                       <Text style={styles.upgradeBadgeText}>
                         {t('plans.upgradeBadge')}
                       </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.currentBadgeContainer}>
+                      <PlanBadge plan={plan.id} />
                     </View>
                   )}
                 </View>
@@ -183,7 +303,9 @@ export default function PlansScreen({ navigation }) {
                     <View
                       style={styles.currentPlanBtn}
                       accessibilityRole="text"
-                      accessibilityLabel={t('plans.accessibility.currentPlanBadge', { plan: planTitle })}
+                      accessibilityLabel={t('plans.accessibility.currentPlanBadge', {
+                        plan: planTitle,
+                      })}
                     >
                       <Ionicons
                         name="checkmark"
@@ -195,22 +317,54 @@ export default function PlansScreen({ navigation }) {
                         {t('plans.currentPlan')}
                       </Text>
                     </View>
-                  ) : (
+                  ) : isEmployer ? (
                     <GradientButton
-                      title={accountType === 'employer' ? t('plans.employerUpgradeCta') : t('plans.upgradeCta')}
-                      onPress={() => handleUpgradePress(planTitle)}
+                      title={t('plans.employerUpgradeCta')}
+                      onPress={() => handleEmployerUpgrade(planTitle)}
                       color={colors.primaryBlue}
-                      accessibilityLabel={t('plans.accessibility.upgradeButton', { plan: planTitle })}
+                      accessibilityLabel={t('plans.accessibility.upgradeButton', {
+                        plan: planTitle,
+                      })}
                       style={styles.ctaButton}
                     />
-                  )}
+                  ) : plan.id === 'pro_student' ? (
+                    <GradientButton
+                      title={
+                        isPurchasing
+                          ? t('plans.purchasing')
+                          : t('plans.upgradeCta')
+                      }
+                      onPress={handleCandidateUpgrade}
+                      color={colors.primaryBlue}
+                      disabled={isPurchasing || isRestoring || !isPurchaseReady}
+                      accessibilityLabel={t('plans.accessibility.upgradeButton', {
+                        plan: planTitle,
+                      })}
+                      style={styles.ctaButton}
+                    />
+                  ) : null}
                 </View>
               </GlassSurface>
             );
           })}
         </View>
 
-        {/* Footer Pre-Monetization Truthful Disclosure */}
+        {/* Restore Purchases CTA (Candidate Only) */}
+        {!isEmployer ? (
+          <View style={styles.restoreContainer}>
+            <GradientButton
+              title={isRestoring ? t('plans.restoring') : t('plans.restorePurchases')}
+              onPress={handleRestore}
+              outline={true}
+              color={colors.primaryBlue}
+              disabled={isPurchasing || isRestoring}
+              accessibilityLabel={t('plans.restorePurchases')}
+              style={styles.restoreButton}
+            />
+          </View>
+        ) : null}
+
+        {/* Truthful Footer Disclosure */}
         <GlassSurface variant="subtle" style={styles.footerNoticeCard}>
           <View style={styles.footerNoticeHeader}>
             <Ionicons
@@ -220,11 +374,15 @@ export default function PlansScreen({ navigation }) {
               style={isRTL ? styles.iconRTL : styles.iconLTR}
             />
             <Text style={[styles.footerNoticeTitle, isRTL && styles.textRTL]}>
-              {t('plans.footerNoticeTitle')}
+              {isEmployer
+                ? t('plans.footerNoticeTitle')
+                : t('plans.candidateDisclosure.title')}
             </Text>
           </View>
           <Text style={[styles.footerNoticeBody, isRTL && styles.textRTL]}>
-            {t('plans.footerNoticeMessage')}
+            {isEmployer
+              ? t('plans.footerNoticeMessage')
+              : t('plans.candidateDisclosure.message')}
           </Text>
         </GlassSurface>
       </ScrollView>
@@ -420,6 +578,13 @@ const styles = StyleSheet.create({
     marginStart: spacing.xs,
   },
   ctaButton: {
+    height: 44,
+  },
+  restoreContainer: {
+    marginTop: spacing.md,
+    alignItems: 'center',
+  },
+  restoreButton: {
     height: 44,
   },
   footerNoticeCard: {

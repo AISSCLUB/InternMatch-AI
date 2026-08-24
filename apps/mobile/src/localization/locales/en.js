@@ -786,8 +786,13 @@ export default {
         feature2: 'Tailored AI cover letter drafting & refinement',
         feature3: 'Personalized skill development recommendations',
         feature4: 'Priority matching algorithm updates',
+        pricingDynamic: '{{price}} / month',
         title: 'Pro Student',
       },
+    },
+    candidateDisclosure: {
+      message: 'Purchases in this demo use RevenueCat Test Store. No real payment is charged.',
+      title: 'RevenueCat Test Store',
     },
     comparisonTitle: 'Plan Comparison',
     currentPlan: 'Current Plan',
@@ -815,6 +820,15 @@ export default {
     employerUpgradeCta: 'Explore Employer Pro',
     footerNoticeMessage: 'InternMatch AI plans and tiers are displayed for feature preview. No payment processing, charges, or subscriptions are active in this build.',
     footerNoticeTitle: 'Pre-Monetization Preview',
+    nothingToRestore: {
+      message: 'No active Pro Student subscription was found for this store account.',
+      title: 'No Subscription Found',
+    },
+    pendingVerification: {
+      message: 'Your purchase is being processed by the store. Your subscription will activate once confirmed.',
+      title: 'Purchase Pending Verification',
+    },
+    perMonth: '/ month',
     previewAlert: {
       message: 'In-app purchases are not available in this preview build. Subscription plans and payment processing will be connected at official launch.',
       title: 'Preview Feature',
@@ -822,6 +836,25 @@ export default {
     previewTag: 'Preview',
     pricingPreview: 'Pricing available at launch',
     pricingPreviewFree: 'Included in Preview',
+    purchaseFailed: {
+      message: 'Unable to complete your purchase at this time. Please try again later.',
+      title: 'Purchase Unsuccessful',
+    },
+    purchaseSuccess: {
+      message: 'Your Pro Student subscription is now active. Enjoy all advanced AI matching and career tools.',
+      title: 'Welcome to Pro Student!',
+    },
+    purchasing: 'Processing...',
+    restoreFailed: {
+      message: 'Unable to restore purchases at this time. Please check your connection and try again.',
+      title: 'Restore Failed',
+    },
+    restorePurchases: 'Restore Purchases',
+    restoreSuccess: {
+      message: 'Your Pro Student subscription has been successfully restored.',
+      title: 'Purchases Restored',
+    },
+    restoring: 'Restoring...',
     subtitle: 'Choose the right plan to accelerate your internship journey',
     title: 'Plans & Upgrade',
     upgradeBadge: 'UPGRADE',
