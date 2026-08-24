@@ -11,9 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useScrollToTop } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { getTabScreenBottomPadding } from '../theme/tabBarLayout';
 import motionTokens from '../motion/motionTokens';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
@@ -36,6 +38,8 @@ import { getLocalizedErrorMessage } from '../localization/errorMessages';
 export default function MatchupsScreen({ navigation }) {
   const { t } = useTranslation();
   const { isRTL } = useLocalization();
+  const insets = useSafeAreaInsets();
+  const bottomPadding = getTabScreenBottomPadding(insets.bottom);
   const scrollViewRef = useRef(null);
   useTabScroll('Matchups', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -134,7 +138,7 @@ export default function MatchupsScreen({ navigation }) {
       <ScrollView
         ref={scrollViewRef}
         style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}

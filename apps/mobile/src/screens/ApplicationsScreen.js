@@ -12,9 +12,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
+import { getTabScreenBottomPadding } from '../theme/tabBarLayout';
 import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHeader';
@@ -52,6 +54,8 @@ function StatusPill({ status }) {
 export default function ApplicationsScreen({ navigation }) {
   const { t } = useTranslation();
   const { locale } = useLocalization();
+  const insets = useSafeAreaInsets();
+  const bottomPadding = getTabScreenBottomPadding(insets.bottom);
   const scrollViewRef = useRef(null);
   useTabScroll('Applications', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -146,7 +150,7 @@ export default function ApplicationsScreen({ navigation }) {
       <ScrollView
         ref={scrollViewRef}
         style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}

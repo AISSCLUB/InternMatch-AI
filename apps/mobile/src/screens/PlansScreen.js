@@ -28,6 +28,8 @@ export default function PlansScreen({ navigation }) {
 
   const subscriptionSnapshot = getSubscriptionSnapshot(profile?.preferences?.account_type);
   const { accountType, availablePlans } = subscriptionSnapshot;
+  const isEmployer = accountType === 'employer';
+  const screenSubtitle = isEmployer ? t('plans.employer.subtitle') : t('plans.subtitle');
 
   const handleUpgradePress = useCallback((planTitle) => {
     haptics.selection();
@@ -54,7 +56,7 @@ export default function PlansScreen({ navigation }) {
         {/* Intro Header */}
         <View style={styles.headerSection}>
           <Text style={[styles.screenSubtitle, isRTL && styles.textRTL]}>
-            {t('plans.subtitle')}
+            {screenSubtitle}
           </Text>
         </View>
 
@@ -83,7 +85,9 @@ export default function PlansScreen({ navigation }) {
           {availablePlans.map((plan) => {
             const isHighlighted = plan.isHighlighted || plan.isPaid;
             const planTitle = t(plan.titleKey);
-            const pricingLabel = t(plan.pricingKey);
+            const pricingLabel = isEmployer && plan.id === 'employer'
+              ? t('plans.employer.standard.pricingLabel', { defaultValue: t(plan.pricingKey) })
+              : t(plan.pricingKey);
             const description = t(plan.descriptionKey);
 
             return (
@@ -144,19 +148,33 @@ export default function PlansScreen({ navigation }) {
 
                 {/* Features List */}
                 <View style={styles.featuresList}>
-                  {plan.features.map((featKey, idx) => (
-                    <View key={`${plan.id}-feat-${idx}`} style={styles.featureRow}>
-                      <Ionicons
-                        name={plan.isPaid ? 'sparkles' : 'checkmark-circle'}
-                        size={16}
-                        color={plan.isPaid ? colors.primaryBlue : (colors.accent || colors.teal)}
-                        style={isRTL ? styles.featureIconRTL : styles.featureIconLTR}
-                      />
-                      <Text style={[styles.featureText, isRTL && styles.textRTL]}>
-                        {t(featKey)}
-                      </Text>
-                    </View>
-                  ))}
+                  {plan.features.map((featKey, idx) => {
+                    const isStandardEmployer = isEmployer && !plan.isPaid;
+                    const iconName = isStandardEmployer
+                      ? 'time-outline'
+                      : plan.isPaid
+                      ? 'sparkles'
+                      : 'checkmark-circle';
+                    const iconColor = isStandardEmployer
+                      ? (colors.accentStrong || colors.tealDark)
+                      : plan.isPaid
+                      ? colors.primaryBlue
+                      : (colors.accent || colors.teal);
+
+                    return (
+                      <View key={`${plan.id}-feat-${idx}`} style={styles.featureRow}>
+                        <Ionicons
+                          name={iconName}
+                          size={16}
+                          color={iconColor}
+                          style={isRTL ? styles.featureIconRTL : styles.featureIconLTR}
+                        />
+                        <Text style={[styles.featureText, isRTL && styles.textRTL]}>
+                          {t(featKey)}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 {/* Action CTA */}

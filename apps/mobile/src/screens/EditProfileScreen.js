@@ -24,6 +24,7 @@ import Chip from '../components/Chip';
 import GradientButton from '../components/GradientButton';
 import { useProfile } from '../context/ProfileContext';
 import { upsertProfile, uploadAvatar, deleteAvatar } from '../services/api';
+import { normalizeAccountType } from '../services/subscriptionService';
 import haptics from '../services/haptics';
 
 const WORK_TYPE_KEYS = [
@@ -79,6 +80,11 @@ function normalizeUrl(rawUrl) {
 export default function EditProfileScreen({ navigation }) {
   const { t } = useTranslation();
   const { profile, setProfile, refreshProfile } = useProfile();
+
+  const accountType = profile?.preferences?.account_type
+    ? normalizeAccountType(profile.preferences.account_type)
+    : null;
+  const isEmployer = accountType === 'employer';
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
   const [headline, setHeadline] = useState(profile?.headline ?? '');
@@ -372,21 +378,35 @@ export default function EditProfileScreen({ navigation }) {
 
     setSaving(true);
     try {
-      const payload = {
-        full_name: trimmedName,
-        headline: headline.trim() || (department.trim() ? department.trim() : null),
-        preferences: {
-          ...(profile?.preferences || {}),
-          department: department.trim() || null,
-          linkedin_url: normalizedLinkedin,
-          github_url: normalizedGithub,
-          portfolio_url: normalizedPortfolio,
-          work_types: workTypes,
-          desired_locations: desiredLocations,
-          target_roles: targetRoles,
-        },
-        skills: skills,
-      };
+      const payload = isEmployer
+        ? {
+            full_name: trimmedName,
+            headline: headline.trim() || null,
+            preferences: {
+              ...(profile?.preferences || {}),
+              account_type: 'employer',
+              linkedin_url: normalizedLinkedin,
+              github_url: normalizedGithub,
+              portfolio_url: normalizedPortfolio,
+            },
+            skills: profile?.skills || [],
+          }
+        : {
+            full_name: trimmedName,
+            headline: headline.trim() || (department.trim() ? department.trim() : null),
+            preferences: {
+              ...(profile?.preferences || {}),
+              account_type: profile?.preferences?.account_type || 'intern',
+              department: department.trim() || null,
+              linkedin_url: normalizedLinkedin,
+              github_url: normalizedGithub,
+              portfolio_url: normalizedPortfolio,
+              work_types: workTypes,
+              desired_locations: desiredLocations,
+              target_roles: targetRoles,
+            },
+            skills: skills,
+          };
 
       const updated = await upsertProfile(payload);
       setProfile(updated);
@@ -399,6 +419,21 @@ export default function EditProfileScreen({ navigation }) {
       setSaving(false);
     }
   };
+
+  if (!profile) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <ScreenHeader
+          title={t('editProfile.title')}
+          showBack={true}
+          navigation={navigation}
+        />
+        <View style={styles.centerLoading}>
+          <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
@@ -459,10 +494,12 @@ export default function EditProfileScreen({ navigation }) {
 
           <Text style={styles.sectionTitle}>{t('editProfile.basicInfo')}</Text>
 
-          <Text style={styles.label}>{t('editProfile.fullName')}</Text>
+          <Text style={styles.label}>
+            {isEmployer ? t('editProfile.employer.fullName') : t('editProfile.fullName')}
+          </Text>
           <TextInput
             style={styles.input}
-            placeholder={t('editProfile.fullName')}
+            placeholder={isEmployer ? t('editProfile.employer.fullNamePlaceholder') : t('editProfile.fullName')}
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={fullName}
             onChangeText={setFullName}
@@ -471,160 +508,168 @@ export default function EditProfileScreen({ navigation }) {
           <Text style={styles.label}>{t('editProfile.headline')}</Text>
           <TextInput
             style={styles.input}
-            placeholder={t('editProfile.headlinePlaceholder', { defaultValue: 'e.g. Computer Science Student' })}
+            placeholder={
+              isEmployer
+                ? t('editProfile.employer.headlinePlaceholder', { defaultValue: 'e.g. Technology company hiring interns' })
+                : t('editProfile.headlinePlaceholder', { defaultValue: 'e.g. Computer Science Student' })
+            }
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={headline}
             onChangeText={setHeadline}
           />
 
-          <Text style={styles.label}>{t('editProfile.department')}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={t('editProfile.departmentPlaceholder', { defaultValue: 'e.g. Computer Engineering' })}
-            placeholderTextColor={colors.textTertiary || colors.textMuted}
-            value={department}
-            onChangeText={setDepartment}
-          />
+          {!isEmployer && (
+            <>
+              <Text style={styles.label}>{t('editProfile.department')}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t('editProfile.departmentPlaceholder', { defaultValue: 'e.g. Computer Engineering' })}
+                placeholderTextColor={colors.textTertiary || colors.textMuted}
+                value={department}
+                onChangeText={setDepartment}
+              />
 
-          {/* Editable Skills Section */}
-          <Text style={styles.sectionTitle}>{t('editProfile.skills')}</Text>
-          <View style={styles.chipInputRow}>
-            <TextInput
-              style={[styles.input, styles.chipInput]}
-              placeholder={t('editProfile.addSkillPlaceholder')}
-              placeholderTextColor={colors.textTertiary || colors.textMuted}
-              value={newSkill}
-              onChangeText={setNewSkill}
-              onSubmitEditing={handleAddSkill}
-              returnKeyType="done"
-              maxLength={80}
-            />
-            <TouchableOpacity
-              style={styles.addChipBtn}
-              onPress={handleAddSkill}
-              accessibilityRole="button"
-              accessibilityLabel={t('editProfile.addSkillPlaceholder')}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          {skills.length > 0 ? (
-            <View style={styles.chipRow}>
-              {skills.map((s) => (
-                <Chip
-                  key={s}
-                  label={s}
-                  variant="skill"
-                  onRemove={() => handleRemoveSkill(s)}
+              {/* Editable Skills Section */}
+              <Text style={styles.sectionTitle}>{t('editProfile.skills')}</Text>
+              <View style={styles.chipInputRow}>
+                <TextInput
+                  style={[styles.input, styles.chipInput]}
+                  placeholder={t('editProfile.addSkillPlaceholder')}
+                  placeholderTextColor={colors.textTertiary || colors.textMuted}
+                  value={newSkill}
+                  onChangeText={setNewSkill}
+                  onSubmitEditing={handleAddSkill}
+                  returnKeyType="done"
+                  maxLength={80}
                 />
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyItemsText}>
-              {t('editProfile.noSkills')}
-            </Text>
-          )}
+                <TouchableOpacity
+                  style={styles.addChipBtn}
+                  onPress={handleAddSkill}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('editProfile.addSkillPlaceholder')}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="add" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
 
-          {/* Career Preferences Section */}
-          <Text style={styles.sectionTitle}>{t('editProfile.careerPreferences')}</Text>
+              {skills.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {skills.map((s) => (
+                    <Chip
+                      key={s}
+                      label={s}
+                      variant="skill"
+                      onRemove={() => handleRemoveSkill(s)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptyItemsText}>
+                  {t('editProfile.noSkills')}
+                </Text>
+              )}
 
-          <Text style={styles.label}>{t('editProfile.workStyle')}</Text>
-          <View style={styles.chipRow}>
-            {WORK_TYPE_KEYS.map((opt) => {
-              const isSelected = workTypes.includes(opt.id);
-              const label = t(`editProfile.workTypes.${opt.id}`, { defaultValue: opt.id });
-              return (
-                <Chip
-                  key={opt.id}
-                  label={label}
-                  variant={isSelected ? 'skill' : 'neutral'}
-                  selected={isSelected}
-                  onPress={() => toggleWorkType(opt.id)}
+              {/* Career Preferences Section */}
+              <Text style={styles.sectionTitle}>{t('editProfile.careerPreferences')}</Text>
+
+              <Text style={styles.label}>{t('editProfile.workStyle')}</Text>
+              <View style={styles.chipRow}>
+                {WORK_TYPE_KEYS.map((opt) => {
+                  const isSelected = workTypes.includes(opt.id);
+                  const label = t(`editProfile.workTypes.${opt.id}`, { defaultValue: opt.id });
+                  return (
+                    <Chip
+                      key={opt.id}
+                      label={label}
+                      variant={isSelected ? 'skill' : 'neutral'}
+                      selected={isSelected}
+                      onPress={() => toggleWorkType(opt.id)}
+                    />
+                  );
+                })}
+              </View>
+
+              <Text style={styles.label}>{t('editProfile.desiredLocations')}</Text>
+              <View style={styles.chipInputRow}>
+                <TextInput
+                  style={[styles.input, styles.chipInput]}
+                  placeholder={t('editProfile.addLocationPlaceholder')}
+                  placeholderTextColor={colors.textTertiary || colors.textMuted}
+                  value={newLocation}
+                  onChangeText={setNewLocation}
+                  onSubmitEditing={handleAddLocation}
+                  returnKeyType="done"
+                  maxLength={80}
                 />
-              );
-            })}
-          </View>
+                <TouchableOpacity
+                  style={styles.addChipBtn}
+                  onPress={handleAddLocation}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('editProfile.addLocationPlaceholder')}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="add" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
 
-          <Text style={styles.label}>{t('editProfile.desiredLocations')}</Text>
-          <View style={styles.chipInputRow}>
-            <TextInput
-              style={[styles.input, styles.chipInput]}
-              placeholder={t('editProfile.addLocationPlaceholder')}
-              placeholderTextColor={colors.textTertiary || colors.textMuted}
-              value={newLocation}
-              onChangeText={setNewLocation}
-              onSubmitEditing={handleAddLocation}
-              returnKeyType="done"
-              maxLength={80}
-            />
-            <TouchableOpacity
-              style={styles.addChipBtn}
-              onPress={handleAddLocation}
-              accessibilityRole="button"
-              accessibilityLabel={t('editProfile.addLocationPlaceholder')}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+              {desiredLocations.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {desiredLocations.map((loc) => (
+                    <Chip
+                      key={loc}
+                      label={loc}
+                      variant="skill"
+                      onRemove={() => handleRemoveLocation(loc)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptyItemsText}>
+                  {t('editProfile.noLocations')}
+                </Text>
+              )}
 
-          {desiredLocations.length > 0 ? (
-            <View style={styles.chipRow}>
-              {desiredLocations.map((loc) => (
-                <Chip
-                  key={loc}
-                  label={loc}
-                  variant="skill"
-                  onRemove={() => handleRemoveLocation(loc)}
+              <Text style={styles.label}>{t('editProfile.targetRoles')}</Text>
+              <View style={styles.chipInputRow}>
+                <TextInput
+                  style={[styles.input, styles.chipInput]}
+                  placeholder={t('editProfile.addRolePlaceholder')}
+                  placeholderTextColor={colors.textTertiary || colors.textMuted}
+                  value={newRole}
+                  onChangeText={setNewRole}
+                  onSubmitEditing={handleAddRole}
+                  returnKeyType="done"
+                  maxLength={80}
                 />
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyItemsText}>
-              {t('editProfile.noLocations')}
-            </Text>
-          )}
+                <TouchableOpacity
+                  style={styles.addChipBtn}
+                  onPress={handleAddRole}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('editProfile.addRolePlaceholder')}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="add" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
 
-          <Text style={styles.label}>{t('editProfile.targetRoles')}</Text>
-          <View style={styles.chipInputRow}>
-            <TextInput
-              style={[styles.input, styles.chipInput]}
-              placeholder={t('editProfile.addRolePlaceholder')}
-              placeholderTextColor={colors.textTertiary || colors.textMuted}
-              value={newRole}
-              onChangeText={setNewRole}
-              onSubmitEditing={handleAddRole}
-              returnKeyType="done"
-              maxLength={80}
-            />
-            <TouchableOpacity
-              style={styles.addChipBtn}
-              onPress={handleAddRole}
-              accessibilityRole="button"
-              accessibilityLabel={t('editProfile.addRolePlaceholder')}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          {targetRoles.length > 0 ? (
-            <View style={styles.chipRow}>
-              {targetRoles.map((role) => (
-                <Chip
-                  key={role}
-                  label={role}
-                  variant="skill"
-                  onRemove={() => handleRemoveRole(role)}
-                />
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyItemsText}>
-              {t('editProfile.noRoles')}
-            </Text>
+              {targetRoles.length > 0 ? (
+                <View style={styles.chipRow}>
+                  {targetRoles.map((role) => (
+                    <Chip
+                      key={role}
+                      label={role}
+                      variant="skill"
+                      onRemove={() => handleRemoveRole(role)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.emptyItemsText}>
+                  {t('editProfile.noRoles')}
+                </Text>
+              )}
+            </>
           )}
 
           <Text style={styles.sectionTitle}>{t('editProfile.socialLinks')}</Text>
@@ -799,5 +844,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  centerLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxxl,
   },
 });

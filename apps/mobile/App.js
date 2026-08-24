@@ -9,7 +9,7 @@ import { LocalizationProvider } from './src/localization/LocalizationContext';
 export default function App() {
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <LocalizationProvider>
       <ProfileProvider>
         <SavedInternshipsProvider>

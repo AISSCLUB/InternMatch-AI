@@ -27,6 +27,15 @@ import {
 } from '../context/TabScrollContext';
 import { useProfile } from '../context/ProfileContext';
 
+import {
+  FLOATING_TAB_BAR_HEIGHT,
+  FLOATING_TAB_BAR_MIN_BOTTOM_INSET,
+  FLOATING_TAB_BAR_HORIZONTAL_MARGIN,
+  FLOATING_TAB_BAR_RADIUS,
+  FLOATING_TAB_BAR_LENS_HEIGHT,
+  FLOATING_TAB_BAR_LENS_TOP,
+} from '../theme/tabBarLayout';
+
 const ICONS = {
   Home: 'home',
   Internships: 'business',
@@ -64,13 +73,13 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
     ((typeof isLiquidGlassAvailable === 'function' && isLiquidGlassAvailable()) &&
       (typeof isGlassEffectAPIAvailable === 'function' && isGlassEffectAPIAvailable()));
 
-  const bottomOffset = Math.max(insets.bottom, 12);
+  const bottomOffset = Math.max(insets.bottom, FLOATING_TAB_BAR_MIN_BOTTOM_INSET);
   const routeCount = state.routes.length || 5;
   const activeVisualIndex = isRTL ? routeCount - 1 - state.index : state.index;
   const visualRoutes = isRTL ? [...state.routes].reverse() : state.routes;
 
   // Exact geometry derived directly from windowWidth
-  const totalBarWidth = windowWidth - 32; // left: 16, right: 16
+  const totalBarWidth = windowWidth - (FLOATING_TAB_BAR_HORIZONTAL_MARGIN * 2);
   const tabWidth = totalBarWidth / routeCount;
   const lensWidth = Math.max(48, tabWidth - 8);
   const lensInset = (tabWidth - lensWidth) / 2; // Symmetric 4px inset
@@ -163,7 +172,7 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
         <Animated.View
           style={[
             styles.lensContainer,
-            { width: lensWidth, height: 48, top: 6 },
+            { width: lensWidth, height: FLOATING_TAB_BAR_LENS_HEIGHT, top: FLOATING_TAB_BAR_LENS_TOP },
             animatedLensStyle,
           ]}
           pointerEvents="none"
@@ -256,10 +265,10 @@ export default function CustomTabBar({ state, descriptors, navigation }) {
 const styles = StyleSheet.create({
   floatingBar: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    height: 60,
-    borderRadius: 30,
+    left: FLOATING_TAB_BAR_HORIZONTAL_MARGIN,
+    right: FLOATING_TAB_BAR_HORIZONTAL_MARGIN,
+    height: FLOATING_TAB_BAR_HEIGHT,
+    borderRadius: FLOATING_TAB_BAR_RADIUS,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255, 255, 255, 0.35)',
@@ -274,7 +283,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
-    height: 60,
+    height: FLOATING_TAB_BAR_HEIGHT,
   },
   lensContainer: {
     position: 'absolute',
@@ -295,7 +304,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
   },
   tabItem: {
-    height: 60,
+    height: FLOATING_TAB_BAR_HEIGHT,
     minWidth: spacing.minimumTouchTarget,
     alignItems: 'center',
     justifyContent: 'center',

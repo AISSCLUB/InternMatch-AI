@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import colors from '../theme/colors';
@@ -18,7 +19,7 @@ import GlassSurface from '../components/GlassSurface';
 import { signOut, getCurrentUser, sendPasswordResetEmail } from '../services/auth';
 import { PASSWORD_RESET_REDIRECT_URL } from '../services/passwordRecovery';
 import { useProfile } from '../context/ProfileContext';
-import { getSubscriptionSnapshot } from '../services/subscriptionService';
+import { getSubscriptionSnapshot, normalizeAccountType } from '../services/subscriptionService';
 import haptics from '../services/haptics';
 import { useTranslation } from 'react-i18next';
 import { useLocalization } from '../localization/LocalizationContext';
@@ -105,6 +106,10 @@ export default function SettingsScreen({ navigation }) {
   const [resettingPassword, setResettingPassword] = useState(false);
   const passwordResetInFlightRef = useRef(false);
 
+  const accountType = profile?.preferences?.account_type
+    ? normalizeAccountType(profile.preferences.account_type)
+    : null;
+  const isEmployer = accountType === 'employer';
   const subscriptionSnapshot = getSubscriptionSnapshot(profile?.preferences?.account_type);
   const currentPlanLabel = t(subscriptionSnapshot.currentPlan.badgeKey);
 
@@ -228,6 +233,24 @@ export default function SettingsScreen({ navigation }) {
     ]);
   };
 
+  if (!profile) {
+    return (
+      <ScreenContainer edges={['top', 'bottom']}>
+        <ScreenHeader
+          title={t('settings.title')}
+          showBack={true}
+          navigation={navigation}
+        />
+        <View style={styles.profileLoadingContainer}>
+          <ActivityIndicator
+            size="large"
+            color={colors.accent || colors.teal}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
@@ -279,22 +302,27 @@ export default function SettingsScreen({ navigation }) {
           />
         </GlassSurface>
 
-        {/* Profile & Career Section */}
-        <Text style={[styles.sectionHeader, isRTL && styles.textRTL]}>{t('settings.sections.profileCareer')}</Text>
+        {/* Profile Section */}
+        <Text style={[styles.sectionHeader, isRTL && styles.textRTL]}>
+          {isEmployer ? t('settings.sections.profile') : t('settings.sections.profileCareer')}
+        </Text>
         <GlassSurface variant="card" style={styles.glassCard}>
           <SettingsRow
             icon="person-outline"
             label={t('settings.editProfile')}
             onPress={() => navigation.navigate('EditProfile')}
+            isLast={isEmployer}
             accessibilityLabel={t('settings.accessibility.editProfile')}
           />
-          <SettingsRow
-            icon="document-text-outline"
-            label={t('settings.manageCv')}
-            onPress={() => navigation.navigate('CVUpload')}
-            isLast={true}
-            accessibilityLabel={t('settings.accessibility.manageCv')}
-          />
+          {!isEmployer && (
+            <SettingsRow
+              icon="document-text-outline"
+              label={t('settings.manageCv')}
+              onPress={() => navigation.navigate('CVUpload')}
+              isLast={true}
+              accessibilityLabel={t('settings.accessibility.manageCv')}
+            />
+          )}
         </GlassSurface>
 
         {/* Privacy & Legal Section */}
@@ -615,5 +643,10 @@ const styles = StyleSheet.create({
     ...typography.button,
     color: colors.danger || colors.red,
     fontWeight: '600',
+  },
+  profileLoadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

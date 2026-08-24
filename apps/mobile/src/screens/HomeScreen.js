@@ -13,12 +13,15 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import motionTokens from '../motion/motionTokens';
+import { getTabScreenBottomPadding } from '../theme/tabBarLayout';
 import ScreenContainer from '../components/ScreenContainer';
 import Card from '../components/Card';
+import GlassSurface from '../components/GlassSurface';
 import PressableCard from '../components/PressableCard';
 import PressableScale from '../components/PressableScale';
 import GradientButton from '../components/GradientButton';
@@ -29,6 +32,7 @@ import AIPulse from '../components/motion/AIPulse';
 import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHeader';
 import { useProfile } from '../context/ProfileContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
+import { normalizeAccountType } from '../services/subscriptionService';
 import { getMatches } from '../services/api';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
 
@@ -36,7 +40,16 @@ export default function HomeScreen({ navigation }) {
   const { profile, refreshProfile } = useProfile();
   const { t } = useTranslation();
   const { isRTL } = useLocalization();
-  const displayName = profile?.full_name?.trim() || t('home.studentFallback');
+  const insets = useSafeAreaInsets();
+
+  const accountType = profile?.preferences?.account_type
+    ? normalizeAccountType(profile.preferences.account_type)
+    : null;
+  const isEmployer = accountType === 'employer';
+
+  const displayName =
+    profile?.full_name?.trim() ||
+    (isEmployer ? t('home.employerFallback', { defaultValue: 'Employer' }) : t('home.studentFallback'));
 
   const scrollViewRef = useRef(null);
   useTabScroll('Home', scrollViewRef);
@@ -68,7 +81,7 @@ export default function HomeScreen({ navigation }) {
   );
 
   const fetchMatchesData = useCallback(async () => {
-    if (!hasAnalyzedCV) return;
+    if (isEmployer || !hasAnalyzedCV) return;
 
     setMatchesLoading(true);
     setMatchesError(null);
@@ -83,19 +96,19 @@ export default function HomeScreen({ navigation }) {
     } finally {
       setMatchesLoading(false);
     }
-  }, [hasAnalyzedCV]);
+  }, [isEmployer, hasAnalyzedCV]);
 
   useEffect(() => {
-    if (hasAnalyzedCV) {
+    if (!isEmployer && hasAnalyzedCV) {
       fetchMatchesData();
     }
-  }, [hasAnalyzedCV, fetchMatchesData]);
+  }, [isEmployer, hasAnalyzedCV, fetchMatchesData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await refreshProfile();
-      if (hasAnalyzedCV) {
+      if (!isEmployer && hasAnalyzedCV) {
         await fetchMatchesData();
       }
     } catch (err) {
@@ -115,6 +128,18 @@ export default function HomeScreen({ navigation }) {
   const firstMatch = topMatches[0];
   const remainingMatches = topMatches.slice(1);
 
+  const bottomPadding = getTabScreenBottomPadding(insets.bottom);
+
+  if (!profile) {
+    return (
+      <ScreenContainer edges={['top']}>
+        <View style={styles.centerLoading}>
+          <ActivityIndicator size="large" color={colors.accent || colors.teal} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer edges={['top']}>
       <AuthenticatedAppChromeHeader />
@@ -122,7 +147,7 @@ export default function HomeScreen({ navigation }) {
       <ScrollView
         ref={scrollViewRef}
         style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -139,31 +164,115 @@ export default function HomeScreen({ navigation }) {
         <Reveal delay={0}>
           <View style={styles.headerBlock}>
             {isRTL ? (
-              <Text style={[styles.hello, styles.rtlText]} numberOfLines={2}>
-                <Text style={styles.rtlWriting}>{t('home.greetingHello', { defaultValue: 'أهلاً' })}, </Text>
-                <Text style={{ writingDirection: 'ltr' }}>{displayName}</Text>
-                <Text> {'\u{1F44B}'}</Text>
-              </Text>
+              <View style={styles.greetingRowRTL}>
+                <Text style={[styles.hello, styles.rtlText]}>
+                  {t('home.greetingHello', { defaultValue: 'أهلاً' })},
+                </Text>
+                <View style={styles.nameIsolation}>
+                  <Text
+                    style={[styles.hello, styles.nameLTR]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {displayName}
+                  </Text>
+                </View>
+                <Text style={styles.hello}>
+                  {'\u{1F44B}'}
+                </Text>
+              </View>
             ) : (
-              <Text style={styles.hello} numberOfLines={2}>
-                {t('home.greeting', { name: displayName })} {'\u{1F44B}'}
-              </Text>
+              <View style={styles.greetingRowLTR}>
+                <Text style={styles.hello} numberOfLines={2}>
+                  {t('home.greeting', { name: displayName })} {'\u{1F44B}'}
+                </Text>
+              </View>
             )}
           </View>
         </Reveal>
 
-        {/* Sequence 2: Signature Match Intelligence Hero Orb */}
-        <Reveal delay={motionTokens.stagger.fast}>
-          <MatchIntelligenceOrb
-            score={firstMatch?.overall_score}
-            topMatch={firstMatch}
-            hasAnalyzedCV={hasAnalyzedCV}
-            isCalculating={isCalculating}
-            progressPercent={progressPercent}
-          />
-        </Reveal>
+        {isEmployer ? (
+          <>
+            {/* Sequence 2: Employer Preview Hero Card */}
+            <Reveal delay={motionTokens.stagger.fast}>
+              <GlassSurface variant="card" style={styles.employerHeroCard}>
+                <View style={[styles.employerHeroHeader, isRTL && styles.rowRTL]}>
+                  <View style={styles.employerIconCircle}>
+                    <Ionicons name="briefcase-outline" size={24} color={colors.accentStrong || colors.tealDark} />
+                  </View>
+                  <View style={styles.employerHeroTitleBlock}>
+                    <Text style={[styles.employerHeroEyebrow, isRTL && styles.rtlText]}>
+                      {t('home.employer.previewEyebrow')}
+                    </Text>
+                    <Text style={[styles.employerHeroTitle, isRTL && styles.rtlText]}>
+                      {t('home.employer.previewTitle')}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.employerHeroDescription, isRTL && styles.rtlText]}>
+                  {t('home.employer.previewDescription')}
+                </Text>
+                <View style={styles.employerActions}>
+                  <GradientButton
+                    title={t('home.employer.viewPlans')}
+                    color={colors.accent || colors.teal}
+                    onPress={() => navigation.navigate('Plans')}
+                    style={styles.employerActionBtn}
+                  />
+                  <TouchableOpacity
+                    style={[styles.employerProfileLink, isRTL && styles.rowRTL]}
+                    onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.employer.viewProfile')}
+                  >
+                    <Text style={[styles.employerProfileLinkText, isRTL && styles.rtlText]}>
+                      {t('home.employer.viewProfile')}
+                    </Text>
+                    <Ionicons
+                      name={isRTL ? 'arrow-back' : 'arrow-forward'}
+                      size={16}
+                      color={colors.accentStrong || colors.tealDark}
+                      style={[styles.browseIcon, isRTL && styles.browseIconRTL]}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </GlassSurface>
+            </Reveal>
 
-        {!hasAnalyzedCV ? (
+            {/* Sequence 3: Truthful Roadmap Notice Card */}
+            <Reveal delay={motionTokens.stagger.normal}>
+              <GlassSurface variant="subtle" style={styles.roadmapCard}>
+                <View style={[styles.roadmapHeader, isRTL && styles.rowRTL]}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={18}
+                    color={colors.textSecondary || colors.textMuted}
+                    style={isRTL ? styles.browseIconRTL : styles.browseIcon}
+                  />
+                  <Text style={[styles.roadmapTitle, isRTL && styles.rtlText]}>
+                    {t('plans.footerNoticeTitle')}
+                  </Text>
+                </View>
+                <Text style={[styles.roadmapBody, isRTL && styles.rtlText]}>
+                  {t('home.employer.roadmapNotice')}
+                </Text>
+              </GlassSurface>
+            </Reveal>
+          </>
+        ) : (
+          <>
+            {/* Sequence 2: Signature Match Intelligence Hero Orb */}
+            <Reveal delay={motionTokens.stagger.fast}>
+              <MatchIntelligenceOrb
+                score={firstMatch?.overall_score}
+                topMatch={firstMatch}
+                hasAnalyzedCV={hasAnalyzedCV}
+                isCalculating={isCalculating}
+                progressPercent={progressPercent}
+              />
+            </Reveal>
+
+            {!hasAnalyzedCV ? (
           <>
             {/* Sequence 3: Upload CV Prompt Card */}
             <Reveal delay={motionTokens.stagger.normal}>
@@ -427,7 +536,9 @@ export default function HomeScreen({ navigation }) {
             </Reveal>
           </>
         )}
-      </ScrollView>
+      </>
+    )}
+  </ScrollView>
     </ScreenContainer>
   );
 }
@@ -750,5 +861,108 @@ const styles = StyleSheet.create({
   arrowIconRTL: {
     marginStart: 0,
     marginEnd: spacing.xs,
+  },
+  greetingRowRTL: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    columnGap: spacing.xs,
+  },
+  greetingRowLTR: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  nameIsolation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  nameLTR: {
+    writingDirection: 'ltr',
+    textAlign: 'left',
+  },
+  employerHeroCard: {
+    padding: spacing.lg,
+    borderRadius: spacing.radii.card || spacing.radii.lg,
+    marginBottom: spacing.lg,
+  },
+  employerHeroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  employerIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginEnd: spacing.md,
+  },
+  employerHeroTitleBlock: {
+    flex: 1,
+  },
+  employerHeroEyebrow: {
+    ...typography.eyebrow,
+    color: colors.accentStrong || colors.tealDark,
+    letterSpacing: 0.6,
+  },
+  employerHeroTitle: {
+    ...typography.cardTitle,
+    fontSize: 18,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.xxs,
+  },
+  employerHeroDescription: {
+    ...typography.bodySecondary,
+    color: colors.textSecondary || colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: spacing.lg,
+  },
+  employerActions: {
+    gap: spacing.sm,
+  },
+  employerActionBtn: {
+    width: '100%',
+  },
+  employerProfileLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    minHeight: spacing.minimumTouchTarget,
+  },
+  employerProfileLinkText: {
+    ...typography.button,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 13,
+  },
+  roadmapCard: {
+    padding: spacing.md,
+    borderRadius: spacing.radii.card || spacing.radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle || colors.border,
+  },
+  roadmapHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  roadmapTitle: {
+    ...typography.label,
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textSecondary || colors.textMuted,
+    marginStart: spacing.xs,
+    letterSpacing: 0.3,
+  },
+  roadmapBody: {
+    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary || colors.textMuted,
   },
 });

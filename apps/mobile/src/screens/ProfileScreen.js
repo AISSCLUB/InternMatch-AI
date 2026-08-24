@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -28,6 +29,8 @@ import { useProfile } from '../context/ProfileContext';
 import { useSavedInternships } from '../context/SavedInternshipsContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 import { useLocalization } from '../localization/LocalizationContext';
+import { normalizeAccountType } from '../services/subscriptionService';
+import { getTabScreenBottomPadding } from '../theme/tabBarLayout';
 import { calculateProfileCompleteness } from '../utils/profileCompleteness';
 
 const appVersion = require('../../app.json').expo.version || '1.0.0';
@@ -43,6 +46,7 @@ function getInitials(name) {
 export default function ProfileScreen({ navigation }) {
   const { t } = useTranslation();
   const { isRTL } = useLocalization();
+  const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
   useTabScroll('Profile', scrollViewRef);
   useScrollToTop(scrollViewRef);
@@ -50,6 +54,13 @@ export default function ProfileScreen({ navigation }) {
 
   const { profile, loading, refreshProfile } = useProfile();
   const { savedIds } = useSavedInternships();
+
+  const accountType = profile?.preferences?.account_type
+    ? normalizeAccountType(profile.preferences.account_type)
+    : null;
+  const isEmployer = accountType === 'employer';
+
+  const bottomPadding = getTabScreenBottomPadding(insets.bottom);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,7 +104,7 @@ export default function ProfileScreen({ navigation }) {
 
   // Derive primary education summary if available
   const primaryEducation =
-    profile?.education && profile.education.length > 0
+    !isEmployer && profile?.education && profile.education.length > 0
       ? `${profile.education[0].degree} - ${profile.education[0].institution}`
       : null;
 
@@ -123,7 +134,7 @@ export default function ProfileScreen({ navigation }) {
       <ScrollView
         ref={scrollViewRef}
         style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -151,12 +162,12 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </View>
 
-        {loading && !profile ? (
+        {!profile ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
             <Text style={styles.loadingText}>{t('profile.loading')}</Text>
           </View>
-        ) : profile ? (
+        ) : (
           <>
             <Text style={styles.name} numberOfLines={2}>
               {profile.full_name}
@@ -164,257 +175,293 @@ export default function ProfileScreen({ navigation }) {
             {profile.headline ? (
               <Text style={styles.subtitle}>{profile.headline}</Text>
             ) : null}
-            {primaryEducation ? (
+            {!isEmployer && primaryEducation ? (
               <Text style={styles.subtitle}>{primaryEducation}</Text>
             ) : null}
 
-            {/* Profile Completeness Card */}
-            <GlassSurface variant="card" style={styles.completenessCard}>
-              <View style={styles.completenessHeader}>
-                <View style={styles.completenessTitleRow}>
+            {isEmployer ? (
+              /* Employer Preview Disclosure Card */
+              <GlassSurface variant="card" style={styles.employerNoticeCard}>
+                <View style={[styles.employerNoticeHeader, isRTL && styles.rowRTL]}>
                   <Ionicons
-                    name={completeness.isComplete ? 'shield-checkmark' : 'sparkles'}
-                    size={16}
-                    color={completeness.isComplete ? colors.green || '#10B981' : colors.accent || colors.teal}
-                    style={{ marginEnd: spacing.xs }}
-                  />
-                  <Text style={styles.completenessTitle}>
-                    {completeness.isComplete
-                      ? t('profile.completenessComplete')
-                      : t('profile.completenessPercent', { percentage: completeness.percentage })}
-                  </Text>
-                </View>
-                <Text style={styles.completenessCount}>
-                  {completeness.completedCount}/{completeness.totalCount}
-                </Text>
-              </View>
-
-              <View style={styles.progressBarBg}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      width: `${completeness.percentage}%`,
-                      backgroundColor: completeness.isComplete
-                        ? colors.green || '#10B981'
-                        : colors.accentStrong || colors.tealDark,
-                    },
-                  ]}
-                />
-              </View>
-
-              {!completeness.isComplete && completeness.firstMissingItem ? (
-                <TouchableOpacity
-                  style={styles.completenessCtaRow}
-                  onPress={() => navigation.navigate(completeness.firstMissingItem.route)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('profile.completenessImproveMatching', { label: completeness.firstMissingItem.label })}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.completenessCtaText} numberOfLines={1}>
-                    {t('profile.completenessImproveMatching', { label: completeness.firstMissingItem.label })}
-                  </Text>
-                  <Ionicons
-                    name={isRTL ? "chevron-back" : "chevron-forward"}
-                    size={14}
+                    name="briefcase-outline"
+                    size={20}
                     color={colors.accentStrong || colors.tealDark}
+                    style={isRTL ? styles.iconRTL : styles.iconLTR}
                   />
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.completenessCompleteRow}>
-                  <Text style={styles.completenessCompleteText}>
-                    {t('profile.completenessReady')}
+                  <Text style={[styles.employerNoticeBadge, isRTL && styles.textRTL]}>
+                    {t('profile.employer.previewBadge')}
                   </Text>
                 </View>
-              )}
-            </GlassSurface>
-
-            {/* Skills Section */}
-            <Text style={styles.sectionTitle}>{t('profile.skillsTitle')}</Text>
-            {skills.length > 0 ? (
-              <View style={styles.chipRow}>
-                {skills.map((s) => (
-                  <Chip key={s} label={s} variant="skill" />
-                ))}
-              </View>
+                <Text style={[styles.employerNoticeText, isRTL && styles.textRTL]}>
+                  {t('profile.employer.previewNotice')}
+                </Text>
+                <GradientButton
+                  title={t('profile.employer.viewPlans')}
+                  color={colors.accent || colors.teal}
+                  onPress={() => navigation.navigate('Plans')}
+                  style={{ marginTop: spacing.md, width: '100%' }}
+                />
+              </GlassSurface>
             ) : (
-              <Card style={styles.linkCard} padding="sm">
-                <TouchableOpacity
-                  style={styles.linkRow}
-                  onPress={() => navigation.navigate('EditProfile')}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('profile.addSkills')}
-                >
-                  <View style={styles.linkRowLeft}>
-                    <Ionicons
-                      name="add-circle-outline"
-                      size={18}
-                      color={colors.accent || colors.teal}
-                      style={styles.linkIcon}
-                    />
-                    <Text style={styles.addLinksText}>{t('profile.addSkills')}</Text>
+              <>
+                {/* Profile Completeness Card */}
+                <GlassSurface variant="card" style={styles.completenessCard}>
+                  <View style={styles.completenessHeader}>
+                    <View style={styles.completenessTitleRow}>
+                      <Ionicons
+                        name={completeness.isComplete ? 'shield-checkmark' : 'sparkles'}
+                        size={16}
+                        color={completeness.isComplete ? colors.green || '#10B981' : colors.accent || colors.teal}
+                        style={{ marginEnd: spacing.xs }}
+                      />
+                      <Text style={styles.completenessTitle}>
+                        {completeness.isComplete
+                          ? t('profile.completenessComplete')
+                          : t('profile.completenessPercent', { percentage: completeness.percentage })}
+                      </Text>
+                    </View>
+                    <Text style={styles.completenessCount}>
+                      {completeness.completedCount}/{completeness.totalCount}
+                    </Text>
                   </View>
-                  <Ionicons
-                    name={isRTL ? "chevron-back" : "chevron-forward"}
-                    size={16}
-                    color={colors.textTertiary || colors.textMuted}
-                  />
-                </TouchableOpacity>
-              </Card>
+
+                  <View style={styles.progressBarBg}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          width: `${completeness.percentage}%`,
+                          backgroundColor: completeness.isComplete
+                            ? colors.green || '#10B981'
+                            : colors.accentStrong || colors.tealDark,
+                        },
+                      ]}
+                    />
+                  </View>
+
+                  {!completeness.isComplete && completeness.firstMissingItem ? (
+                    <TouchableOpacity
+                      style={styles.completenessCtaRow}
+                      onPress={() => navigation.navigate(completeness.firstMissingItem.route)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profile.completenessImproveMatching', { label: completeness.firstMissingItem.label })}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.completenessCtaText} numberOfLines={1}>
+                        {t('profile.completenessImproveMatching', { label: completeness.firstMissingItem.label })}
+                      </Text>
+                      <Ionicons
+                        name={isRTL ? "chevron-back" : "chevron-forward"}
+                        size={14}
+                        color={colors.accentStrong || colors.tealDark}
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.completenessCompleteRow}>
+                      <Text style={styles.completenessCompleteText}>
+                        {t('profile.completenessReady')}
+                      </Text>
+                    </View>
+                  )}
+                </GlassSurface>
+
+                {/* Skills Section */}
+                <Text style={styles.sectionTitle}>{t('profile.skillsTitle')}</Text>
+                {skills.length > 0 ? (
+                  <View style={styles.chipRow}>
+                    {skills.map((s) => (
+                      <Chip key={s} label={s} variant="skill" />
+                    ))}
+                  </View>
+                ) : (
+                  <Card style={styles.linkCard} padding="sm">
+                    <TouchableOpacity
+                      style={styles.linkRow}
+                      onPress={() => navigation.navigate('EditProfile')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profile.addSkills')}
+                    >
+                      <View style={styles.linkRowLeft}>
+                        <Ionicons
+                          name="add-circle-outline"
+                          size={18}
+                          color={colors.accent || colors.teal}
+                          style={styles.linkIcon}
+                        />
+                        <Text style={styles.addLinksText}>{t('profile.addSkills')}</Text>
+                      </View>
+                      <Ionicons
+                        name={isRTL ? "chevron-back" : "chevron-forward"}
+                        size={16}
+                        color={colors.textTertiary || colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                  </Card>
+                )}
+              </>
             )}
 
             {/* Functional Social & Portfolio Links */}
-            <Text style={styles.sectionTitle}>{t('profile.linksTitle')}</Text>
-            <Card style={styles.linkCard} padding="sm">
-              {hasAnyLinks ? (
-                <>
-                  {linkedinUrl ? (
+            {(isEmployer ? hasAnyLinks : true) && (
+              <>
+                <Text style={styles.sectionTitle}>{t('profile.linksTitle')}</Text>
+                <Card style={styles.linkCard} padding="sm">
+                  {hasAnyLinks ? (
+                    <>
+                      {linkedinUrl ? (
+                        <TouchableOpacity
+                          style={styles.linkRow}
+                          onPress={() => handleOpenLink(linkedinUrl, 'LinkedIn')}
+                          accessibilityRole="link"
+                          accessibilityLabel="LinkedIn"
+                        >
+                          <View style={styles.linkRowLeft}>
+                            <Ionicons
+                              name="logo-linkedin"
+                              size={18}
+                              color={colors.accent || colors.teal}
+                              style={styles.linkIcon}
+                            />
+                            <Text style={styles.linkText}>LinkedIn</Text>
+                          </View>
+                          <Ionicons
+                            name="open-outline"
+                            size={16}
+                            color={colors.textTertiary || colors.textMuted}
+                          />
+                        </TouchableOpacity>
+                      ) : null}
+
+                      {githubUrl ? (
+                        <TouchableOpacity
+                          style={[styles.linkRow, linkedinUrl ? styles.linkRowBorder : null]}
+                          onPress={() => handleOpenLink(githubUrl, 'GitHub')}
+                          accessibilityRole="link"
+                          accessibilityLabel="GitHub"
+                        >
+                          <View style={styles.linkRowLeft}>
+                            <Ionicons
+                              name="logo-github"
+                              size={18}
+                              color={colors.accent || colors.teal}
+                              style={styles.linkIcon}
+                            />
+                            <Text style={styles.linkText}>GitHub</Text>
+                          </View>
+                          <Ionicons
+                            name="open-outline"
+                            size={16}
+                            color={colors.textTertiary || colors.textMuted}
+                          />
+                        </TouchableOpacity>
+                      ) : null}
+
+                      {portfolioUrl ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.linkRow,
+                            linkedinUrl || githubUrl ? styles.linkRowBorder : null,
+                          ]}
+                          onPress={() => handleOpenLink(portfolioUrl, 'Portfolio')}
+                          accessibilityRole="link"
+                          accessibilityLabel="Portfolio"
+                        >
+                          <View style={styles.linkRowLeft}>
+                            <Ionicons
+                              name="globe-outline"
+                              size={18}
+                              color={colors.accent || colors.teal}
+                              style={styles.linkIcon}
+                            />
+                            <Text style={styles.linkText}>Portfolio</Text>
+                          </View>
+                          <Ionicons
+                            name="open-outline"
+                            size={16}
+                            color={colors.textTertiary || colors.textMuted}
+                          />
+                        </TouchableOpacity>
+                      ) : null}
+                    </>
+                  ) : !isEmployer ? (
                     <TouchableOpacity
                       style={styles.linkRow}
-                      onPress={() => handleOpenLink(linkedinUrl, 'LinkedIn')}
-                      accessibilityRole="link"
-                      accessibilityLabel="LinkedIn"
+                      onPress={() => navigation.navigate('EditProfile')}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('profile.addLinks')}
                     >
                       <View style={styles.linkRowLeft}>
                         <Ionicons
-                          name="logo-linkedin"
+                          name="add-circle-outline"
                           size={18}
                           color={colors.accent || colors.teal}
                           style={styles.linkIcon}
                         />
-                        <Text style={styles.linkText}>LinkedIn</Text>
+                        <Text style={styles.addLinksText}>{t('profile.addLinks')}</Text>
                       </View>
                       <Ionicons
-                        name="open-outline"
+                        name={isRTL ? "chevron-back" : "chevron-forward"}
                         size={16}
                         color={colors.textTertiary || colors.textMuted}
                       />
                     </TouchableOpacity>
                   ) : null}
+                </Card>
+              </>
+            )}
 
-                  {githubUrl ? (
-                    <TouchableOpacity
-                      style={[styles.linkRow, linkedinUrl ? styles.linkRowBorder : null]}
-                      onPress={() => handleOpenLink(githubUrl, 'GitHub')}
-                      accessibilityRole="link"
-                      accessibilityLabel="GitHub"
-                    >
-                      <View style={styles.linkRowLeft}>
-                        <Ionicons
-                          name="logo-github"
-                          size={18}
-                          color={colors.accent || colors.teal}
-                          style={styles.linkIcon}
-                        />
-                        <Text style={styles.linkText}>GitHub</Text>
-                      </View>
-                      <Ionicons
-                        name="open-outline"
-                        size={16}
-                        color={colors.textTertiary || colors.textMuted}
-                      />
-                    </TouchableOpacity>
-                  ) : null}
-
-                  {portfolioUrl ? (
-                    <TouchableOpacity
-                      style={[
-                        styles.linkRow,
-                        linkedinUrl || githubUrl ? styles.linkRowBorder : null,
-                      ]}
-                      onPress={() => handleOpenLink(portfolioUrl, 'Portfolio')}
-                      accessibilityRole="link"
-                      accessibilityLabel="Portfolio"
-                    >
-                      <View style={styles.linkRowLeft}>
-                        <Ionicons
-                          name="globe-outline"
-                          size={18}
-                          color={colors.accent || colors.teal}
-                          style={styles.linkIcon}
-                        />
-                        <Text style={styles.linkText}>Portfolio</Text>
-                      </View>
-                      <Ionicons
-                        name="open-outline"
-                        size={16}
-                        color={colors.textTertiary || colors.textMuted}
-                      />
-                    </TouchableOpacity>
-                  ) : null}
-                </>
-              ) : (
-                <TouchableOpacity
-                  style={styles.linkRow}
-                  onPress={() => navigation.navigate('EditProfile')}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('profile.addLinks')}
-                >
-                  <View style={styles.linkRowLeft}>
-                    <Ionicons
-                      name="add-circle-outline"
-                      size={18}
-                      color={colors.accent || colors.teal}
-                      style={styles.linkIcon}
-                    />
-                    <Text style={styles.addLinksText}>{t('profile.addLinks')}</Text>
-                  </View>
-                  <Ionicons
-                    name={isRTL ? "chevron-back" : "chevron-forward"}
-                    size={16}
-                    color={colors.textTertiary || colors.textMuted}
-                  />
-                </TouchableOpacity>
-              )}
-            </Card>
-
-            <View style={styles.buttonRow}>
-              <GradientButton
-                title={t('profile.editProfile')}
-                color={colors.accent || colors.teal}
-                onPress={() => navigation.navigate('EditProfile')}
-                style={styles.actionBtn}
-              />
-              <GradientButton
-                title={t('profile.uploadCV')}
-                color={colors.primary || colors.blue}
-                onPress={() => navigation.navigate('CVUpload')}
-                style={styles.actionBtn}
-              />
-            </View>
-
-            {/* Bookmarks Section */}
-            <Text style={styles.sectionTitle}>{t('profile.bookmarksTitle')}</Text>
-            <Card style={styles.linkCard} padding="sm">
-              <TouchableOpacity
-                style={styles.legalRow}
-                onPress={() => navigation.navigate('SavedInternships')}
-                accessibilityRole="button"
-                accessibilityLabel={`${t('profile.savedInternships')}, ${savedIds.size}`}
-              >
-                <View style={styles.legalRowLeft}>
-                  <Ionicons
-                    name="bookmark-outline"
-                    size={18}
+            {!isEmployer && (
+              <>
+                <View style={styles.buttonRow}>
+                  <GradientButton
+                    title={t('profile.editProfile')}
                     color={colors.accent || colors.teal}
-                    style={styles.linkIcon}
+                    onPress={() => navigation.navigate('EditProfile')}
+                    style={styles.actionBtn}
                   />
-                  <Text style={styles.linkText}>{t('profile.savedInternships')}</Text>
+                  <GradientButton
+                    title={t('profile.uploadCV')}
+                    color={colors.primary || colors.blue}
+                    onPress={() => navigation.navigate('CVUpload')}
+                    style={styles.actionBtn}
+                  />
                 </View>
-                <View style={styles.badgeRowRight}>
-                  {savedIds.size > 0 ? (
-                    <View style={styles.savedBadgePill}>
-                      <Text style={styles.savedBadgeText}>{savedIds.size}</Text>
+
+                {/* Bookmarks Section */}
+                <Text style={styles.sectionTitle}>{t('profile.bookmarksTitle')}</Text>
+                <Card style={styles.linkCard} padding="sm">
+                  <TouchableOpacity
+                    style={styles.legalRow}
+                    onPress={() => navigation.navigate('SavedInternships')}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('profile.savedInternships')}, ${savedIds.size}`}
+                  >
+                    <View style={styles.legalRowLeft}>
+                      <Ionicons
+                        name="bookmark-outline"
+                        size={18}
+                        color={colors.accent || colors.teal}
+                        style={styles.linkIcon}
+                      />
+                      <Text style={styles.linkText}>{t('profile.savedInternships')}</Text>
                     </View>
-                  ) : null}
-                  <Ionicons
-                    name={isRTL ? "chevron-back" : "chevron-forward"}
-                    size={16}
-                    color={colors.textTertiary || colors.textMuted}
-                  />
-                </View>
-              </TouchableOpacity>
-            </Card>
+                    <View style={styles.badgeRowRight}>
+                      {savedIds.size > 0 ? (
+                        <View style={styles.savedBadgePill}>
+                          <Text style={styles.savedBadgeText}>{savedIds.size}</Text>
+                        </View>
+                      ) : null}
+                      <Ionicons
+                        name={isRTL ? "chevron-back" : "chevron-forward"}
+                        size={16}
+                        color={colors.textTertiary || colors.textMuted}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </Card>
+              </>
+            )}
 
             {/* Legal & About Section */}
             <Text style={styles.sectionTitle}>{t('profile.legalTitle')}</Text>
@@ -477,19 +524,6 @@ export default function ProfileScreen({ navigation }) {
               </View>
             </Card>
           </>
-        ) : (
-          <Card style={styles.emptyWrap} padding="lg">
-            <Text style={styles.name}>{t('profile.noProfileTitle')}</Text>
-            <Text style={styles.subtitle}>
-              {t('profile.noProfileSubtitle')}
-            </Text>
-            <GradientButton
-              title={t('profile.createProfile')}
-              color={colors.accent || colors.teal}
-              onPress={() => navigation.navigate('EditProfile')}
-              style={{ marginTop: spacing.lg, width: '100%' }}
-            />
-          </Card>
         )}
       </ScrollView>
     </ScreenContainer>
@@ -714,5 +748,38 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
     alignItems: 'center',
     textAlign: 'center',
+  },
+  employerNoticeCard: {
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: spacing.radii.card || spacing.radii.lg,
+  },
+  employerNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  employerNoticeBadge: {
+    ...typography.badge,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginStart: spacing.xs,
+  },
+  employerNoticeText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  iconLTR: {
+    marginEnd: spacing.xs,
+  },
+  iconRTL: {
+    marginStart: spacing.xs,
+  },
+  textRTL: {
+    textAlign: 'right',
   },
 });
