@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import colors from '../theme/colors';
@@ -24,19 +25,94 @@ import GradientButton from '../components/GradientButton';
 import PressableScale from '../components/PressableScale';
 import motionTokens from '../motion/motionTokens';
 import { signInWithGoogle } from '../services/googleAuth';
-import { signInWithEmail } from '../services/auth';
+import {
+  signInWithEmail,
+  resendSignupConfirmation,
+  isEmailNotConfirmedError,
+  isAuthRateLimitError,
+} from '../services/auth';
 import { syncAuthenticatedUser, upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
 
-export default function SignInScreen({ navigation }) {
+export default function SignInScreen({ navigation, route }) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState('');
+
+  const initialConfirmationEmail = typeof route?.params?.confirmationEmail === 'string'
+    ? route.params.confirmationEmail.trim().toLowerCase()
+    : '';
+
+  const [email, setEmail] = useState(initialConfirmationEmail || '');
   const [password, setPassword] = useState('');
   const [focusedField, setFocusedField] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState(initialConfirmationEmail || '');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
   const { refreshProfile, setProfile } = useProfile();
+
+  useEffect(() => {
+    const paramEmail = typeof route?.params?.confirmationEmail === 'string'
+      ? route.params.confirmationEmail.trim().toLowerCase()
+      : '';
+    if (paramEmail) {
+      setEmail(paramEmail);
+      setPendingConfirmationEmail(paramEmail);
+    }
+  }, [route?.params?.confirmationEmail]);
+
+  // 60 seconds is an InternMatch UX cooldown,
+  // NOT a claim about Supabase's actual server quota window.
+  useEffect(() => {
+    if (resendCooldownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldownSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldownSeconds]);
+
+  const handleResendConfirmation = async () => {
+    const targetEmail = pendingConfirmationEmail.trim().toLowerCase();
+    if (!targetEmail || resendLoading || resendCooldownSeconds > 0) {
+      return;
+    }
+
+    setResendLoading(true);
+    try {
+      const { error } = await resendSignupConfirmation(targetEmail);
+      if (error) {
+        throw error;
+      }
+      // 60 seconds is an InternMatch UX cooldown,
+      // NOT a claim about Supabase's actual server quota window.
+      setResendCooldownSeconds(60);
+      haptics.success();
+      Alert.alert(
+        t('auth.emailConfirmation.resentTitle'),
+        t('auth.emailConfirmation.resentMessage', { email: targetEmail })
+      );
+    } catch (err) {
+      if (isAuthRateLimitError(err)) {
+        // 60 seconds is an InternMatch UX cooldown,
+        // NOT a claim about Supabase's actual server quota window.
+        setResendCooldownSeconds(60);
+        haptics.error();
+        Alert.alert(t('common.error'), t('auth.emailConfirmation.rateLimit'));
+      } else {
+        haptics.error();
+        Alert.alert(t('common.error'), t('auth.emailConfirmation.resendFailed'));
+      }
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   const handleContinue = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -62,6 +138,8 @@ export default function SignInScreen({ navigation }) {
         throw new Error(t('errors.unauthorized'));
       }
 
+      setPendingConfirmationEmail('');
+
       const syncResult = await syncAuthenticatedUser();
       if (syncResult.has_profile) {
         await refreshProfile();
@@ -85,7 +163,6 @@ export default function SignInScreen({ navigation }) {
             setProfile(created);
             navigation.replace('MainTabs');
           } catch (createErr) {
-            console.warn('Failed to bootstrap profile from metadata:', createErr);
             throw createErr;
           }
         } else {
@@ -93,13 +170,24 @@ export default function SignInScreen({ navigation }) {
         }
       }
     } catch (error) {
-      console.warn('Sign-in failed:', error);
+      if (isEmailNotConfirmedError(error)) {
+        setPendingConfirmationEmail(normalizedEmail);
+        Alert.alert(
+          t('auth.emailConfirmation.pendingTitle'),
+          t('auth.emailConfirmation.pendingMessage', { email: normalizedEmail })
+        );
+        return;
+      }
+
+      if (isAuthRateLimitError(error)) {
+        Alert.alert(t('common.error'), t('errors.authTooManyRequests'));
+        return;
+      }
+
       let errorKey = 'errors.authSignInFailed';
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
       if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('user not found')) {
         errorKey = 'errors.authInvalidCredentials';
-      } else if (msg.includes('too many requests') || msg.includes('rate limit')) {
-        errorKey = 'errors.authTooManyRequests';
       }
       Alert.alert(t('common.error'), t(errorKey));
     } finally {
@@ -112,7 +200,6 @@ export default function SignInScreen({ navigation }) {
       await signInWithGoogle();
       Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     } catch (e) {
-      console.warn('Google sign-in failed', e);
       Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     }
   };
@@ -171,6 +258,56 @@ export default function SignInScreen({ navigation }) {
                 }
               }}
             />
+
+            {/* Inline Pending Confirmation Panel */}
+            {Boolean(pendingConfirmationEmail) && (
+              <View style={styles.confirmationPanel}>
+                <View style={styles.confirmationPanelHeader}>
+                  <Ionicons
+                    name="mail-unread-outline"
+                    size={18}
+                    color={colors.accentStrong || colors.tealDark}
+                    style={styles.confirmationPanelIcon}
+                  />
+                  <Text style={styles.confirmationPanelTitle}>
+                    {t('auth.emailConfirmation.pendingTitle')}
+                  </Text>
+                </View>
+                <Text style={styles.confirmationPanelMessage}>
+                  {t('auth.emailConfirmation.pendingMessage', { email: pendingConfirmationEmail })}
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.resendBtn,
+                    (resendLoading || resendCooldownSeconds > 0) && styles.resendBtnDisabled,
+                  ]}
+                  onPress={handleResendConfirmation}
+                  disabled={resendLoading || resendCooldownSeconds > 0}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    resendLoading
+                      ? t('auth.emailConfirmation.resending')
+                      : resendCooldownSeconds > 0
+                      ? t('auth.emailConfirmation.resendIn', { seconds: resendCooldownSeconds })
+                      : t('auth.emailConfirmation.resend')
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.resendBtnText,
+                      (resendLoading || resendCooldownSeconds > 0) && styles.resendBtnTextDisabled,
+                    ]}
+                  >
+                    {resendLoading
+                      ? t('auth.emailConfirmation.resending')
+                      : resendCooldownSeconds > 0
+                      ? t('auth.emailConfirmation.resendIn', { seconds: resendCooldownSeconds })
+                      : t('auth.emailConfirmation.resend')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Email Field */}
             <View style={styles.fieldGroup}>
@@ -402,5 +539,52 @@ const styles = StyleSheet.create({
     color: colors.textTertiary || colors.textMuted,
     fontSize: 14,
     fontWeight: '700',
+  },
+  confirmationPanel: {
+    backgroundColor: 'rgba(14, 116, 144, 0.08)',
+    borderRadius: spacing.radii.md,
+    borderWidth: 1,
+    borderColor: 'rgba(14, 116, 144, 0.20)',
+    padding: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  confirmationPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xxs,
+  },
+  confirmationPanelIcon: {
+    marginEnd: spacing.xs,
+  },
+  confirmationPanelTitle: {
+    ...typography.bodyEmphasis,
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.textPrimary || colors.textDark,
+  },
+  confirmationPanelMessage: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    lineHeight: 18,
+    marginBottom: spacing.sm,
+  },
+  resendBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm + 2,
+    borderRadius: spacing.radii.sm,
+    backgroundColor: 'rgba(14, 116, 144, 0.12)',
+  },
+  resendBtnDisabled: {
+    backgroundColor: 'rgba(14, 116, 144, 0.05)',
+  },
+  resendBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.accentStrong || colors.tealDark,
+  },
+  resendBtnTextDisabled: {
+    color: colors.textTertiary || colors.textMuted,
   },
 });

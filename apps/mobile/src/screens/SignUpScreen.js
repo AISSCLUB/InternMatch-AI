@@ -24,7 +24,7 @@ import GradientButton from '../components/GradientButton';
 import PressableScale from '../components/PressableScale';
 import motionTokens from '../motion/motionTokens';
 import { signInWithGoogle } from '../services/googleAuth';
-import { signUpWithEmail } from '../services/auth';
+import { signUpWithEmail, isAuthRateLimitError } from '../services/auth';
 import { syncAuthenticatedUser, upsertProfile } from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
@@ -80,7 +80,9 @@ export default function SignUpScreen({ navigation }) {
           t('auth.checkEmailTitle'),
           t('auth.checkEmailMessage')
         );
-        navigation.replace('SignIn');
+        navigation.replace('SignIn', {
+          confirmationEmail: normalizedEmail,
+        });
         return;
       }
 
@@ -99,7 +101,10 @@ export default function SignUpScreen({ navigation }) {
 
       navigation.replace('MainTabs');
     } catch (error) {
-      console.warn('Sign-up failed:', error);
+      if (isAuthRateLimitError(error)) {
+        Alert.alert(t('common.error'), t('auth.emailConfirmation.rateLimit'));
+        return;
+      }
       let errorKey = 'errors.authSignUpFailed';
       const msg = error instanceof Error ? error.message.toLowerCase() : '';
       if (msg.includes('already registered') || msg.includes('email in use') || msg.includes('user already exists')) {
@@ -120,7 +125,6 @@ export default function SignUpScreen({ navigation }) {
       await signInWithGoogle();
       Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     } catch (e) {
-      console.warn('Google sign-in failed', e);
       Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
     }
   };
