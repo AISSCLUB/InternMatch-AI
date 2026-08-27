@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   StyleSheet,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -36,6 +37,7 @@ export default function SignUpScreen({ navigation }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [department, setDepartment] = useState('');
   const [focusedField, setFocusedField] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -294,20 +296,40 @@ export default function SignUpScreen({ navigation }) {
             {/* Password Field */}
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>{t('auth.password')}</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  focusedField === 'password' && styles.inputFocused,
-                ]}
-                placeholder={t('auth.passwordMin')}
-                placeholderTextColor="rgba(22, 35, 46, 0.40)"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField(null)}
-                accessibilityLabel={t('auth.password')}
-              />
+              <View style={styles.passwordInputWrap}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.passwordInput,
+                    focusedField === 'password' && styles.inputFocused,
+                  ]}
+                  placeholder={t('auth.passwordMin')}
+                  placeholderTextColor="rgba(22, 35, 46, 0.40)"
+                  secureTextEntry={!passwordVisible}
+                  value={password}
+                  onChangeText={setPassword}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                  accessibilityLabel={t('auth.password')}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => {
+                    haptics.selection();
+                    setPasswordVisible((prev) => !prev);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                  accessibilityState={{ expanded: passwordVisible }}
+                >
+                  <Ionicons
+                    name={passwordVisible ? 'eye-outline' : 'eye-off-outline'}
+                    size={20}
+                    color={colors.textSecondary || colors.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Department Field */}
@@ -490,6 +512,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(14, 116, 144, 0.16)',
     color: colors.textDark,
     ...typography.body,
+  },
+  passwordInputWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 48,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    height: 48,
+    width: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputFocused: {
     borderColor: colors.accent || colors.teal,
