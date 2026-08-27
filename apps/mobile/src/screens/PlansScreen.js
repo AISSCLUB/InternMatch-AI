@@ -27,6 +27,7 @@ export default function PlansScreen({ navigation }) {
   const { isRTL } = useLocalization();
   const { profile } = useProfile();
   const {
+    runtimeState,
     candidateState,
     isPurchasing,
     isRestoring,
@@ -65,36 +66,39 @@ export default function PlansScreen({ navigation }) {
     if (isPurchasing || isRestoring || !isPurchaseReady) return;
     haptics.selection();
 
+    let result;
     try {
-      const result = await purchaseProStudent();
-      if (result.reason === 'identity_changed') {
-        return;
-      }
-
-      if (result.success) {
-        haptics.notificationSuccess();
-        Alert.alert(
-          t('plans.purchaseSuccess.title'),
-          t('plans.purchaseSuccess.message'),
-          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
-        );
-      } else if (result.cancelled) {
-        // Quiet dismissal for user cancellation
-      } else if (result.reason === 'entitlement_not_active') {
-        Alert.alert(
-          t('plans.pendingVerification.title'),
-          t('plans.pendingVerification.message'),
-          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
-        );
-      } else {
-        haptics.selection();
-        Alert.alert(
-          t('plans.purchaseFailed.title'),
-          t('plans.purchaseFailed.message'),
-          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
-        );
-      }
+      result = await purchaseProStudent();
     } catch {
+      Alert.alert(
+        t('plans.purchaseFailed.title'),
+        t('plans.purchaseFailed.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+      return;
+    }
+
+    if (result.reason === 'identity_changed') {
+      return;
+    }
+
+    if (result.success) {
+      haptics.success();
+      Alert.alert(
+        t('plans.purchaseSuccess.title'),
+        t('plans.purchaseSuccess.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+    } else if (result.cancelled) {
+      // Quiet dismissal for user cancellation
+    } else if (result.reason === 'entitlement_not_active') {
+      Alert.alert(
+        t('plans.pendingVerification.title'),
+        t('plans.pendingVerification.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+    } else {
+      haptics.selection();
       Alert.alert(
         t('plans.purchaseFailed.title'),
         t('plans.purchaseFailed.message'),
@@ -107,33 +111,36 @@ export default function PlansScreen({ navigation }) {
     if (isPurchasing || isRestoring) return;
     haptics.selection();
 
+    let result;
     try {
-      const result = await restorePurchases();
-      if (result.reason === 'identity_changed') {
-        return;
-      }
-
-      if (result.success && result.proStudentActive) {
-        haptics.notificationSuccess();
-        Alert.alert(
-          t('plans.restoreSuccess.title'),
-          t('plans.restoreSuccess.message'),
-          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
-        );
-      } else if (result.success && !result.proStudentActive) {
-        Alert.alert(
-          t('plans.nothingToRestore.title'),
-          t('plans.nothingToRestore.message'),
-          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
-        );
-      } else {
-        Alert.alert(
-          t('plans.restoreFailed.title'),
-          t('plans.restoreFailed.message'),
-          [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
-        );
-      }
+      result = await restorePurchases();
     } catch {
+      Alert.alert(
+        t('plans.restoreFailed.title'),
+        t('plans.restoreFailed.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+      return;
+    }
+
+    if (result.reason === 'identity_changed') {
+      return;
+    }
+
+    if (result.success && result.proStudentActive) {
+      haptics.success();
+      Alert.alert(
+        t('plans.restoreSuccess.title'),
+        t('plans.restoreSuccess.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+    } else if (result.success && !result.proStudentActive) {
+      Alert.alert(
+        t('plans.nothingToRestore.title'),
+        t('plans.nothingToRestore.message'),
+        [{ text: t('common.close', { defaultValue: 'OK' }), style: 'default' }]
+      );
+    } else {
       Alert.alert(
         t('plans.restoreFailed.title'),
         t('plans.restoreFailed.message'),
@@ -349,8 +356,8 @@ export default function PlansScreen({ navigation }) {
           })}
         </View>
 
-        {/* Restore Purchases CTA (Candidate Only) */}
-        {!isEmployer ? (
+        {/* Restore Purchases CTA (Candidate Only - supported platform stores only) */}
+        {!isEmployer && runtimeState?.restorePurchasesSupported === true ? (
           <View style={styles.restoreContainer}>
             <GradientButton
               title={isRestoring ? t('plans.restoring') : t('plans.restorePurchases')}

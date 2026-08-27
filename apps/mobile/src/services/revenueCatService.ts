@@ -13,6 +13,7 @@ export const REVENUECAT_PRODUCT_ID = 'internmatch_pro_student_monthly';
 export interface RevenueCatRuntimeState {
   configured: boolean;
   identifiedUserId: string | null;
+  restorePurchasesSupported: boolean;
   reason?: string | null;
 }
 
@@ -66,6 +67,21 @@ function getPublicApiKey(): string {
     return rawKey.trim();
   }
   return '';
+}
+
+/**
+ * Returns true if the configured RevenueCat API key supports store-level purchase restoration.
+ * RevenueCat Test Store keys (prefixed with "test_") do not support restorePurchases.
+ */
+export function isRestorePurchasesSupported(): boolean {
+  if (!isConfigured) {
+    return false;
+  }
+  const apiKey = getPublicApiKey();
+  if (!apiKey || apiKey.startsWith('test_')) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -253,6 +269,7 @@ export function getRevenueCatRuntimeState(): RevenueCatRuntimeState {
   return {
     configured: isConfigured,
     identifiedUserId: currentIdentifiedUserId,
+    restorePurchasesSupported: isRestorePurchasesSupported(),
     reason: configurationReason,
   };
 }
@@ -425,6 +442,16 @@ export async function restorePurchases(): Promise<RestoreActionResult> {
         reason: 'unauthenticated',
       },
       reason: 'unauthenticated',
+    };
+  }
+
+  if (!isRestorePurchasesSupported()) {
+    const fallbackState = await getCandidateRevenueCatState();
+    return {
+      success: false,
+      proStudentActive: fallbackState.proStudentActive,
+      candidateState: fallbackState,
+      reason: 'restore_unsupported_test_store',
     };
   }
 

@@ -14,6 +14,7 @@ const RevenueCatContext = createContext({
   runtimeState: {
     configured: false,
     identifiedUserId: null,
+    restorePurchasesSupported: false,
     reason: null,
   },
   candidateState: DEFAULT_CANDIDATE_REVENUECAT_STATE,
