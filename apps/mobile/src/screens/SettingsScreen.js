@@ -19,6 +19,7 @@ import GlassSurface from '../components/GlassSurface';
 import { signOut, getCurrentUser, sendPasswordResetEmail } from '../services/auth';
 import { PASSWORD_RESET_REDIRECT_URL } from '../services/passwordRecovery';
 import { useProfile } from '../context/ProfileContext';
+import { useRevenueCat } from '../context/RevenueCatProvider';
 import { getSubscriptionSnapshot, normalizeAccountType } from '../services/subscriptionService';
 import haptics from '../services/haptics';
 import { useTranslation } from 'react-i18next';
@@ -99,6 +100,7 @@ export default function SettingsScreen({ navigation }) {
   const [userEmail, setUserEmail] = useState('');
   const [signingOut, setSigningOut] = useState(false);
   const { profile, clearProfile } = useProfile();
+  const { candidateState } = useRevenueCat();
   const { t } = useTranslation();
   const { locale, isRTL, setLocale } = useLocalization();
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
@@ -110,7 +112,10 @@ export default function SettingsScreen({ navigation }) {
     ? normalizeAccountType(profile.preferences.account_type)
     : null;
   const isEmployer = accountType === 'employer';
-  const subscriptionSnapshot = getSubscriptionSnapshot(profile?.preferences?.account_type);
+  const subscriptionSnapshot = getSubscriptionSnapshot(
+    profile?.preferences?.account_type,
+    candidateState
+  );
   const currentPlanLabel = t(subscriptionSnapshot.currentPlan.badgeKey);
 
   useEffect(() => {

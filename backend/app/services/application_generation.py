@@ -3,7 +3,7 @@ Grounded Application Cover Letter Generation Service
 Generates tailored, grounded cover letters using Google Gemini structured output
 based strictly on persisted candidate, internship, and match data.
 """
-
+from html import unescape
 from typing import List, Optional
 
 from google import genai
@@ -182,4 +182,4 @@ def generate_grounded_cover_letter(
             f"Model returned unparseable or empty structured output: {err}"
         ) from err
 
-    return parsed.generated_cover_letter
+    return unescape(parsed.generated_cover_letter)

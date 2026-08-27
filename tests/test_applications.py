@@ -511,6 +511,67 @@ def test_generate_grounded_cover_letter_missing_api_key_fails(monkeypatch):
         )
 
 
+def test_generate_grounded_cover_letter_unescapes_html_entities(monkeypatch):
+    """Test regression: generate_grounded_cover_letter unescapes HTML entities in generated text."""
+    profile = StudentProfile(
+        id=uuid4(),
+        user_id=uuid4(),
+        full_name="Caner Yılmaz",
+        headline="Yazılım Mühendisi",
+    )
+    listing = InternshipListing(
+        id=uuid4(),
+        title="Gömülü Sistemler Stajyeri",
+        company="Teknoloji & Araştırma A.Ş.",
+        location="İstanbul",
+        work_type="hybrid",
+        description="Gömülü sensör sistemleri geliştirme.",
+        required_skills=["C++", "Sensör"],
+    )
+    match = Match(
+        id=uuid4(),
+        student_id=profile.id,
+        internship_id=listing.id,
+        overall_score=90,
+        skill_score=90,
+        vector_score=90,
+        attribute_score=90,
+        skill_gap_analysis={"matching_skills": ["C++", "Sensör"]},
+    )
+
+    escaped_cover_letter = (
+        "Sayın Yetkili, &#220;niversitesi m&#252;hendisliği öğrencisi olarak "
+        "g&#246;mülü sens&#246;r sistemleri &amp; yazılım alanındaki staj pozisyonuna başvuruyorum."
+    )
+    mock_llm_output = LLMCoverLetter(
+        generated_cover_letter=escaped_cover_letter
+    )
+    _mock_gemini_cover_letter_generate(monkeypatch, mock_llm_output)
+
+    result = generate_grounded_cover_letter(
+        profile=profile,
+        internship=listing,
+        match=match,
+        tone="professional",
+        candidate_skills=["C++", "Sensör"],
+        education_entries=["Boğaziçi Üniversitesi"],
+        content_locale="tr",
+    )
+
+    expected_cover_letter = (
+        "Sayın Yetkili, Üniversitesi mühendisliği öğrencisi olarak "
+        "gömülü sensör sistemleri & yazılım alanındaki staj pozisyonuna başvuruyorum."
+    )
+    assert result == expected_cover_letter
+    assert "&#220;niversitesi" not in result
+    assert "Üniversitesi" in result
+    assert "mühendisliği" in result
+    assert "gömülü" in result
+    assert "sensör" in result
+    assert "&amp;" not in result
+    assert "&" in result
+
+
 # ---------------------------------------------------------------------------
 # 3. APPLICATION PERSISTENCE & REGENERATION SEMANTICS (14 - 17)
 # ---------------------------------------------------------------------------
