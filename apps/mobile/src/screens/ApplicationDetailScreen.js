@@ -156,33 +156,6 @@ export default function ApplicationDetailScreen({ route, navigation }) {
     await fetchDetail(true);
   };
 
-  const handleStatusChange = async (newStatus) => {
-    if (!detail || !applicationId || mutatingStatus || savingNotes || isEditingNotes || refreshing || loading || mutationLockRef.current) return;
-    if (detail.status === newStatus) return;
-
-    setMutatingStatus(true);
-    mutationLockRef.current = true;
-    requestGenerationRef.current += 1;
-    try {
-      await updateApplicationStatus(applicationId, {
-        status: newStatus,
-        notes: detail.notes,
-      });
-      haptics.success();
-      // Refetch authoritative detail and chronological timeline
-      await fetchDetail(true);
-    } catch (err) {
-      haptics.error();
-      console.warn('Failed to update status:', err);
-      Alert.alert(
-        t('applicationDetail.statusUpdateFailedTitle', { defaultValue: t('common.error') }),
-        t('errors.applicationStatusUpdateFailed')
-      );
-    } finally {
-      mutationLockRef.current = false;
-      setMutatingStatus(false);
-    }
-  };
 
   const handleSaveNotes = async () => {
     if (!detail || !applicationId || savingNotes || mutatingStatus || refreshing || loading || mutationLockRef.current) return;
@@ -402,67 +375,83 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 </View>
               </Card>
 
-              {/* Status Selector Card */}
-              <Card style={styles.sectionCard} padding="md">
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>{t('applicationDetail.updateStatusTitle')}</Text>
-                  {mutatingStatus && (
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.accent || colors.teal}
-                    />
-                  )}
-                </View>
-                <Text style={styles.sectionSubtitle}>
-                  {t('applicationDetail.updateStatusSubtitle')}
-                </Text>
+              {/* Draft Application or Canonical Status Card */}
+              {detail.status === 'saved' ? (
+                <Card style={styles.draftNoticeCard} padding="md">
+                  <View style={styles.draftNoticeHeader}>
+                    <View style={styles.draftIconCircle}>
+                      <Ionicons
+                        name="document-text-outline"
+                        size={22}
+                        color={colors.accentStrong || colors.tealDark}
+                      />
+                    </View>
+                    <View style={styles.draftNoticeTitleCol}>
+                      <Text style={styles.draftNoticeTitle}>
+                        {t('applicationDetail.draftTitle', 'Draft Application')}
+                      </Text>
+                      <Text style={styles.draftNoticeSubtitle}>
+                        {t(
+                          'applicationDetail.draftSubtitle',
+                          'This application is saved as a draft. Review your cover letter before submitting to the employer.'
+                        )}
+                      </Text>
+                    </View>
+                  </View>
 
-                <View style={styles.statusChipsGrid}>
-                  {CANONICAL_STATUSES.map((statusKey) => {
-                    const isSelected = detail.status === statusKey;
-                    const config = STATUS_CONFIG[statusKey] || STATUS_CONFIG.saved;
-                    const label = t(`applications.statuses.${statusKey}`, { defaultValue: statusKey });
-
-                    return (
-                      <PressableScale
-                        key={statusKey}
-                        style={[
-                          styles.statusChip,
-                          isSelected && styles.statusChipSelected,
-                          isSelected && { borderColor: config.fg },
-                        ]}
-                        onPress={() => handleStatusChange(statusKey)}
-                        disabled={mutatingStatus || savingNotes || isEditingNotes || refreshing}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('applicationDetail.changeStatusA11y', { status: label })}
-                        accessibilityState={{ selected: isSelected }}
-                      >
-                        <Ionicons
-                          name={config.icon}
-                          size={14}
-                          color={
-                            isSelected
-                              ? config.fg
-                              : colors.textSecondary || colors.textMuted
-                          }
-                          style={styles.chipIcon}
-                        />
-                        <Text
-                          style={[
-                            styles.statusChipText,
-                            isSelected && {
-                              color: config.fg,
-                              fontWeight: '700',
-                            },
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </PressableScale>
-                    );
-                  })}
-                </View>
-              </Card>
+                  <PressableScale
+                    style={styles.submitDraftBtn}
+                    onPress={() =>
+                      navigation.navigate('CoverLetter', {
+                        applicationId: detail.id,
+                        draft: detail.generated_cover_letter,
+                        currentStatus: detail.status,
+                        internshipId: detail.internship_id,
+                        companyName: detail.company_name,
+                        jobTitle: detail.job_title,
+                      })
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={t('applicationDetail.reviewAndSubmit', 'Review & Submit Application')}
+                  >
+                    <Ionicons name="paper-plane-outline" size={16} color={colors.textInverse || colors.white} />
+                    <Text style={styles.submitDraftBtnText}>
+                      {t('applicationDetail.reviewAndSubmit', 'Review & Submit Application')}
+                    </Text>
+                  </PressableScale>
+                </Card>
+              ) : (
+                <Card style={styles.sectionCard} padding="md">
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>
+                      {t('applicationDetail.canonicalStatusTitle', 'Application Status')}
+                    </Text>
+                    <StatusPill status={detail.status} />
+                  </View>
+                  <Text style={styles.canonicalStatusExplanation}>
+                    {detail.status === 'applied' &&
+                      t(
+                        'applicationDetail.statusExplanationApplied',
+                        'Your application has been received by the employer and is awaiting review.'
+                      )}
+                    {detail.status === 'interviewing' &&
+                      t(
+                        'applicationDetail.statusExplanationInterviewing',
+                        'Great news! The employer has selected your application for the interview stage.'
+                      )}
+                    {detail.status === 'accepted' &&
+                      t(
+                        'applicationDetail.statusExplanationAccepted',
+                        'Congratulations! Your application has been accepted for this internship.'
+                      )}
+                    {detail.status === 'rejected' &&
+                      t(
+                        'applicationDetail.statusExplanationRejected',
+                        'The employer has reviewed your application and decided not to proceed at this time.'
+                      )}
+                  </Text>
+                </Card>
+              )}
 
               {/* Status Timeline Card */}
               <Card style={styles.sectionCard} padding="md">
@@ -831,6 +820,64 @@ const styles = StyleSheet.create({
     color: colors.textSecondary || colors.textMuted,
     marginTop: spacing.xxs,
     marginBottom: spacing.md,
+  },
+  canonicalStatusExplanation: {
+    ...typography.bodyMedium,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+    lineHeight: 20,
+  },
+  draftNoticeCard: {
+    marginBottom: spacing.md,
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+  },
+  draftNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  draftIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#CCFBF1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginEnd: spacing.sm,
+  },
+  draftNoticeTitleCol: {
+    flex: 1,
+  },
+  draftNoticeTitle: {
+    ...typography.h3,
+    fontSize: 16,
+    color: colors.accentStrong || '#0F766E',
+    fontWeight: '700',
+  },
+  draftNoticeSubtitle: {
+    ...typography.caption,
+    color: '#134E4A',
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  submitDraftBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent || colors.teal,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    borderRadius: spacing.radiusSm || 8,
+    minHeight: spacing.minimumTouchTarget,
+    gap: spacing.xs,
+  },
+  submitDraftBtnText: {
+    ...typography.bodyMedium,
+    color: colors.textInverse || colors.white,
+    fontWeight: '700',
+    fontSize: 14,
   },
   statusChipsGrid: {
     flexDirection: 'row',

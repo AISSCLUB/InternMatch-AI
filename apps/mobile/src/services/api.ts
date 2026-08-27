@@ -251,6 +251,7 @@ export type InternshipSummary = {
   work_type: string;
   required_skills: string[];
   preferred_skills: string[];
+  is_active?: boolean;
   posted_at: string;
 };
 
@@ -272,6 +273,7 @@ export type InternshipDetail = {
   preferred_skills: string[];
   languages: string[];
   min_education: string | null;
+  is_active?: boolean;
   posted_at: string;
 };
 
@@ -558,6 +560,144 @@ export async function updateApplicationStatus(
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    }
+  );
+}
+
+export type EmployerCreateInternshipPayload = {
+  title: string;
+  company: string;
+  location: string;
+  work_type: 'remote' | 'onsite' | 'hybrid';
+  description: string;
+  required_skills?: string[];
+  preferred_skills?: string[];
+  language?: string;
+  education_requirements?: string | null;
+  experience_requirements?: string | null;
+};
+
+export type EmployerOpportunityListResponse = {
+  items: InternshipSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type EmployerApplicantCandidate = {
+  student_id: string;
+  full_name: string;
+  headline: string | null;
+  department: string | null;
+  skills: string[];
+};
+
+export type EmployerApplicantItem = {
+  application_id: string;
+  internship_id: string;
+  status: ApplicationStatus;
+  applied_date: string | null;
+  generated_cover_letter: string | null;
+  match_score: number | null;
+  created_at: string;
+  updated_at: string;
+  candidate: EmployerApplicantCandidate;
+};
+
+export type EmployerApplicantListResponse = {
+  items: EmployerApplicantItem[];
+  total: number;
+  internship_id: string;
+};
+
+export async function createEmployerInternship(
+  payload: EmployerCreateInternshipPayload
+): Promise<InternshipDetail> {
+  return apiRequest<InternshipDetail>('/internships', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getEmployerInternships(
+  params: {
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<EmployerOpportunityListResponse> {
+  const queryParts: string[] = [];
+
+  if (typeof params.limit === 'number' && params.limit > 0) {
+    queryParts.push(`limit=${encodeURIComponent(params.limit.toString())}`);
+  }
+  if (typeof params.offset === 'number' && params.offset >= 0) {
+    queryParts.push(`offset=${encodeURIComponent(params.offset.toString())}`);
+  }
+
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+
+  return apiRequest<EmployerOpportunityListResponse>(`/internships/mine${queryString}`, {
+    method: 'GET',
+  });
+}
+
+export async function getEmployerApplicants(
+  internshipId: string
+): Promise<EmployerApplicantListResponse> {
+  return apiRequest<EmployerApplicantListResponse>(
+    `/internships/${encodeURIComponent(internshipId)}/applicants`,
+    {
+      method: 'GET',
+    }
+  );
+}
+
+export async function getEmployerApplicantDetail(
+  internshipId: string,
+  applicationId: string
+): Promise<EmployerApplicantItem> {
+  return apiRequest<EmployerApplicantItem>(
+    `/internships/${encodeURIComponent(internshipId)}/applicants/${encodeURIComponent(applicationId)}`,
+    {
+      method: 'GET',
+    }
+  );
+}
+
+export async function closeEmployerOpportunity(
+  id: string
+): Promise<InternshipDetail> {
+  return apiRequest<InternshipDetail>(
+    `/internships/${encodeURIComponent(id)}/close`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
+export async function updateEmployerApplicantStatus(
+  internshipId: string,
+  applicationId: string,
+  payload: { status: ApplicationStatus; notes?: string }
+): Promise<EmployerApplicantItem> {
+  return apiRequest<EmployerApplicantItem>(
+    `/internships/${encodeURIComponent(internshipId)}/applicants/${encodeURIComponent(applicationId)}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function submitApplication(
+  applicationId: string,
+  payload?: { cover_letter?: string; notes?: string }
+): Promise<ApplicationDetailResponse> {
+  return apiRequest<ApplicationDetailResponse>(
+    `/applications/${encodeURIComponent(applicationId)}/submit`,
+    {
+      method: 'POST',
+      body: payload ? JSON.stringify(payload) : JSON.stringify({}),
     }
   );
 }

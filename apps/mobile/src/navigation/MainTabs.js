@@ -6,6 +6,7 @@ import HomeScreen from '../screens/HomeScreen';
 import InternshipsScreen from '../screens/InternshipsScreen';
 import MatchupsScreen from '../screens/MatchupsScreen';
 import ApplicationsScreen from '../screens/ApplicationsScreen';
+import EmployerOpportunitiesScreen from '../screens/EmployerOpportunitiesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { TabScrollProvider } from '../context/TabScrollContext';
 import { useProfile } from '../context/ProfileContext';
@@ -38,7 +39,9 @@ export default function MainTabs() {
         tabBar={(props) => <CustomTabBar {...props} />}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
-        {!isEmployer && (
+        {isEmployer ? (
+          <Tab.Screen name="Opportunities" component={EmployerOpportunitiesScreen} />
+        ) : (
           <>
             <Tab.Screen name="Internships" component={InternshipsScreen} />
             <Tab.Screen name="Matchups" component={MatchupsScreen} />
@@ -50,6 +53,7 @@ export default function MainTabs() {
     </TabScrollProvider>
   );
 }
+
 
 const styles = StyleSheet.create({
   loadingContainer: {

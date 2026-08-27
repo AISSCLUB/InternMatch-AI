@@ -39,6 +39,7 @@ import {
 const ICONS = {
   Home: 'home',
   Internships: 'business',
+  Opportunities: 'briefcase',
   Matchups: 'radio-button-on',
   Applications: 'document-text',
   Profile: 'person-circle',
@@ -47,10 +48,12 @@ const ICONS = {
 const TAB_TRANSLATION_KEYS = Object.freeze({
   Home: 'navigation.tabs.home',
   Internships: 'navigation.tabs.internships',
+  Opportunities: 'navigation.tabs.opportunities',
   Matchups: 'navigation.tabs.matchups',
   Applications: 'navigation.tabs.applications',
   Profile: 'navigation.tabs.profile',
 });
+
 
 export default function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();

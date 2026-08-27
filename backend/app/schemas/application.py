@@ -97,6 +97,28 @@ class ApplicationStatusUpdateRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class ApplicationSubmitRequest(BaseModel):
+    """Request schema for POST /api/v1/applications/{id}/submit (Candidate explicit submit)."""
+
+    cover_letter: Optional[str] = Field(
+        default=None, description="Optional edited cover letter content"
+    )
+    notes: Optional[str] = Field(
+        default=None, description="Optional candidate notes"
+    )
+
+
+class EmployerApplicantStatusUpdateRequest(BaseModel):
+    """Request schema for employer transitioning applicant status."""
+
+    status: Literal["interviewing", "accepted", "rejected"] = Field(
+        ..., description="Target applicant status (interviewing, accepted, rejected)"
+    )
+    notes: Optional[str] = Field(
+        default=None, description="Optional employer notes"
+    )
+
+
 class ApplicationStatusEventResponse(BaseModel):
     """Schema representing an individual status transition in an application's timeline."""
 
@@ -152,3 +174,67 @@ class ApplicationDetailResponse(BaseModel):
                 for event in events
             ],
         )
+
+
+class CandidateApplicantSummary(BaseModel):
+    """Candidate profile summary nested inside an EmployerApplicantResponse."""
+
+    student_id: UUID
+    full_name: str
+    headline: Optional[str] = None
+    department: Optional[str] = None
+    skills: List[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EmployerApplicantResponse(BaseModel):
+    """Schema representing an applicant in an employer's internship applicant list/detail."""
+
+    application_id: UUID
+    internship_id: UUID
+    status: ApplicationStatus
+    applied_date: Optional[date] = None
+    generated_cover_letter: Optional[str] = None
+    match_score: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    candidate: CandidateApplicantSummary
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_orm_data(
+        cls,
+        application: Any,
+        profile: Any,
+        match: Optional[Any],
+        skills: Optional[List[str]] = None,
+    ) -> "EmployerApplicantResponse":
+        """Factory mapping Application, StudentProfile, and optional Match."""
+        dept = (profile.preferences or {}).get("department") if profile.preferences else None
+        return cls(
+            application_id=application.id,
+            internship_id=application.internship_id,
+            status=application.status,
+            applied_date=application.applied_date,
+            generated_cover_letter=application.generated_cover_letter,
+            match_score=match.overall_score if match is not None else None,
+            created_at=application.created_at,
+            updated_at=application.updated_at,
+            candidate=CandidateApplicantSummary(
+                student_id=profile.id,
+                full_name=profile.full_name,
+                headline=profile.headline,
+                department=dept,
+                skills=skills or [],
+            ),
+        )
+
+
+class EmployerApplicantListResponse(BaseModel):
+    """Schema representing the list of applicants for an employer's internship."""
+
+    items: List[EmployerApplicantResponse]
+    total: int
+    internship_id: UUID

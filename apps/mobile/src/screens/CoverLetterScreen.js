@@ -20,7 +20,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import ScreenHeader from '../components/ScreenHeader';
 import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
-import { updateApplicationStatus, ApiError } from '../services/api';
+import { submitApplication, updateApplicationStatus, ApiError } from '../services/api';
 import haptics from '../services/haptics';
 
 export default function CoverLetterScreen({ route, navigation }) {
@@ -36,11 +36,11 @@ export default function CoverLetterScreen({ route, navigation }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateError, setUpdateError] = useState(null);
 
-  const handleMarkAsApplied = async () => {
+  const handleSubmitApplication = async () => {
     if (!applicationId) {
       Alert.alert(
-        t('coverLetter.missingRefTitle'),
-        t('coverLetter.missingRefMsg')
+        t('coverLetter.missingRefTitle', 'Missing Reference'),
+        t('coverLetter.missingRefMsg', 'Application reference not found.')
       );
       return;
     }
@@ -49,29 +49,32 @@ export default function CoverLetterScreen({ route, navigation }) {
     setUpdateError(null);
 
     try {
-      const updated = await updateApplicationStatus(applicationId, {
-        status: 'applied',
+      const updated = await submitApplication(applicationId, {
+        cover_letter: text,
       });
 
       haptics.success();
-      setCurrentStatus(updated.status);
+      setCurrentStatus(updated.status || 'applied');
 
       Alert.alert(
-        t('coverLetter.trackerUpdatedTitle'),
-        t('coverLetter.trackerUpdatedMsg'),
+        t('coverLetter.submittedSuccessTitle', 'Application Submitted'),
+        t('coverLetter.submittedSuccessMsg', 'Your application and reviewed cover letter have been sent to the employer.'),
         [
           {
-            text: t('coverLetter.goToApplications'),
+            text: t('coverLetter.goToApplications', 'View Applications'),
             onPress: () =>
               navigation.navigate('MainTabs', { screen: 'Applications' }),
           },
-          { text: t('coverLetter.stayHere'), style: 'cancel' },
+          { text: t('coverLetter.stayHere', 'OK'), style: 'cancel' },
         ]
       );
     } catch (err) {
-      console.warn('Failed to update application status:', err);
-      setUpdateError('APPLICATION_STATUS_UPDATE_FAILED');
-      Alert.alert(t('common.error'), t('errors.applicationStatusUpdateFailed'));
+      console.warn('Failed to submit application:', err);
+      setUpdateError('APPLICATION_SUBMIT_FAILED');
+      const msg = err instanceof ApiError && err.data?.detail
+        ? err.data.detail
+        : t('errors.applicationStatusUpdateFailed', 'Failed to submit application. Please try again.');
+      Alert.alert(t('common.error', 'Error'), msg);
     } finally {
       setIsUpdating(false);
     }
@@ -172,9 +175,9 @@ export default function CoverLetterScreen({ route, navigation }) {
                 />
               ) : (
                 <GradientButton
-                  title={t('coverLetter.markApplied')}
+                  title={t('coverLetter.submitApplication', 'Submit Application')}
                   color={colors.accent || colors.teal}
-                  onPress={handleMarkAsApplied}
+                  onPress={handleSubmitApplication}
                   style={{ marginTop: spacing.lg }}
                 />
               )}

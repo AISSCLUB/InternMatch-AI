@@ -1,24 +1,38 @@
 """
-Public Read-Only Internship Catalog Endpoints
-Provides endpoints for browsing and fetching internship listings.
+Public Read-Only and Authenticated Employer Internship Catalog Endpoints
+Provides endpoints for browsing, fetching, creating, and retrieving
+employer-owned internship listings and applicants.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
+from app.core.config import settings
+from app.core.logging import get_logger
+from app.core.security import AuthenticatedUser, require_employer_user
 from app.db.session import get_db
+from app.repositories.application import ApplicationRepository
 from app.repositories.internship import InternshipRepository
+from app.repositories.matching_data import MatchingDataRepository
+from app.schemas.application import (
+    EmployerApplicantListResponse,
+    EmployerApplicantResponse,
+    EmployerApplicantStatusUpdateRequest,
+)
 from app.schemas.internship import (
+    InternshipCreateRequest,
     InternshipDetailResponse,
     InternshipListResponse,
     InternshipSummaryResponse,
 )
 from app.services.content_translation import translate_internship_content
-from fastapi import APIRouter, Depends, Query, status
+from app.services.embeddings import generate_embedding
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -32,6 +46,71 @@ def format_not_found_error(message: str) -> Dict[str, Any]:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     }
+
+
+@router.post(
+    "",
+    response_model=InternshipDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_internship(
+    payload: InternshipCreateRequest,
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Create and immediately publish a new employer internship opportunity.
+    Requires valid Bearer JWT and verified employer account.
+    Generates description embedding synchronously and requires valid embedding
+    before persisting the opportunity.
+    """
+    try:
+        embedding = generate_embedding(payload.description)
+    except Exception as exc:
+        logger.warning(
+            "Embedding generation failed for employer opportunity creation: %s",
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Opportunity publishing is temporarily unavailable.",
+        ) from exc
+
+    if (
+        not embedding
+        or not isinstance(embedding, (list, tuple))
+        or len(embedding) != settings.EMBEDDING_DIMENSION
+    ):
+        logger.warning("Embedding service returned invalid embedding vector.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Opportunity publishing is temporarily unavailable.",
+        )
+
+    try:
+        listing = InternshipRepository.create_employer_listing(
+            db=db,
+            employer_user_id=current_user.user_id,
+            title=payload.title,
+            company=payload.company,
+            location=payload.location,
+            work_type=payload.work_type,
+            description=payload.description,
+            required_skills=payload.required_skills,
+            preferred_skills=payload.preferred_skills,
+            language=payload.language,
+            education_requirements=payload.education_requirements,
+            experience_requirements=payload.experience_requirements,
+            description_embedding=list(embedding),
+        )
+        db.commit()
+        db.refresh(listing)
+    except Exception:
+        db.rollback()
+        raise
+
+    return InternshipDetailResponse.from_orm_model(listing)
+
 
 
 @router.get("", response_model=InternshipListResponse)
@@ -48,7 +127,7 @@ def list_internships(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieve the list of curated internships with optional filtering.
+    Retrieve the list of curated and employer-published internships with optional filtering.
     Public read-only endpoint.
     """
     items, total = InternshipRepository.list_internships(
@@ -64,6 +143,237 @@ def list_internships(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/mine", response_model=InternshipListResponse)
+def list_my_internships(
+    limit: int = Query(20, ge=1, le=50, description="Pagination limit (default 20, max 50)"),
+    offset: int = Query(0, ge=0, description="Pagination offset (default 0)"),
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve internship opportunities created and owned by the authenticated employer.
+    Requires authenticated employer account.
+    Returns newest-first paginated list.
+    """
+    items, total = InternshipRepository.list_by_employer(
+        db=db,
+        employer_user_id=current_user.user_id,
+        limit=limit,
+        offset=offset,
+    )
+    return InternshipListResponse(
+        items=[InternshipSummaryResponse.from_orm_model(item) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/{id}/applicants", response_model=EmployerApplicantListResponse)
+def list_internship_applicants(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve all submitted applicants (status != 'saved') for an employer's opportunity.
+    Requires authenticated employer account and listing ownership.
+    Returns 404 if the opportunity is not found or owned by another employer.
+    """
+    listing = InternshipRepository.get_by_id_and_owner(
+        db=db,
+        internship_id=id,
+        employer_user_id=current_user.user_id,
+    )
+    if not listing:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=format_not_found_error("Internship opportunity not found."),
+        )
+
+    records = ApplicationRepository.list_applicants_for_employer_internship(
+        db=db,
+        internship_id=id,
+        employer_user_id=current_user.user_id,
+    )
+
+    items = []
+    for app, profile, match in records:
+        skills = MatchingDataRepository.get_skill_names_for_student(db, profile.id)
+        items.append(
+            EmployerApplicantResponse.from_orm_data(
+                application=app,
+                profile=profile,
+                match=match,
+                skills=skills,
+            )
+        )
+
+    return EmployerApplicantListResponse(
+        items=items,
+        total=len(items),
+        internship_id=id,
+    )
+
+
+@router.post("/{id}/close", response_model=InternshipDetailResponse)
+def close_internship_opportunity(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Close an employer-owned internship opportunity.
+    Closed opportunities are removed from public candidate discovery and matching,
+    while existing applications and employer listing history are preserved.
+    Requires verified employer ownership.
+    """
+    listing = InternshipRepository.get_by_id_and_owner(
+        db=db,
+        internship_id=id,
+        employer_user_id=current_user.user_id,
+    )
+    if not listing:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=format_not_found_error(
+                "Internship opportunity not found or not owned by current user."
+            ),
+        )
+
+    try:
+        updated_listing = InternshipRepository.close_listing(db=db, listing=listing)
+        db.commit()
+        db.refresh(updated_listing)
+    except Exception:
+        db.rollback()
+        raise
+
+    return InternshipDetailResponse.from_orm_model(updated_listing)
+
+
+@router.get("/{id}/applicants/{application_id}", response_model=EmployerApplicantResponse)
+def get_internship_applicant_detail(
+    id: UUID,
+    application_id: UUID,
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve detailed applicant information for an employer-owned opportunity.
+    Requires authenticated employer account and listing ownership.
+    Returns 404 if not found or unauthorized.
+    """
+    record = ApplicationRepository.get_applicant_detail_for_employer(
+        db=db,
+        internship_id=id,
+        application_id=application_id,
+        employer_user_id=current_user.user_id,
+    )
+    if not record:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=format_not_found_error("Applicant record not found."),
+        )
+
+    app, profile, match = record
+    skills = MatchingDataRepository.get_skill_names_for_student(db, profile.id)
+    return EmployerApplicantResponse.from_orm_data(
+        application=app,
+        profile=profile,
+        match=match,
+        skills=skills,
+    )
+
+
+@router.patch(
+    "/{id}/applicants/{application_id}/status",
+    response_model=EmployerApplicantResponse,
+)
+def update_employer_applicant_status(
+    id: UUID,
+    application_id: UUID,
+    payload: EmployerApplicantStatusUpdateRequest,
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Transition applicant status for an employer-owned opportunity.
+    Enforces valid recruiter lifecycle state machine:
+      - applied -> interviewing, accepted, rejected
+      - interviewing -> accepted, rejected
+      - accepted (terminal) -> no transitions
+      - rejected (terminal) -> no transitions
+      - saved -> cannot be updated by employer
+    Creates an authoritative ApplicationStatusEvent timeline entry.
+    Requires verified employer ownership.
+    """
+    record = ApplicationRepository.get_applicant_detail_for_employer(
+        db=db,
+        internship_id=id,
+        application_id=application_id,
+        employer_user_id=current_user.user_id,
+    )
+    if not record:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=format_not_found_error(
+                "Applicant record not found for this opportunity."
+            ),
+        )
+
+    app, profile, match = record
+    current_status = app.status
+    target_status = payload.status
+
+    # Enforce strict transition rules
+    if current_status == "saved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot update status for draft application. Candidate has not submitted yet.",
+        )
+
+    if current_status in ("accepted", "rejected"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Application is in terminal '{current_status}' status and cannot be modified.",
+        )
+
+    valid_transitions = {
+        "applied": {"interviewing", "accepted", "rejected"},
+        "interviewing": {"accepted", "rejected"},
+    }
+
+    allowed = valid_transitions.get(current_status, set())
+    if target_status not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status transition from '{current_status}' to '{target_status}'.",
+        )
+
+    try:
+        updated_app = ApplicationRepository.update_status(
+            db=db,
+            application=app,
+            status=target_status,
+            notes=payload.notes,
+            notes_provided=payload.notes is not None,
+        )
+        db.commit()
+        db.refresh(updated_app)
+    except Exception:
+        db.rollback()
+        raise
+
+    skills = MatchingDataRepository.get_skill_names_for_student(db, profile.id)
+    return EmployerApplicantResponse.from_orm_data(
+        application=updated_app,
+        profile=profile,
+        match=match,
+        skills=skills,
     )
 
 

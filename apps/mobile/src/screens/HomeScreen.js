@@ -33,7 +33,7 @@ import AuthenticatedAppChromeHeader from '../components/AuthenticatedAppChromeHe
 import { useProfile } from '../context/ProfileContext';
 import { useTabScroll, useTabScrollReporter } from '../context/TabScrollContext';
 import { normalizeAccountType } from '../services/subscriptionService';
-import { getMatches } from '../services/api';
+import { getMatches, getEmployerInternships } from '../services/api';
 import { useMatchCalculation } from '../hooks/useMatchCalculation';
 
 export default function HomeScreen({ navigation }) {
@@ -60,6 +60,12 @@ export default function HomeScreen({ navigation }) {
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Employer workspace state
+  const [employerOpportunities, setEmployerOpportunities] = useState([]);
+  const [employerTotal, setEmployerTotal] = useState(0);
+  const [employerLoading, setEmployerLoading] = useState(false);
+  const [employerError, setEmployerError] = useState(null);
 
   const {
     isCalculating,
@@ -98,17 +104,41 @@ export default function HomeScreen({ navigation }) {
     }
   }, [isEmployer, hasAnalyzedCV]);
 
+  const fetchEmployerData = useCallback(async () => {
+    if (!isEmployer) return;
+
+    setEmployerLoading(true);
+    setEmployerError(null);
+
+    try {
+      const res = await getEmployerInternships({ limit: 50 });
+      const items = res.items || [];
+      setEmployerOpportunities(items.slice(0, 5));
+      const publishedCount = items.filter((i) => i.is_active !== false).length;
+      setEmployerTotal(publishedCount);
+    } catch (err) {
+      console.warn('Failed to load employer data on Home:', err);
+      setEmployerError('EMPLOYER_LOAD_FAILED');
+    } finally {
+      setEmployerLoading(false);
+    }
+  }, [isEmployer]);
+
   useEffect(() => {
-    if (!isEmployer && hasAnalyzedCV) {
+    if (isEmployer) {
+      fetchEmployerData();
+    } else if (hasAnalyzedCV) {
       fetchMatchesData();
     }
-  }, [isEmployer, hasAnalyzedCV, fetchMatchesData]);
+  }, [isEmployer, hasAnalyzedCV, fetchEmployerData, fetchMatchesData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await refreshProfile();
-      if (!isEmployer && hasAnalyzedCV) {
+      if (isEmployer) {
+        await fetchEmployerData();
+      } else if (hasAnalyzedCV) {
         await fetchMatchesData();
       }
     } catch (err) {
@@ -193,40 +223,52 @@ export default function HomeScreen({ navigation }) {
 
         {isEmployer ? (
           <>
-            {/* Sequence 2: Employer Preview Hero Card */}
+            {/* Sequence 2: Employer Recruiter Dashboard Hero Card */}
             <Reveal delay={motionTokens.stagger.fast}>
               <GlassSurface variant="card" style={styles.employerHeroCard}>
                 <View style={[styles.employerHeroHeader, isRTL && styles.rowRTL]}>
                   <View style={styles.employerIconCircle}>
-                    <Ionicons name="briefcase-outline" size={24} color={colors.accentStrong || colors.tealDark} />
+                    <Ionicons name="briefcase" size={24} color={colors.accentStrong || colors.tealDark} />
                   </View>
                   <View style={styles.employerHeroTitleBlock}>
                     <Text style={[styles.employerHeroEyebrow, isRTL && styles.rtlText]}>
-                      {t('home.employer.previewEyebrow')}
+                      {t('home.employer.eyebrow')}
                     </Text>
                     <Text style={[styles.employerHeroTitle, isRTL && styles.rtlText]}>
-                      {t('home.employer.previewTitle')}
+                      {t('home.employer.title')}
                     </Text>
                   </View>
                 </View>
                 <Text style={[styles.employerHeroDescription, isRTL && styles.rtlText]}>
-                  {t('home.employer.previewDescription')}
+                  {t('home.employer.description')}
                 </Text>
+
+                {/* Live Metric Stat Pill */}
+                <View style={[styles.employerStatsRow, isRTL && styles.rowRTL]}>
+                  <View style={[styles.employerStatBox, isRTL && styles.rowRTL]}>
+                    <View style={styles.statDot} />
+                    <Text style={styles.statCount}>{employerTotal}</Text>
+                    <Text style={[styles.statLabel, isRTL && styles.rtlText]}>
+                      {t('home.employer.publishedOpportunities', { defaultValue: 'Published Opportunities' })}
+                    </Text>
+                  </View>
+                </View>
+
                 <View style={styles.employerActions}>
                   <GradientButton
-                    title={t('home.employer.viewPlans')}
+                    title={`+ ${t('home.employer.createOpportunity')}`}
                     color={colors.accent || colors.teal}
-                    onPress={() => navigation.navigate('Plans')}
+                    onPress={() => navigation.navigate('CreateOpportunity')}
                     style={styles.employerActionBtn}
                   />
                   <TouchableOpacity
                     style={[styles.employerProfileLink, isRTL && styles.rowRTL]}
-                    onPress={() => navigation.navigate('MainTabs', { screen: 'Profile' })}
+                    onPress={() => navigation.navigate('MainTabs', { screen: 'Opportunities' })}
                     accessibilityRole="button"
-                    accessibilityLabel={t('home.employer.viewProfile')}
+                    accessibilityLabel={t('home.employer.viewOpportunities')}
                   >
                     <Text style={[styles.employerProfileLinkText, isRTL && styles.rtlText]}>
-                      {t('home.employer.viewProfile')}
+                      {t('home.employer.viewOpportunities')}
                     </Text>
                     <Ionicons
                       name={isRTL ? 'arrow-back' : 'arrow-forward'}
@@ -239,30 +281,159 @@ export default function HomeScreen({ navigation }) {
               </GlassSurface>
             </Reveal>
 
-            {/* Sequence 3: Truthful Roadmap Notice Card */}
+            {/* Sequence 3: Employer Opportunities Overview */}
             <Reveal delay={motionTokens.stagger.normal}>
-              <GlassSurface variant="subtle" style={styles.roadmapCard}>
-                <View style={[styles.roadmapHeader, isRTL && styles.rowRTL]}>
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={18}
-                    color={colors.textSecondary || colors.textMuted}
-                    style={isRTL ? styles.browseIconRTL : styles.browseIcon}
-                  />
-                  <Text style={[styles.roadmapTitle, isRTL && styles.rtlText]}>
-                    {t('plans.footerNoticeTitle')}
+              {employerLoading && !refreshing && employerOpportunities.length === 0 && (
+                <View style={styles.centerLoading}>
+                  <ActivityIndicator size="small" color={colors.accent || colors.teal} />
+                  <Text style={[styles.loadingText, isRTL && styles.rtlWriting]}>
+                    {t('home.employer.loadingWorkspace')}
                   </Text>
                 </View>
-                <Text style={[styles.roadmapBody, isRTL && styles.rtlText]}>
-                  {t('home.employer.roadmapNotice')}
-                </Text>
-              </GlassSurface>
+              )}
+
+              {employerError && !employerLoading && (
+                <Card style={styles.errorCard} padding="md">
+                  <Ionicons name="alert-circle-outline" size={24} color={colors.danger || '#EF4444'} />
+                  <Text style={[styles.errorText, isRTL && styles.rtlWriting]}>
+                    {t('home.employer.errorLoading')}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.retryBtn}
+                    onPress={fetchEmployerData}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.employer.retry')}
+                  >
+                    <Text style={[styles.retryBtnText, isRTL && styles.rtlWriting]}>
+                      {t('home.employer.retry')}
+                    </Text>
+                  </TouchableOpacity>
+                </Card>
+              )}
+
+              {!employerLoading && !employerError && employerTotal === 0 && (
+                <Card style={styles.emptyMatchesCard} padding="lg">
+                  <Ionicons name="briefcase-outline" size={36} color={colors.accent || colors.teal} />
+                  <Text style={[styles.emptyMatchesTitle, isRTL && styles.rtlWriting]}>
+                    {t('home.employer.noOpportunitiesTitle')}
+                  </Text>
+                  <Text style={[styles.emptyMatchesSubtitle, isRTL && styles.rtlWriting]}>
+                    {t('home.employer.noOpportunitiesSubtitle')}
+                  </Text>
+                  <GradientButton
+                    title={`+ ${t('home.employer.createOpportunity')}`}
+                    color={colors.accent || colors.teal}
+                    onPress={() => navigation.navigate('CreateOpportunity')}
+                    style={{ marginTop: spacing.lg, width: '100%' }}
+                  />
+                </Card>
+              )}
+
+              {!employerLoading && !employerError && employerOpportunities.length > 0 && (
+                <>
+                  <View style={[styles.sectionHeaderRow, isRTL && styles.rowRTL]}>
+                    <Text style={[styles.sectionEyebrow, isRTL && styles.rtlText]}>
+                      {t('home.employer.recentOpportunities')}
+                    </Text>
+                    {employerTotal > employerOpportunities.length && (
+                      <TouchableOpacity
+                        onPress={() => navigation.navigate('MainTabs', { screen: 'Opportunities' })}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('home.employer.viewAll', { total: employerTotal })}
+                      >
+                        <Text style={[styles.seeAllLink, isRTL && styles.rtlText]}>
+                          {t('home.employer.viewAll', { total: employerTotal })}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {employerOpportunities.map((opp) => (
+                    <PressableCard
+                      key={opp.id}
+                      style={styles.employerOppCard}
+                      padding="md"
+                      onPress={() =>
+                        navigation.navigate('EmployerApplicants', {
+                          internshipId: opp.id,
+                          title: opp.title,
+                        })
+                      }
+                      accessibilityLabel={`${opp.title} at ${opp.company}`}
+                    >
+                      <View style={[styles.oppCardHeader, isRTL && styles.rowRTL]}>
+                        <Text style={[styles.oppTitle, isRTL && styles.rtlText]} numberOfLines={1}>
+                          {opp.title}
+                        </Text>
+                        <View style={[styles.badgesContainer, isRTL && styles.rowRTL]}>
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              opp.is_active === false ? styles.closedBadge : styles.publishedBadge,
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.statusDot,
+                                opp.is_active === false ? styles.closedDot : styles.publishedDot,
+                              ]}
+                            />
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                opp.is_active === false
+                                  ? styles.closedBadgeText
+                                  : styles.publishedBadgeText,
+                              ]}
+                            >
+                              {opp.is_active === false
+                                ? t('employerOpportunities.statusClosed', 'Closed')
+                                : t('employerOpportunities.statusPublished', 'Published')}
+                            </Text>
+                          </View>
+                          <View style={styles.workTypePill}>
+                            <Text style={styles.workTypePillText}>{opp.work_type}</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <Text style={[styles.oppMeta, isRTL && styles.rtlText]}>
+                        {opp.company} {'\u00b7'} {opp.location}
+                      </Text>
+                      <View style={[styles.oppFooter, isRTL && styles.rowRTL]}>
+                        <TouchableOpacity
+                          style={[styles.viewApplicantsBtn, isRTL && styles.rowRTL]}
+                          onPress={() =>
+                            navigation.navigate('EmployerApplicants', {
+                              internshipId: opp.id,
+                              title: opp.title,
+                            })
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`${t('home.employer.viewApplicants')} for ${opp.title}`}
+                        >
+                          <Text style={[styles.viewApplicantsBtnText, isRTL && styles.rtlText]}>
+                            {t('home.employer.viewApplicants')}
+                          </Text>
+                          <Ionicons
+                            name={isRTL ? 'arrow-back' : 'arrow-forward'}
+                            size={14}
+                            color={colors.accentStrong || colors.tealDark}
+                            style={[styles.browseIcon, isRTL && styles.browseIconRTL]}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </PressableCard>
+                  ))}
+                </>
+              )}
             </Reveal>
           </>
         ) : (
           <>
             {/* Sequence 2: Signature Match Intelligence Hero Orb */}
             <Reveal delay={motionTokens.stagger.fast}>
+
               <MatchIntelligenceOrb
                 score={firstMatch?.overall_score}
                 topMatch={firstMatch}
@@ -940,29 +1111,134 @@ const styles = StyleSheet.create({
     color: colors.accentStrong || colors.tealDark,
     fontSize: 13,
   },
-  roadmapCard: {
-    padding: spacing.md,
-    borderRadius: spacing.radii.card || spacing.radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderSubtle || colors.border,
-  },
-  roadmapHeader: {
+  employerStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.md,
   },
-  roadmapTitle: {
+  employerStatBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(14, 116, 144, 0.08)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: spacing.radii.pill,
+  },
+  statDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.success || '#10B981',
+    marginEnd: spacing.xs,
+  },
+  statCount: {
     ...typography.label,
-    fontSize: 12,
     fontWeight: '700',
-    color: colors.textSecondary || colors.textMuted,
-    marginStart: spacing.xs,
-    letterSpacing: 0.3,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 14,
+    marginEnd: spacing.xs,
   },
-  roadmapBody: {
+  statLabel: {
     ...typography.caption,
-    fontSize: 12,
-    lineHeight: 17,
     color: colors.textSecondary || colors.textMuted,
+    fontSize: 12,
+  },
+  employerOppCard: {
+    marginBottom: spacing.sm,
+  },
+  oppCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xxs,
+  },
+  oppTitle: {
+    flex: 1,
+    ...typography.cardTitle,
+    fontSize: 15,
+    color: colors.textPrimary || colors.textDark,
+    marginEnd: spacing.sm,
+  },
+  badgesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: spacing.radii.pill,
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    marginEnd: 4,
+  },
+  publishedBadge: {
+    backgroundColor: '#ECFDF5',
+  },
+  publishedDot: {
+    backgroundColor: '#10B981',
+  },
+  publishedBadgeText: {
+    ...typography.badge,
+    fontSize: 10,
+    color: '#065F46',
+    fontWeight: '600',
+  },
+  closedBadge: {
+    backgroundColor: '#F3F4F6',
+  },
+  closedDot: {
+    backgroundColor: '#9CA3AF',
+  },
+  closedBadgeText: {
+    ...typography.badge,
+    fontSize: 10,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  statusBadgeText: {
+    ...typography.badge,
+    fontSize: 10,
+  },
+  workTypePill: {
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: spacing.radii.pill,
+  },
+  workTypePillText: {
+    ...typography.badge,
+    fontSize: 11,
+    color: colors.accentStrong || colors.tealDark,
+    textTransform: 'capitalize',
+  },
+  oppMeta: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  oppFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle || colors.border,
+    paddingTop: spacing.xs,
+  },
+  viewApplicantsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: spacing.minimumTouchTarget,
+    paddingVertical: spacing.xxs,
+  },
+  viewApplicantsBtnText: {
+    ...typography.button,
+    color: colors.accentStrong || colors.tealDark,
+    fontSize: 13,
   },
 });

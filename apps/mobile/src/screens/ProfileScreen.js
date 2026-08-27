@@ -197,7 +197,7 @@ export default function ProfileScreen({ navigation }) {
                   {t('profile.employer.previewNotice')}
                 </Text>
                 <GradientButton
-                  title={t('profile.employer.viewPlans')}
+                  title={t('profile.employer.previewPlans', { defaultValue: t('profile.employer.viewPlans') })}
                   color={colors.accent || colors.teal}
                   onPress={() => navigation.navigate('Plans')}
                   style={{ marginTop: spacing.md, width: '100%' }}

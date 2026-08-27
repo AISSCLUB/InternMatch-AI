@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useScrollToTop } from '@react-navigation/native';
+import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -50,6 +50,9 @@ export default function MatchupsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const isFocused = useIsFocused();
+  const autoRecalculateTriggeredRef = useRef(false);
+  const passiveFetchTriggeredRef = useRef(false);
 
   const {
     isCalculating,
@@ -83,8 +86,40 @@ export default function MatchupsScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    fetchMatchesData();
-  }, [fetchMatchesData]);
+    if (!isFocused) {
+      autoRecalculateTriggeredRef.current = false;
+      passiveFetchTriggeredRef.current = false;
+      return;
+    }
+
+    if (hasAnalyZV) {
+      if (autoRecalculateTriggeredRef.current) {
+        return;
+      }
+
+      if (isCalculating) {
+        autoRecalculateTriggeredRef.current = true;
+        return;
+      }
+
+      autoRecalculateTriggeredRef.current = true;
+      startCalculation(() => {
+        fetchMatchesData();
+      });
+      return;
+    }
+
+    if (!passiveFetchTriggeredRef.current) {
+      passiveFetchTriggeredRef.current = true;
+      fetchMatchesData();
+    }
+  }, [
+    isFocused,
+    hasAnalyZV,
+    isCalculating,
+    startCalculation,
+    fetchMatchesData,
+  ]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

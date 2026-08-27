@@ -1,14 +1,75 @@
 """
-Internship Catalog API Response Schemas
-Provides Pydantic schemas for public internship catalog listing and detail responses.
+Internship Catalog API Response and Request Schemas
+Provides Pydantic schemas for public internship catalog listing, detail,
+and employer opportunity creation responses.
 Handles explicit API boundary translations required by docs/API_CONTRACT.md.
 """
 
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class InternshipCreateRequest(BaseModel):
+    """Schema for POST /api/v1/internships (Employer Opportunity Creation)."""
+
+    title: str = Field(
+        ..., min_length=1, max_length=200, description="Job / internship title"
+    )
+    company: str = Field(
+        ..., min_length=1, max_length=200, description="Company name"
+    )
+    location: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Location (e.g. 'Istanbul, Turkiye' or 'Remote')",
+    )
+    work_type: Literal["remote", "onsite", "hybrid"] = Field(
+        ..., description="Work modality ('remote', 'onsite', 'hybrid')"
+    )
+    description: str = Field(
+        ..., min_length=1, description="Internship description"
+    )
+    required_skills: List[str] = Field(
+        default_factory=list, description="List of required skills"
+    )
+    preferred_skills: List[str] = Field(
+        default_factory=list, description="List of preferred skills"
+    )
+    language: Optional[str] = Field(
+        default="English", description="Primary working language"
+    )
+    education_requirements: Optional[str] = Field(
+        default=None, description="Minimum education requirements"
+    )
+    experience_requirements: Optional[str] = Field(
+        default=None, description="Experience requirements"
+    )
+
+    @field_validator("title", "company", "location", "description", mode="before")
+    @classmethod
+    def validate_non_empty_trimmed(cls, v: Any) -> str:
+        """Validate and trim required string fields."""
+        if not isinstance(v, str) or not v.strip():
+            raise ValueError("Field must be a non-empty string.")
+        return v.strip()
+
+    @field_validator("required_skills", "preferred_skills", mode="before")
+    @classmethod
+    def validate_skills_list(cls, v: Any) -> List[str]:
+        """Normalize and filter string skills list."""
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            raise ValueError("Skills must be a list of strings.")
+        cleaned = []
+        for item in v:
+            if isinstance(item, str) and item.strip():
+                cleaned.append(item.strip())
+        return cleaned
 
 
 class InternshipSummaryResponse(BaseModel):
@@ -21,6 +82,7 @@ class InternshipSummaryResponse(BaseModel):
     work_type: str
     required_skills: List[str] = Field(default_factory=list)
     preferred_skills: List[str] = Field(default_factory=list)
+    is_active: bool = True
     posted_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -36,6 +98,7 @@ class InternshipSummaryResponse(BaseModel):
             work_type=model.work_type,
             required_skills=model.required_skills or [],
             preferred_skills=model.preferred_skills or [],
+            is_active=getattr(model, "is_active", True),
             posted_at=model.created_at,
         )
 
@@ -62,6 +125,7 @@ class InternshipDetailResponse(BaseModel):
     preferred_skills: List[str] = Field(default_factory=list)
     languages: List[str] = Field(default_factory=list)
     min_education: Optional[str] = None
+    is_active: bool = True
     posted_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -82,5 +146,6 @@ class InternshipDetailResponse(BaseModel):
             preferred_skills=model.preferred_skills or [],
             languages=languages_list,
             min_education=model.education_requirements,
+            is_active=getattr(model, "is_active", True),
             posted_at=model.created_at,
         )

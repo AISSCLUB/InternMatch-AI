@@ -30,10 +30,11 @@ class InternshipRepository:
         offset: int = 0,
     ) -> Tuple[List[InternshipListing], int]:
         """
-        Fetch paginated and filtered list of internship listings.
+        Fetch paginated and filtered list of active internship listings.
+        Excludes closed listings from public discovery.
         Returns (items, total_count).
         """
-        stmt = select(InternshipListing)
+        stmt = select(InternshipListing).where(InternshipListing.is_active.is_(True))
 
         if work_type and work_type.strip():
             stmt = stmt.where(
@@ -72,3 +73,97 @@ class InternshipRepository:
         items = list(db.scalars(paged_stmt).all())
 
         return items, total
+
+    @staticmethod
+    def create_employer_listing(
+        db: Session,
+        employer_user_id: UUID,
+        title: str,
+        company: str,
+        location: str,
+        work_type: str,
+        description: str,
+        required_skills: List[str],
+        preferred_skills: List[str],
+        language: Optional[str] = "English",
+        education_requirements: Optional[str] = None,
+        experience_requirements: Optional[str] = None,
+        description_embedding: Optional[List[float]] = None,
+    ) -> InternshipListing:
+        """
+        Create and persist a new InternshipListing owned by employer_user_id.
+        Flushes session state; does not commit transaction.
+        """
+        listing = InternshipListing(
+            employer_user_id=employer_user_id,
+            title=title,
+            company=company,
+            location=location,
+            work_type=work_type,
+            description=description,
+            required_skills=required_skills or [],
+            preferred_skills=preferred_skills or [],
+            language=language or "English",
+            education_requirements=education_requirements,
+            experience_requirements=experience_requirements,
+            description_embedding=description_embedding,
+        )
+        db.add(listing)
+        db.flush()
+        return listing
+
+    @staticmethod
+    def list_by_employer(
+        db: Session,
+        employer_user_id: UUID,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Tuple[List[InternshipListing], int]:
+        """
+        Fetch paginated list of internship listings strictly owned by employer_user_id.
+        Returns (items, total_count) ordered by created_at DESC.
+        """
+        stmt = select(InternshipListing).where(
+            InternshipListing.employer_user_id == employer_user_id
+        )
+
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total = db.scalar(count_stmt) or 0
+
+        safe_limit = max(1, min(limit, 50))
+        safe_offset = max(0, offset)
+        paged_stmt = (
+            stmt.order_by(InternshipListing.created_at.desc())
+            .offset(safe_offset)
+            .limit(safe_limit)
+        )
+        items = list(db.scalars(paged_stmt).all())
+        return items, total
+
+    @staticmethod
+    def get_by_id_and_owner(
+        db: Session,
+        internship_id: UUID,
+        employer_user_id: UUID,
+    ) -> Optional[InternshipListing]:
+        """
+        Fetch single internship listing record ensuring it is owned by employer_user_id.
+        """
+        stmt = select(InternshipListing).where(
+            InternshipListing.id == internship_id,
+            InternshipListing.employer_user_id == employer_user_id,
+        )
+        return db.scalar(stmt)
+
+    @staticmethod
+    def close_listing(
+        db: Session,
+        listing: InternshipListing,
+    ) -> InternshipListing:
+        """
+        Mark an internship listing as closed (is_active = False).
+        Flushes session state; does not commit transaction.
+        """
+        listing.is_active = False
+        db.flush()
+        return listing

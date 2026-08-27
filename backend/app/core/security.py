@@ -9,8 +9,10 @@ from uuid import UUID
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.db.session import get_db
 from fastapi import Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 from supabase import create_client
 
 logger = get_logger(__name__)
@@ -188,3 +190,35 @@ async def get_current_user_id(
     the authenticated user_id UUID.
     """
     return current_user.user_id
+
+
+def require_employer_user(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AuthenticatedUser:
+    """
+    FastAPI dependency ensuring authenticated user has a canonical StudentProfile
+    with preferences['account_type'] == 'employer'.
+    Rejects missing profiles and non-employer accounts with HTTP 403 Forbidden.
+    """
+    from app.repositories.student_profile import StudentProfileRepository
+
+    profile = StudentProfileRepository.get_by_user_id(db, user_id=current_user.user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=format_auth_error(
+                "Employer profile not found or access denied.",
+                code="FORBIDDEN",
+            ),
+        )
+    account_type = (profile.preferences or {}).get("account_type")
+    if not isinstance(account_type, str) or account_type.strip().lower() != "employer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=format_auth_error(
+                "Only employer accounts are permitted to perform this action.",
+                code="FORBIDDEN",
+            ),
+        )
+    return current_user

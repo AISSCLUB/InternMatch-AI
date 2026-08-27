@@ -13,6 +13,7 @@ from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import (
     ARRAY,
     JSON,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -160,6 +161,9 @@ class InternshipListing(Base):
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid4
     )
+    employer_user_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
     title: Mapped[str] = mapped_column(String, nullable=False)
     company: Mapped[str] = mapped_column(String, nullable=False)
     location: Mapped[str] = mapped_column(String, nullable=False)
@@ -186,6 +190,9 @@ class InternshipListing(Base):
     description_embedding: Mapped[Optional[List[float]]] = mapped_column(
         VECTOR(settings.EMBEDDING_DIMENSION).with_variant(JSON(), "sqlite"),
         nullable=True,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         default=lambda: datetime.now(timezone.utc), nullable=False

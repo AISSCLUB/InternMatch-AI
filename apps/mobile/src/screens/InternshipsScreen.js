@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useScrollToTop } from '@react-navigation/native';
+import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -96,11 +96,13 @@ export default function InternshipsScreen({ navigation }) {
     }
   }, [selectedFilterKey]);
 
-  useEffect(() => {
-    setRefreshing(false);
-    setLoadingMore(false);
-    fetchInitialInternships(selectedFilterKey);
-  }, [selectedFilterKey, fetchInitialInternships]);
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshing(false);
+      setLoadingMore(false);
+      fetchInitialInternships(selectedFilterKey);
+    }, [selectedFilterKey, fetchInitialInternships]),
+  );
 
   const handleRefresh = async () => {
     const filterKey = selectedFilterKey;

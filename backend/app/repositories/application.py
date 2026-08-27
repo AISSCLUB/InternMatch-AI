@@ -12,6 +12,7 @@ from app.db.models import (
     Application,
     ApplicationStatusEvent,
     InternshipListing,
+    Match,
     StudentProfile,
 )
 from sqlalchemy import select
@@ -194,3 +195,69 @@ class ApplicationRepository:
         db.add(new_app)
         db.flush()
         return new_app
+
+    @staticmethod
+    def list_applicants_for_employer_internship(
+        db: Session,
+        internship_id: UUID,
+        employer_user_id: UUID,
+    ) -> List[Tuple[Application, StudentProfile, Optional[Match]]]:
+        """
+        Fetch all submitted applicants (status != 'saved') for an internship
+        strictly owned by employer_user_id.
+        Enforces tenant isolation by joining InternshipListing with
+        InternshipListing.employer_user_id == employer_user_id.
+        Ordered by Application.applied_date.desc().nullslast(), Application.created_at.desc().
+        """
+        stmt = (
+            select(Application, StudentProfile, Match)
+            .join(InternshipListing, Application.internship_id == InternshipListing.id)
+            .join(StudentProfile, Application.student_id == StudentProfile.id)
+            .outerjoin(
+                Match,
+                (Match.student_id == Application.student_id)
+                & (Match.internship_id == Application.internship_id),
+            )
+            .where(
+                Application.internship_id == internship_id,
+                InternshipListing.employer_user_id == employer_user_id,
+                Application.status != "saved",
+            )
+            .order_by(
+                Application.applied_date.desc().nullslast(),
+                Application.created_at.desc(),
+            )
+        )
+        return list(db.execute(stmt).tuples().all())
+
+    @staticmethod
+    def get_applicant_detail_for_employer(
+        db: Session,
+        internship_id: UUID,
+        application_id: UUID,
+        employer_user_id: UUID,
+    ) -> Optional[Tuple[Application, StudentProfile, Optional[Match]]]:
+        """
+        Fetch a specific applicant detail for an employer-owned internship.
+        Enforces:
+        - internship.employer_user_id == employer_user_id
+        - application.internship_id == internship_id
+        - application.status != 'saved'
+        """
+        stmt = (
+            select(Application, StudentProfile, Match)
+            .join(InternshipListing, Application.internship_id == InternshipListing.id)
+            .join(StudentProfile, Application.student_id == StudentProfile.id)
+            .outerjoin(
+                Match,
+                (Match.student_id == Application.student_id)
+                & (Match.internship_id == Application.internship_id),
+            )
+            .where(
+                Application.id == application_id,
+                Application.internship_id == internship_id,
+                InternshipListing.employer_user_id == employer_user_id,
+                Application.status != "saved",
+            )
+        )
+        return db.execute(stmt).tuples().first()
