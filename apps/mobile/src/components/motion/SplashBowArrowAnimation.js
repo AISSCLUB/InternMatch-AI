@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import Svg, { Path, Line, Polygon } from 'react-native-svg';
 import Animated, {
   useSharedValue,
@@ -260,7 +260,14 @@ export default function SplashBowArrowAnimation({
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Bow and String Layer (Zero-dimension pivot anchor at (bowX, bowY)) */}
-      <Animated.View style={[styles.zeroPivot, animatedBowStyle]}>
+      <Animated.View
+        collapsable={false}
+        style={[
+          styles.zeroPivot,
+          Platform.OS === 'ios' && styles.iosNativePivot,
+          animatedBowStyle,
+        ]}
+      >
         <Svg width={60} height={100} viewBox="-38 -50 60 100" style={styles.bowSvg}>
           {/* Upper string segment */}
           <AnimatedLine
@@ -288,7 +295,14 @@ export default function SplashBowArrowAnimation({
       </Animated.View>
 
       {/* Arrow Layer (Zero-dimension pivot anchor at arrow TIP) */}
-      <Animated.View style={[styles.zeroPivot, animatedArrowStyle]}>
+      <Animated.View
+        collapsable={false}
+        style={[
+          styles.zeroPivot,
+          Platform.OS === 'ios' && styles.iosNativePivot,
+          animatedArrowStyle,
+        ]}
+      >
         <Svg width={60} height={20} viewBox="-54 -10 60 20" style={styles.arrowSvg}>
           {/* Arrow shaft (from tail at -50 to tip at 0) */}
           <Line
@@ -356,6 +370,16 @@ const styles = StyleSheet.create({
     top: 0,
     width: 0,
     height: 0,
+  },
+  // iOS does not reliably composite animated SVG children whose native
+  // parent has an exactly zero-sized layout box. Keep Android's original
+  // zero-size pivot untouched, while giving iOS a 1x1 native surface whose
+  // center remains exactly on the logical (0, 0) pivot.
+  iosNativePivot: {
+    left: -0.5,
+    top: -0.5,
+    width: 1,
+    height: 1,
   },
   bowSvg: {
     position: 'absolute',
