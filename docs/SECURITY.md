@@ -115,3 +115,13 @@ Uploaded CVs represent a potential threat vector (malicious files, execution exp
    - Client applications only receive RevenueCat public SDK keys (`EXPO_PUBLIC_REVENUECAT_*`).
    - RevenueCat secret V2 API keys / Webhook signing secrets MUST be stored exclusively in backend environment variables (`REVENUECAT_SECRET_KEY`) and NEVER committed to repository code.
 3. **Webhook Verification:** Optional RevenueCat webhooks (`/webhooks/revenuecat`) MUST verify signature headers to prevent fake entitlement injection.
+
+---
+
+## Mobile Dependency Advisory Baseline
+
+Final submission verification of the Expo SDK 54 mobile dependency tree reports npm audit advisories, including high-severity findings inherited through the Expo/Metro toolchain. The available npm remediation path for the high-severity findings requires a breaking/major Expo upgrade.
+
+For the Shipaton submission baseline, the tested Expo SDK 54 stack is intentionally retained rather than introducing an unverified major native migration immediately before submission. Final verification reported **0 critical** npm advisories. The remaining advisories are treated as an explicitly documented dependency risk and must not be interpreted as a claim of zero vulnerabilities.
+
+A future maintenance cycle should upgrade the Expo/React Native toolchain to a remediated supported release and repeat native build, authentication/deep-link, RevenueCat, TypeScript, and regression verification before release.
