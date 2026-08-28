@@ -44,19 +44,19 @@ Gate 1 remains 100% frozen, verified, and passing. Zero business logic, SQL tabl
 
 The following authoritative documents were updated with documentation-only alignment fixes:
 
-1. [docs/DATABASE.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/DATABASE.md):
+1. [docs/DATABASE.md](../docs/DATABASE.md):
    - Added **Canonical Skill Gap Data Architecture Note** establishing `matches.skill_gap_analysis` JSONB as the single source of truth.
    - Updated `applications.internship_id` foreign key to `ON DELETE SET NULL` (nullable FK) to preserve candidate tracking history.
    - Updated `student_skills.skill_id` foreign key to `ON DELETE RESTRICT` to protect master taxonomy skills.
    - Added complete **Foreign Key Delete Policy Summary Matrix**.
-2. [docs/API_CONTRACT.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/API_CONTRACT.md):
+2. [docs/API_CONTRACT.md](../docs/API_CONTRACT.md):
    - Added **Data Derivation Note** under `GET /matches/{id}/explanation` documenting that `matching_skills` and `missing_skills` are derived directly from the canonical `matches.skill_gap_analysis` JSONB column.
-3. [docs/DEVELOPMENT.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/DEVELOPMENT.md):
+3. [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md):
    - Updated Node.js runtime policy to `Node.js 22 LTS / 24 LTS (>=20.0.0)`.
    - Documented dual health check probes (`/health` container liveness probe vs `/api/v1/health` versioned operational check).
-4. [docs/DEPLOYMENT.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/DEPLOYMENT.md):
+4. [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md):
    - Documented dual health check probes (`/health` container liveness probe vs `/api/v1/health` versioned operational check).
-5. [docs/ARCHITECTURE.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/ARCHITECTURE.md) & [docs/READINESS_REPORT.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/READINESS_REPORT.md):
+5. [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) & [docs/READINESS_REPORT.md](../docs/READINESS_REPORT.md):
    - Updated Node.js runtime policy to `Node.js 22 LTS / 24 LTS (>=20.0.0)`.
 
 ---
@@ -90,7 +90,7 @@ The following authoritative documents were updated with documentation-only align
 
 - **`/health` (Root Container Probe):** Used by Docker Compose and cloud container orchestrators for HTTP process liveness verification.
 - **`/api/v1/health` (Versioned Operational API Probe):** Used for monitoring database connectivity, Redis queue state, and application version status.
-- **Backend Mount:** [backend/app/main.py](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/backend/app/main.py) mounts both endpoints cleanly.
+- **Backend Mount:** [backend/app/main.py](../backend/app/main.py) mounts both endpoints cleanly.
 
 ---
 
@@ -121,9 +121,9 @@ The following authoritative documents were updated with documentation-only align
 
 ## 10. Frontend/Backend Boundary Verification
 
-- **Selen's Scope:** [apps/mobile](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/apps/mobile/package.json) (React Native Expo) & [apps/landing](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/apps/landing/package.json) (Next.js).
-- **Mohammad's Scope:** [backend](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/backend/app/main.py), [worker](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/worker/worker.py), `database/`, `infrastructure/`.
-- **Interface Boundary:** [docs/API_CONTRACT.md](file:///c:/Users/hp/OneDrive/Desktop/InternMatch%20AI/docs/API_CONTRACT.md).
+- **Selen's Scope:** [apps/mobile](../apps/mobile/package.json) (React Native Expo) & [apps/landing](../apps/landing/package.json) (Next.js).
+- **Mohammad's Scope:** [backend](../backend/app/main.py), [worker](../worker/worker.py), `database/`, `infrastructure/`.
+- **Interface Boundary:** [docs/API_CONTRACT.md](../docs/API_CONTRACT.md).
 - **Independence:** Selen can develop UI components natively outside Docker without Python, Docker, or direct database access.
 
 ---

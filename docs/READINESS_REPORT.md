@@ -3,13 +3,13 @@
 **Date:** August 10, 2026  
 **Auditor:** Implementation Agent (Antigravity AI)  
 **Project Authors:** Mohammad & Selen (Two-Person Student Team, Affiliation: AISS Club — Üsküdar University)  
-**Target Repository:** `c:\Users\hp\OneDrive\Desktop\InternMatch AI`  
+**Target Repository:** repository root
 **Status:** Audit & Architecture Phase Complete — Awaiting Human Engineering Team Approval
 
 ---
 
 ## 1. Current Repository State
-- **Workspace Location:** `c:\Users\hp\OneDrive\Desktop\InternMatch AI`
+- **Workspace Location:** repository root
 - **Team Identity:** Created & developed by Mohammad & Selen. Affiliation: AISS Club — Üsküdar University. (AISS Club represents student-club affiliation and does not imply university ownership, funding, or IP holding).
 - **Git Status:** Uninitialized / Clean new directory (`.git` directory not present yet). Intended hosting under AISS Club GitHub Organization (`https://github.com/aissclub/internmatch-ai`).
 - **Contents:** Clean workspace containing only `.playwright-mcp/` system folder, `skills-lock.json`, and the authoritative `docs/` suite.
