@@ -914,3 +914,234 @@ def test_employer_applicant_status_lifecycle_and_terminal_states(client: TestCli
         headers=emp_headers,
     )
     assert res_rej_after.status_code == 400
+
+
+
+def test_employer_interview_schedule_and_reschedule_is_canonical(
+    client: TestClient,
+):
+    """Interview scheduling is canonical, isolated, reschedulable, and timeline-safe."""
+    from datetime import timedelta
+
+    employer_id = uuid4()
+    other_employer_id = uuid4()
+    candidate_id = uuid4()
+
+    _create_profile(
+        employer_id,
+        "Interview Employer",
+        account_type="employer",
+    )
+    _create_profile(
+        other_employer_id,
+        "Other Interview Employer",
+        account_type="employer",
+    )
+    candidate_profile = _create_profile(
+        candidate_id,
+        "Interview Candidate",
+        account_type="intern",
+    )
+
+    employer_headers = {
+        "Authorization": f"Bearer valid-user-{employer_id}"
+    }
+    other_employer_headers = {
+        "Authorization": f"Bearer valid-user-{other_employer_id}"
+    }
+    candidate_headers = {
+        "Authorization": f"Bearer valid-user-{candidate_id}"
+    }
+
+    create_response = client.post(
+        "/api/v1/internships",
+        json={
+            "title": "Interview Workflow Intern",
+            "company": "Workflow Labs",
+            "location": "Istanbul",
+            "work_type": "hybrid",
+            "description": "Test canonical interview scheduling.",
+            "required_skills": ["Python"],
+        },
+        headers=employer_headers,
+    )
+
+    assert create_response.status_code == 201
+
+    listing_id = UUID(create_response.json()["id"])
+
+    db = TestingSessionLocal()
+    try:
+        application = Application(
+            id=uuid4(),
+            student_id=candidate_profile.id,
+            internship_id=listing_id,
+            status="applied",
+            applied_date=datetime.now(timezone.utc).date(),
+        )
+        db.add(application)
+        db.commit()
+        application_id = str(application.id)
+    finally:
+        db.close()
+
+    first_time = (
+        datetime.now(timezone.utc)
+        + timedelta(days=2)
+    ).replace(microsecond=0)
+
+    first_response = client.post(
+        (
+            f"/api/v1/internships/{listing_id}"
+            f"/applicants/{application_id}/interview"
+        ),
+        json={
+            "scheduled_at": first_time.isoformat(),
+            "mode": "online",
+            "location": "  https://meet.example.com/round-one  ",
+            "message": "  Please prepare your portfolio.  ",
+        },
+        headers=employer_headers,
+    )
+
+    assert first_response.status_code == 200
+
+    first_data = first_response.json()
+
+    assert first_data["status"] == "interviewing"
+    assert first_data["interview_mode"] == "online"
+    assert (
+        first_data["interview_location"]
+        == "https://meet.example.com/round-one"
+    )
+    assert (
+        first_data["interview_message"]
+        == "Please prepare your portfolio."
+    )
+    assert first_data["interview_scheduled_at"] is not None
+
+    candidate_response = client.get(
+        f"/api/v1/applications/{application_id}",
+        headers=candidate_headers,
+    )
+
+    assert candidate_response.status_code == 200
+
+    candidate_data = candidate_response.json()
+
+    assert candidate_data["status"] == "interviewing"
+    assert candidate_data["interview_mode"] == "online"
+    assert (
+        candidate_data["interview_location"]
+        == "https://meet.example.com/round-one"
+    )
+    assert (
+        candidate_data["interview_message"]
+        == "Please prepare your portfolio."
+    )
+    assert len(candidate_data["timeline"]) == 1
+    assert candidate_data["timeline"][0]["status"] == "interviewing"
+
+    isolated_response = client.post(
+        (
+            f"/api/v1/internships/{listing_id}"
+            f"/applicants/{application_id}/interview"
+        ),
+        json={
+            "scheduled_at": first_time.isoformat(),
+            "mode": "online",
+            "location": "https://example.com/not-allowed",
+        },
+        headers=other_employer_headers,
+    )
+
+    assert isolated_response.status_code == 404
+
+    second_time = (
+        datetime.now(timezone.utc)
+        + timedelta(days=4)
+    ).replace(microsecond=0)
+
+    reschedule_response = client.post(
+        (
+            f"/api/v1/internships/{listing_id}"
+            f"/applicants/{application_id}/interview"
+        ),
+        json={
+            "scheduled_at": second_time.isoformat(),
+            "mode": "onsite",
+            "location": "  Workflow Labs, Istanbul  ",
+            "message": "  Bring a photo ID.  ",
+        },
+        headers=employer_headers,
+    )
+
+    assert reschedule_response.status_code == 200
+
+    rescheduled = reschedule_response.json()
+
+    assert rescheduled["status"] == "interviewing"
+    assert rescheduled["interview_mode"] == "onsite"
+    assert (
+        rescheduled["interview_location"]
+        == "Workflow Labs, Istanbul"
+    )
+    assert (
+        rescheduled["interview_message"]
+        == "Bring a photo ID."
+    )
+
+    candidate_rescheduled_response = client.get(
+        f"/api/v1/applications/{application_id}",
+        headers=candidate_headers,
+    )
+
+    assert candidate_rescheduled_response.status_code == 200
+
+    candidate_rescheduled = candidate_rescheduled_response.json()
+
+    assert candidate_rescheduled["status"] == "interviewing"
+    assert candidate_rescheduled["interview_mode"] == "onsite"
+    assert (
+        candidate_rescheduled["interview_location"]
+        == "Workflow Labs, Istanbul"
+    )
+    assert (
+        candidate_rescheduled["interview_message"]
+        == "Bring a photo ID."
+    )
+
+    # Rescheduling must not append another interviewing event.
+    assert len(candidate_rescheduled["timeline"]) == 1
+    assert (
+        candidate_rescheduled["timeline"][0]["status"]
+        == "interviewing"
+    )
+
+    accept_response = client.patch(
+        (
+            f"/api/v1/internships/{listing_id}"
+            f"/applicants/{application_id}/status"
+        ),
+        json={"status": "accepted"},
+        headers=employer_headers,
+    )
+
+    assert accept_response.status_code == 200
+    assert accept_response.json()["status"] == "accepted"
+
+    terminal_response = client.post(
+        (
+            f"/api/v1/internships/{listing_id}"
+            f"/applicants/{application_id}/interview"
+        ),
+        json={
+            "scheduled_at": second_time.isoformat(),
+            "mode": "online",
+            "location": "https://example.com/should-fail",
+        },
+        headers=employer_headers,
+    )
+
+    assert terminal_response.status_code == 400
+    assert "terminal" in terminal_response.json()["detail"].lower()

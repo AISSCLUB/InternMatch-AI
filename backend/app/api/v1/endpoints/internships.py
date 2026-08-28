@@ -19,6 +19,7 @@ from app.schemas.application import (
     EmployerApplicantListResponse,
     EmployerApplicantResponse,
     EmployerApplicantStatusUpdateRequest,
+    EmployerInterviewScheduleRequest,
 )
 from app.schemas.internship import (
     InternshipCreateRequest,
@@ -281,6 +282,132 @@ def get_internship_applicant_detail(
 
     app, profile, match = record
     skills = MatchingDataRepository.get_skill_names_for_student(db, profile.id)
+    return EmployerApplicantResponse.from_orm_data(
+        application=app,
+        profile=profile,
+        match=match,
+        skills=skills,
+    )
+
+
+@router.post(
+    "/{id}/applicants/{application_id}/interview",
+    response_model=EmployerApplicantResponse,
+)
+def schedule_employer_applicant_interview(
+    id: UUID,
+    application_id: UUID,
+    payload: EmployerInterviewScheduleRequest,
+    current_user: AuthenticatedUser = Depends(require_employer_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Create or reschedule the canonical interview for an applicant.
+
+    First scheduling:
+      - applied -> interviewing
+
+    Rescheduling:
+      - interviewing remains interviewing
+      - no duplicate status event is created
+
+    saved applications cannot be scheduled.
+    accepted/rejected applications are terminal.
+
+    Interview persistence and lifecycle transition are committed atomically.
+    """
+    record = ApplicationRepository.get_applicant_detail_for_employer(
+        db=db,
+        internship_id=id,
+        application_id=application_id,
+        employer_user_id=current_user.user_id,
+    )
+
+    if not record:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=format_not_found_error(
+                "Applicant record not found for this opportunity."
+            ),
+        )
+
+    app, profile, match = record
+
+    if app.status == "saved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Cannot schedule interview for draft application. "
+                "Candidate has not submitted yet."
+            ),
+        )
+
+    if app.status in ("accepted", "rejected"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Application is in terminal '{app.status}' status "
+                "and cannot be scheduled."
+            ),
+        )
+
+    if app.status not in ("applied", "interviewing"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot schedule interview while application "
+                f"is '{app.status}'."
+            ),
+        )
+
+    if (
+        payload.scheduled_at.tzinfo is None
+        or payload.scheduled_at.utcoffset() is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Interview scheduled_at must include a timezone offset.",
+        )
+
+    normalized_location = payload.location.strip()
+
+    if not normalized_location:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Interview location or meeting URL is required.",
+        )
+
+    normalized_message = (
+        payload.message.strip()
+        if payload.message and payload.message.strip()
+        else None
+    )
+
+    try:
+        app.interview_scheduled_at = payload.scheduled_at
+        app.interview_mode = payload.mode
+        app.interview_location = normalized_location
+        app.interview_message = normalized_message
+
+        if app.status == "applied":
+            ApplicationRepository.update_status(
+                db=db,
+                application=app,
+                status="interviewing",
+            )
+
+        db.commit()
+        db.refresh(app)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    skills = MatchingDataRepository.get_skill_names_for_student(
+        db,
+        profile.id,
+    )
+
     return EmployerApplicantResponse.from_orm_data(
         application=app,
         profile=profile,

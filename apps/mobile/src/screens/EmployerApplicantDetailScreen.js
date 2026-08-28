@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { TextInput } from 'react-native';
+import { scheduleEmployerApplicantInterview } from '../services/api';
 import {
   View,
   Text,
@@ -66,6 +68,12 @@ export default function EmployerApplicantDetailScreen({ route, navigation }) {
   const [loading, setLoading] = useState(!initialApplicant);
   const [refreshing, setRefreshing] = useState(false);
   const [mutatingStatus, setMutatingStatus] = useState(false);
+  const [interviewFormOpen, setInterviewFormOpen] = useState(false);
+  const [interviewDate, setInterviewDate] = useState('');
+  const [interviewTime, setInterviewTime] = useState('');
+  const [interviewMode, setInterviewMode] = useState('online');
+  const [interviewLocation, setInterviewLocation] = useState('');
+  const [interviewMessage, setInterviewMessage] = useState('');
   const [error, setError] = useState(null);
 
   const fetchDetail = useCallback(
@@ -130,6 +138,123 @@ export default function EmployerApplicantDetailScreen({ route, navigation }) {
     },
     [internshipId, applicationId, mutatingStatus, t]
   );
+
+  const openInterviewForm = useCallback(() => {
+    if (applicant?.interview_scheduled_at) {
+      const scheduled = new Date(applicant.interview_scheduled_at);
+
+      if (!Number.isNaN(scheduled.getTime())) {
+        const year = scheduled.getFullYear();
+        const month = String(scheduled.getMonth() + 1).padStart(2, '0');
+        const day = String(scheduled.getDate()).padStart(2, '0');
+        const hours = String(scheduled.getHours()).padStart(2, '0');
+        const minutes = String(scheduled.getMinutes()).padStart(2, '0');
+
+        setInterviewDate(`${year}-${month}-${day}`);
+        setInterviewTime(`${hours}:${minutes}`);
+      }
+
+      setInterviewMode(applicant.interview_mode || 'online');
+      setInterviewLocation(applicant.interview_location || '');
+      setInterviewMessage(applicant.interview_message || '');
+    }
+
+    setInterviewFormOpen(true);
+  }, [applicant]);
+
+  const handleScheduleInterview = useCallback(async () => {
+    if (!internshipId || !applicationId || mutatingStatus) {
+      return;
+    }
+
+    const cleanDate = interviewDate.trim();
+    const cleanTime = interviewTime.trim();
+    const cleanLocation = interviewLocation.trim();
+    const cleanMessage = interviewMessage.trim();
+
+    if (!cleanDate || !cleanTime || !cleanLocation) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'interviewScheduling.requiredFields',
+          'Date, time, and meeting location are required.'
+        )
+      );
+      return;
+    }
+
+    const localDateTime = new Date(`${cleanDate}T${cleanTime}:00`);
+
+    if (Number.isNaN(localDateTime.getTime())) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'interviewScheduling.invalidDateTime',
+          'Enter a valid interview date and time.'
+        )
+      );
+      return;
+    }
+
+    if (localDateTime.getTime() <= Date.now()) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'interviewScheduling.futureDateRequired',
+          'The interview must be scheduled for a future time.'
+        )
+      );
+      return;
+    }
+
+    setMutatingStatus(true);
+
+    try {
+      const updated = await scheduleEmployerApplicantInterview(
+        internshipId,
+        applicationId,
+        {
+          scheduled_at: localDateTime.toISOString(),
+          mode: interviewMode,
+          location: cleanLocation,
+          message: cleanMessage || null,
+        }
+      );
+
+      setApplicant(updated);
+      setInterviewFormOpen(false);
+
+      Alert.alert(
+        t('interviewScheduling.successTitle', 'Interview Scheduled'),
+        t(
+          'interviewScheduling.successMessage',
+          'The interview details are now visible to the candidate.'
+        )
+      );
+    } catch (err) {
+      console.warn('Failed to schedule interview:', err);
+
+      Alert.alert(
+        t('common.error', 'Error'),
+        t(
+          'interviewScheduling.scheduleError',
+          'Failed to schedule the interview. Please try again.'
+        )
+      );
+    } finally {
+      setMutatingStatus(false);
+    }
+  }, [
+    internshipId,
+    applicationId,
+    mutatingStatus,
+    interviewDate,
+    interviewTime,
+    interviewMode,
+    interviewLocation,
+    interviewMessage,
+    t,
+  ]);
 
   const confirmAccept = useCallback(() => {
     Alert.alert(
@@ -291,6 +416,210 @@ export default function EmployerApplicantDetailScreen({ route, navigation }) {
                   {t('employerApplicantDetail.actionsHeading', 'Recruiter Decision')}
                 </Text>
 
+                {interviewFormOpen && (
+                  <View style={styles.interviewFormCard}>
+                    <View style={[styles.interviewFormHeader, isRTL && styles.rowRTL]}>
+                      <View style={styles.interviewFormTitleWrap}>
+                        <Text style={[styles.interviewFormTitle, isRTL && styles.rtlText]}>
+                          {t(
+                            'interviewScheduling.formTitle',
+                            applicant.status === 'interviewing'
+                              ? 'Reschedule Interview'
+                              : 'Schedule Interview'
+                          )}
+                        </Text>
+                        <Text style={[styles.interviewFormSubtitle, isRTL && styles.rtlText]}>
+                          {t(
+                            'interviewScheduling.formSubtitle',
+                            'Set the canonical interview details the candidate will see.'
+                          )}
+                        </Text>
+                      </View>
+                      <Ionicons name="calendar-outline" size={22} color={colors.accent || colors.teal} />
+                    </View>
+
+                    <Text style={[styles.interviewFieldLabel, isRTL && styles.rtlText]}>
+                      {t('interviewScheduling.modeLabel', 'Interview Type')}
+                    </Text>
+
+                    <View style={[styles.interviewModeRow, isRTL && styles.rowRTL]}>
+                      <TouchableOpacity
+                        style={[
+                          styles.interviewModeButton,
+                          interviewMode === 'online' && styles.interviewModeButtonActive,
+                        ]}
+                        onPress={() => setInterviewMode('online')}
+                      >
+                        <Ionicons
+                          name="videocam-outline"
+                          size={17}
+                          color={
+                            interviewMode === 'online'
+                              ? (colors.textInverse || colors.white)
+                              : (colors.textSecondary || colors.textMuted)
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.interviewModeButtonText,
+                            interviewMode === 'online' && styles.interviewModeButtonTextActive,
+                          ]}
+                        >
+                          {t('interviewScheduling.online', 'Online')}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.interviewModeButton,
+                          interviewMode === 'onsite' && styles.interviewModeButtonActive,
+                        ]}
+                        onPress={() => setInterviewMode('onsite')}
+                      >
+                        <Ionicons
+                          name="location-outline"
+                          size={17}
+                          color={
+                            interviewMode === 'onsite'
+                              ? (colors.textInverse || colors.white)
+                              : (colors.textSecondary || colors.textMuted)
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.interviewModeButtonText,
+                            interviewMode === 'onsite' && styles.interviewModeButtonTextActive,
+                          ]}
+                        >
+                          {t('interviewScheduling.onsite', 'On-site')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={[styles.interviewDateTimeRow, isRTL && styles.rowRTL]}>
+                      <View style={styles.interviewDateTimeField}>
+                        <Text style={[styles.interviewFieldLabel, isRTL && styles.rtlText]}>
+                          {t('interviewScheduling.dateLabel', 'Date')}
+                        </Text>
+                        <TextInput
+                          style={[styles.interviewInput, isRTL && styles.rtlInput]}
+                          value={interviewDate}
+                          onChangeText={setInterviewDate}
+                          placeholder="2026-09-01"
+                          placeholderTextColor={colors.textTertiary || colors.textMuted}
+                          autoCapitalize="none"
+                        />
+                      </View>
+
+                      <View style={styles.interviewDateTimeField}>
+                        <Text style={[styles.interviewFieldLabel, isRTL && styles.rtlText]}>
+                          {t('interviewScheduling.timeLabel', 'Time')}
+                        </Text>
+                        <TextInput
+                          style={[styles.interviewInput, isRTL && styles.rtlInput]}
+                          value={interviewTime}
+                          onChangeText={setInterviewTime}
+                          placeholder="14:30"
+                          placeholderTextColor={colors.textTertiary || colors.textMuted}
+                          autoCapitalize="none"
+                        />
+                      </View>
+                    </View>
+
+                    <Text style={[styles.interviewFieldLabel, isRTL && styles.rtlText]}>
+                      {interviewMode === 'online'
+                        ? t('interviewScheduling.linkLabel', 'Meeting Link')
+                        : t('interviewScheduling.locationLabel', 'Interview Location')}
+                    </Text>
+
+                    <TextInput
+                      style={[styles.interviewInput, isRTL && styles.rtlInput]}
+                      value={interviewLocation}
+                      onChangeText={setInterviewLocation}
+                      placeholder={
+                        interviewMode === 'online'
+                          ? 'https://meet.example.com/...'
+                          : t('interviewScheduling.locationPlaceholder', 'Office or meeting address')
+                      }
+                      placeholderTextColor={colors.textTertiary || colors.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+
+                    <Text style={[styles.interviewFieldLabel, isRTL && styles.rtlText]}>
+                      {t('interviewScheduling.messageLabel', 'Message to Candidate')}
+                    </Text>
+
+                    <TextInput
+                      style={[
+                        styles.interviewInput,
+                        styles.interviewMessageInput,
+                        isRTL && styles.rtlInput,
+                      ]}
+                      value={interviewMessage}
+                      onChangeText={setInterviewMessage}
+                      placeholder={t(
+                        'interviewScheduling.messagePlaceholder',
+                        'Add preparation notes or anything the candidate should know.'
+                      )}
+                      placeholderTextColor={colors.textTertiary || colors.textMuted}
+                      multiline
+                      textAlignVertical="top"
+                      maxLength={2000}
+                    />
+
+                    <View style={[styles.interviewFormActions, isRTL && styles.rowRTL]}>
+                      <TouchableOpacity
+                        style={styles.interviewCancelButton}
+                        onPress={() => setInterviewFormOpen(false)}
+                        disabled={mutatingStatus}
+                      >
+                        <Text style={styles.interviewCancelButtonText}>
+                          {t('common.cancel', 'Cancel')}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.interviewScheduleButton}
+                        onPress={handleScheduleInterview}
+                        disabled={mutatingStatus}
+                      >
+                        <Ionicons
+                          name="calendar-outline"
+                          size={17}
+                          color={colors.textInverse || colors.white}
+                        />
+                        <Text style={styles.interviewScheduleButtonText}>
+                          {applicant.status === 'interviewing'
+                            ? t('interviewScheduling.rescheduleAction', 'Reschedule')
+                            : t('interviewScheduling.scheduleAction', 'Schedule Interview')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {applicant.status === 'interviewing' && !interviewFormOpen && (
+                  <TouchableOpacity
+                    style={[styles.rescheduleButton, isRTL && styles.rowRTL]}
+                    onPress={openInterviewForm}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(
+                      'interviewScheduling.rescheduleAction',
+                      'Reschedule'
+                    )}
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={17}
+                      color={colors.accent || colors.teal}
+                    />
+                    <Text style={styles.rescheduleButtonText}>
+                      {t('interviewScheduling.rescheduleAction', 'Reschedule Interview')}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
                 {mutatingStatus ? (
                   <View style={styles.actionLoadingRow}>
                     <ActivityIndicator size="small" color={colors.accent || colors.teal} />
@@ -304,7 +633,7 @@ export default function EmployerApplicantDetailScreen({ route, navigation }) {
                       <View style={styles.actionButtonsCol}>
                         <TouchableOpacity
                           style={[styles.primaryActionBtn, isRTL && styles.rowRTL]}
-                          onPress={() => handleUpdateStatus('interviewing')}
+                          onPress={openInterviewForm}
                           accessibilityRole="button"
                           accessibilityLabel={t('employerApplicantDetail.moveToInterview', 'Move to Interview')}
                         >
@@ -781,4 +1110,139 @@ const styles = StyleSheet.create({
   rtlWriting: {
     writingDirection: 'rtl',
   },
+  interviewFormCard: {
+    backgroundColor: colors.surfaceMuted || '#F8FAFC',
+    borderWidth: 1,
+    borderColor: colors.border || '#E2E8F0',
+    borderRadius: spacing.radii?.md || 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  interviewFormHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  interviewFormTitleWrap: {
+    flex: 1,
+  },
+  interviewFormTitle: {
+    ...typography.bodyMedium,
+    fontWeight: '700',
+    color: colors.textPrimary || colors.textDark,
+  },
+  interviewFormSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: 2,
+  },
+  interviewFieldLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  interviewModeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  interviewModeButton: {
+    flex: 1,
+    minHeight: spacing.minimumTouchTarget,
+    borderWidth: 1,
+    borderColor: colors.border || '#E2E8F0',
+    borderRadius: spacing.radii?.sm || 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.surface || colors.white,
+  },
+  interviewModeButtonActive: {
+    backgroundColor: colors.accent || colors.teal,
+    borderColor: colors.accent || colors.teal,
+  },
+  interviewModeButtonText: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
+  },
+  interviewModeButtonTextActive: {
+    color: colors.textInverse || colors.white,
+  },
+  interviewDateTimeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  interviewDateTimeField: {
+    flex: 1,
+  },
+  interviewInput: {
+    minHeight: spacing.minimumTouchTarget,
+    borderWidth: 1,
+    borderColor: colors.border || '#E2E8F0',
+    borderRadius: spacing.radii?.sm || 8,
+    backgroundColor: colors.surface || colors.white,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    color: colors.textPrimary || colors.textDark,
+    ...typography.body,
+  },
+  interviewMessageInput: {
+    minHeight: 92,
+  },
+  interviewFormActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  interviewCancelButton: {
+    flex: 1,
+    minHeight: spacing.minimumTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border || '#E2E8F0',
+    borderRadius: spacing.radii?.sm || 8,
+    backgroundColor: colors.surface || colors.white,
+  },
+  interviewCancelButtonText: {
+    ...typography.button,
+    color: colors.textSecondary || colors.textMuted,
+  },
+  interviewScheduleButton: {
+    flex: 2,
+    minHeight: spacing.minimumTouchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    borderRadius: spacing.radii?.sm || 8,
+    backgroundColor: colors.accent || colors.teal,
+  },
+  interviewScheduleButtonText: {
+    ...typography.button,
+    color: colors.textInverse || colors.white,
+  },
+  rescheduleButton: {
+    minHeight: spacing.minimumTouchTarget,
+    borderWidth: 1,
+    borderColor: colors.accent || colors.teal,
+    borderRadius: spacing.radii?.sm || 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  rescheduleButtonText: {
+    ...typography.button,
+    color: colors.accent || colors.teal,
+  },
+  rtlInput: {
+    textAlign: 'right',
+  },
+
 });

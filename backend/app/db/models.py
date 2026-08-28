@@ -340,6 +340,27 @@ class Application(Base):
     )
     applied_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Employer-owned canonical interview schedule.
+    # These fields are meaningful when the application is in the
+    # interviewing stage, but remain nullable for historical records.
+    interview_scheduled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    interview_mode: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    interview_location: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    interview_message: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

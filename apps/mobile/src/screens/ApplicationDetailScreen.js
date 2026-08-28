@@ -453,6 +453,115 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 </Card>
               )}
 
+              {detail.interview_scheduled_at && (
+                <Card style={styles.sectionCard} padding="md">
+                  <View style={styles.interviewDetailHeader}>
+                    <View style={styles.interviewDetailIconWrap}>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={20}
+                        color={colors.accent || colors.teal}
+                      />
+                    </View>
+                    <View style={styles.interviewDetailHeaderText}>
+                      <Text style={styles.sectionTitle}>
+                        {t(
+                          'interviewScheduling.candidateCardTitle',
+                          'Interview Details'
+                        )}
+                      </Text>
+                      <Text style={styles.sectionSubtitle}>
+                        {t(
+                          'interviewScheduling.candidateCardSubtitle',
+                          'Your employer has scheduled an interview.'
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.interviewDetailRows}>
+                    <View style={styles.interviewDetailRow}>
+                      <Ionicons
+                        name="time-outline"
+                        size={17}
+                        color={colors.textSecondary || colors.textMuted}
+                      />
+                      <View style={styles.interviewDetailRowText}>
+                        <Text style={styles.interviewDetailLabel}>
+                          {t('interviewScheduling.dateTimeLabel', 'Date & Time')}
+                        </Text>
+                        <Text style={styles.interviewDetailValue}>
+                          {formatEventDate(detail.interview_scheduled_at)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.interviewDetailRow}>
+                      <Ionicons
+                        name={
+                          detail.interview_mode === 'online'
+                            ? 'videocam-outline'
+                            : 'location-outline'
+                        }
+                        size={17}
+                        color={colors.textSecondary || colors.textMuted}
+                      />
+                      <View style={styles.interviewDetailRowText}>
+                        <Text style={styles.interviewDetailLabel}>
+                          {t('interviewScheduling.modeLabel', 'Interview Type')}
+                        </Text>
+                        <Text style={styles.interviewDetailValue}>
+                          {detail.interview_mode === 'online'
+                            ? t('interviewScheduling.online', 'Online')
+                            : t('interviewScheduling.onsite', 'On-site')}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {detail.interview_location ? (
+                      <View style={styles.interviewDetailRow}>
+                        <Ionicons
+                          name={
+                            detail.interview_mode === 'online'
+                              ? 'link-outline'
+                              : 'navigate-outline'
+                          }
+                          size={17}
+                          color={colors.textSecondary || colors.textMuted}
+                        />
+                        <View style={styles.interviewDetailRowText}>
+                          <Text style={styles.interviewDetailLabel}>
+                            {detail.interview_mode === 'online'
+                              ? t('interviewScheduling.linkLabel', 'Meeting Link')
+                              : t('interviewScheduling.locationLabel', 'Interview Location')}
+                          </Text>
+                          <Text
+                            style={styles.interviewDetailValue}
+                            selectable
+                          >
+                            {detail.interview_location}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    {detail.interview_message ? (
+                      <View style={styles.interviewMessageBox}>
+                        <Text style={styles.interviewDetailLabel}>
+                          {t(
+                            'interviewScheduling.employerMessageTitle',
+                            'Message from Employer'
+                          )}
+                        </Text>
+                        <Text style={styles.interviewMessageText}>
+                          {detail.interview_message}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </Card>
+              )}
+
               {/* Status Timeline Card */}
               <Card style={styles.sectionCard} padding="md">
                 <Text style={styles.sectionTitle}>{t('applicationDetail.timelineTitle')}</Text>
@@ -1061,4 +1170,56 @@ const styles = StyleSheet.create({
     color: colors.textInverse || colors.white,
     fontWeight: '600',
   },
+  interviewDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  interviewDetailIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
+  },
+  interviewDetailHeaderText: {
+    flex: 1,
+  },
+  interviewDetailRows: {
+    gap: spacing.md,
+  },
+  interviewDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  interviewDetailRowText: {
+    flex: 1,
+  },
+  interviewDetailLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
+  },
+  interviewDetailValue: {
+    ...typography.body,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: 2,
+  },
+  interviewMessageBox: {
+    backgroundColor: colors.surfaceMuted || '#F8FAFC',
+    borderRadius: spacing.radiusSm || 8,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border || '#E2E8F0',
+  },
+  interviewMessageText: {
+    ...typography.body,
+    color: colors.textPrimary || colors.textDark,
+    marginTop: spacing.xs,
+    lineHeight: 21,
+  },
+
 });

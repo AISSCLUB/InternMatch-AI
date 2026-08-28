@@ -499,6 +499,10 @@ export type ApplicationDetailResponse = {
   generated_cover_letter: string | null;
   applied_date: string | null;
   notes: string | null;
+  interview_scheduled_at: string | null;
+  interview_mode: 'online' | 'onsite' | null;
+  interview_location: string | null;
+  interview_message: string | null;
   created_at: string;
   updated_at: string;
   timeline: ApplicationStatusEvent[];
@@ -599,6 +603,10 @@ export type EmployerApplicantItem = {
   applied_date: string | null;
   generated_cover_letter: string | null;
   match_score: number | null;
+  interview_scheduled_at: string | null;
+  interview_mode: 'online' | 'onsite' | null;
+  interview_location: string | null;
+  interview_message: string | null;
   created_at: string;
   updated_at: string;
   candidate: EmployerApplicantCandidate;
@@ -671,6 +679,27 @@ export async function closeEmployerOpportunity(
     `/internships/${encodeURIComponent(id)}/close`,
     {
       method: 'POST',
+    }
+  );
+}
+
+export type EmployerInterviewSchedulePayload = {
+  scheduled_at: string;
+  mode: 'online' | 'onsite';
+  location: string;
+  message?: string | null;
+};
+
+export async function scheduleEmployerApplicantInterview(
+  internshipId: string,
+  applicationId: string,
+  payload: EmployerInterviewSchedulePayload
+): Promise<EmployerApplicantItem> {
+  return apiRequest<EmployerApplicantItem>(
+    `/internships/${encodeURIComponent(internshipId)}/applicants/${encodeURIComponent(applicationId)}/interview`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
     }
   );
 }

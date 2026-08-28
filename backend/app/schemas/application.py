@@ -108,6 +108,28 @@ class ApplicationSubmitRequest(BaseModel):
     )
 
 
+class EmployerInterviewScheduleRequest(BaseModel):
+    scheduled_at: datetime = Field(
+        ...,
+        description="Interview start time as an ISO-8601 timestamp",
+    )
+    mode: Literal["online", "onsite"] = Field(
+        ...,
+        description="Interview mode",
+    )
+    location: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Meeting URL or physical interview location",
+    )
+    message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="Optional message from the employer to the candidate",
+    )
+
+
 class EmployerApplicantStatusUpdateRequest(BaseModel):
     """Request schema for employer transitioning applicant status."""
 
@@ -139,6 +161,10 @@ class ApplicationDetailResponse(BaseModel):
     generated_cover_letter: Optional[str]
     applied_date: Optional[date]
     notes: Optional[str]
+    interview_scheduled_at: Optional[datetime] = None
+    interview_mode: Optional[Literal["online", "onsite"]] = None
+    interview_location: Optional[str] = None
+    interview_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     timeline: List[ApplicationStatusEventResponse]
@@ -164,6 +190,10 @@ class ApplicationDetailResponse(BaseModel):
             generated_cover_letter=application.generated_cover_letter,
             applied_date=application.applied_date,
             notes=application.notes,
+            interview_scheduled_at=application.interview_scheduled_at,
+            interview_mode=application.interview_mode,
+            interview_location=application.interview_location,
+            interview_message=application.interview_message,
             created_at=application.created_at,
             updated_at=application.updated_at,
             timeline=[
@@ -197,6 +227,10 @@ class EmployerApplicantResponse(BaseModel):
     applied_date: Optional[date] = None
     generated_cover_letter: Optional[str] = None
     match_score: Optional[int] = None
+    interview_scheduled_at: Optional[datetime] = None
+    interview_mode: Optional[Literal["online", "onsite"]] = None
+    interview_location: Optional[str] = None
+    interview_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     candidate: CandidateApplicantSummary
@@ -220,6 +254,10 @@ class EmployerApplicantResponse(BaseModel):
             applied_date=application.applied_date,
             generated_cover_letter=application.generated_cover_letter,
             match_score=match.overall_score if match is not None else None,
+            interview_scheduled_at=application.interview_scheduled_at,
+            interview_mode=application.interview_mode,
+            interview_location=application.interview_location,
+            interview_message=application.interview_message,
             created_at=application.created_at,
             updated_at=application.updated_at,
             candidate=CandidateApplicantSummary(
