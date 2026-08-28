@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0  
 **Status:** Approved & Authoritative  
-**Target Runtimes:** Python 3.13, Node.js 22 LTS / 24 LTS (`>=20.0.0`), Docker & Docker Compose
+**Target Runtimes:** Python 3.13, Node.js 22 LTS, Docker & Docker Compose
 
 ---
 
@@ -10,13 +10,13 @@
 
 Before initiating local development, ensure the following runtimes and tools are installed on your workstation:
 
-| Tool / Runtime | Target Version | Primary Owner / Purpose |
+| Tool / Runtime | Target Version | Primary Purpose |
 | :--- | :--- | :--- |
-| **Python** | `3.13.x` | Backend API & Worker (Mohammad) |
-| **Node.js** | `22.x LTS / 24.x LTS (>=20.0.0)` | Mobile App & Landing Page (Selen) |
-| **Docker & Compose** | `Docker Desktop v24+` | Containerized Backend, Worker, Redis (Mohammad) |
-| **Expo CLI** | Latest (`npx expo`) | React Native Mobile Development (Selen) |
-| **Git** | `2.40+` | Version Control |
+| **Python** | `3.13.x` | Backend API & Worker |
+| **Node.js** | `22.x LTS` | Mobile Application & Web Scaffold |
+| **Docker & Compose** | `Docker with Compose v2` | Containerized Backend, Worker, Redis |
+| **Expo CLI** | Latest (`npx expo`) | React Native Mobile Development |
+| **Git** | `Current supported release` | Version Control |
 
 
 ---
@@ -26,10 +26,10 @@ Before initiating local development, ensure the following runtimes and tools are
 ```
 internmatch-ai/
 ├── apps/
-│   ├── mobile/             # React Native (Expo, TS) - Selen
-│   └── landing/            # Next.js (TS) - Selen
-├── backend/                # FastAPI Application - Mohammad
-├── worker/                 # Python RQ Background Worker - Mohammad
+│   ├── mobile/             # React Native mobile application (Expo SDK 54, TS)
+│   └── landing/            # Next.js web landing page (optional scaffold)
+├── backend/                # FastAPI Application
+├── worker/                 # Python RQ Background Worker
 ├── infrastructure/         # Environment templates & Docker orchestration
 ├── database/               # SQL migrations & RLS policies
 ├── docs/                   # Authoritative system documentation
@@ -43,18 +43,27 @@ internmatch-ai/
 ## 3. Step-by-Step Initial Setup
 
 ### 3.1 Clone & Environment Variables Setup
-*Note: InternMatch AI is created and developed by the two-person student team, Mohammad & Selen (affiliated with AISS Club — Üsküdar University). Code is hosted under the AISS Club GitHub Organization (`https://github.com/aissclub/internmatch-ai`).*
+*Note: InternMatch AI is created and developed by the collaborative two-person student team, Mohamad Barakat & Selanur Yurdakul (AISS Club — Üsküdar University). Repository is hosted at `https://github.com/AISSCLUB/InternMatch-AI`.*
 
 ```bash
 # 1. Clone workspace repository from AISS Club GitHub Org
-git clone https://github.com/aissclub/internmatch-ai.git
-cd internmatch-ai
+git clone https://github.com/AISSCLUB/InternMatch-AI.git
+cd InternMatch-AI
 
 # 2. Prepare environment file
 cp .env.example .env
 ```
 
-### 3.2 Backend & Infrastructure Setup (Engineer 1: Mohammad)
+### 3.2 Database Provisioning
+Before starting the application services against a fresh Supabase PostgreSQL environment:
+
+1. Apply the versioned SQL migrations in numeric order from `database/migrations/`, starting with `001_initial_schema.sql` and continuing through `010_add_application_interview_schedule.sql`.
+2. Apply `database/supabase_storage_setup.sql` to provision the repository-managed private `avatars` bucket and its storage policies; configure the CV bucket separately through `CV_STORAGE_BUCKET`.
+3. Confirm the environment variables in the root `.env` point to the intended Supabase PostgreSQL, Auth, and Storage environment.
+
+Migration execution credentials and server-side database secrets must remain outside client applications and public repository content.
+
+### 3.3 Backend & Infrastructure Setup
 The backend service, background RQ worker, and Redis queue are containerized using Docker Compose.
 
 ```bash
@@ -67,28 +76,34 @@ docker compose ps
 # View backend logs
 docker compose logs -f backend
 
-# Seed controlled internship dataset (30-50 listings)
+# Seed controlled internship dataset from a configured local Python environment
+# after database provisioning and Python dependencies are available
 python scripts/seed_internships.py
 ```
 *Backend endpoints will be accessible at `http://localhost:8000/api/v1` and interactive Swagger docs at `http://localhost:8000/docs`. The infrastructure process liveness probe is at `http://localhost:8000/health` (process liveness only), and the versioned operational readiness endpoint is at `http://localhost:8000/api/v1/health` (probes PostgreSQL database, Redis connectivity, and RQ worker readiness).*
 
 
-### 3.3 Mobile App Setup (Engineer 2: Selen)
-The mobile application operates as a standard Expo environment outside of Docker.
+### 3.4 Mobile Application Setup
+The mobile application operates as a standard Expo SDK 54 environment outside of Docker.
 
 ```bash
 # Navigate to mobile directory
 cd apps/mobile
 
-# Install dependencies
-npm install
+# Prepare environment file
+cp .env.example .env
 
-# Start Expo development server
-npx expo start
+# Install dependencies deterministically
+npm ci
+
+# Run on Android Emulator with native development client (required for RevenueCat)
+npx expo run:android
+
+# Or start Metro bundler in development client mode
+npx expo start --dev-client
 ```
-*Press `a` for Android Emulator, `i` for iOS Simulator, or scan QR code with Expo Go app.*
 
-### 3.4 Landing Page Setup (Engineer 2: Selen)
+### 3.5 Landing Page Setup (Optional Scaffold)
 The landing page operates as a standard Next.js environment.
 
 ```bash
@@ -96,14 +111,14 @@ The landing page operates as a standard Next.js environment.
 cd apps/landing
 
 # Install dependencies
-npm install
+npm ci
 
 # Start Next.js development server
 npm run dev
 ```
 *Landing page will be accessible at `http://localhost:3000`.*
 
-### 3.5 RevenueCat Test Store Development Setup
+### 3.6 RevenueCat Test Store Development Setup
 The mobile app uses `react-native-purchases` for in-app subscription management in Test Store mode.
 
 1. **RevenueCat Canonical Identifiers:**
@@ -117,7 +132,7 @@ The mobile app uses `react-native-purchases` for in-app subscription management 
    ```
 3. **Local Testing Execution:**
    - Launch with the native Android development client: `npx expo run:android` or `npx expo start --dev-client`.
-   - Complete Test Store transactions in the Plans screen; entitlements update immediately in `CustomerInfo`.
+   - Complete Test Store transactions in the Plans screen; entitlement state is reflected through RevenueCat `CustomerInfo`.
    - No Apple App Store Connect or Google Play Console billing setup is required for the hackathon Test Store workflow.
 
 ---
@@ -130,6 +145,7 @@ The mobile app uses `react-native-purchases` for in-app subscription management 
 4. **Git Branching Strategy:**
    - `main`: Primary integration branch.
    - `feature/<scope>-<description>`: Isolated feature branches.
+5. **Quality Verification:** Before finalizing a change, run the checks applicable to the modified components. Repository CI workflows, dependency manifests, and package scripts are the source of truth for the exact current commands; documentation must not introduce stale or conflicting quality commands.
 
 ---
 

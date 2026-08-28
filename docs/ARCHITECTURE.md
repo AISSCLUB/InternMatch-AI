@@ -2,9 +2,9 @@
 
 **Version:** 1.0.0  
 **Status:** Approved & Authoritative  
-**Target Runtimes:** Python 3.13 (Backend/Worker), Node.js 22 LTS / 24 LTS (`>=20.0.0`) (Mobile/Landing)  
+**Target Runtimes:** Python 3.13 (Backend/Worker), Node.js 22 LTS (Mobile/Landing; CI reference runtime)
 
-**Authors:** Mohammad & Selen (Two-Person Student Team, Affiliation: AISS Club — Üsküdar University)
+**Authors:** Mohamad Barakat & Selanur Yurdakul (Two-Person Student Team, Affiliation: AISS Club — Üsküdar University)
 
 ---
 
@@ -26,31 +26,36 @@
 
 ---
 
-## 2. Team Ownership, Identity & Operational Boundaries
+## 2. Team Ownership, Collaboration Model & Academic Context
 
-**Team Identity & Affiliation Statement:**  
-InternMatch AI is created and developed by a two-person student team, **Mohammad** and **Selen**. Both team members are students at **Üsküdar University** and are affiliated with **AISS Club**. AISS Club represents their student-club affiliation and does not imply university ownership, sponsorship, funding, or intellectual-property ownership of the project. Mohammad serves as the official President of AISS Club, and Selen serves as the official Vice President of AISS Club.
+### 2.1 Project Origin, Academic Context & Non-Institutional Boundary
+The original product concept and vision for **InternMatch AI** were proposed by **Selanur Yurdakul**. Following the initial concept, **Mohamad Barakat** established the system architecture, engineering rules, technical documentation, API contracts, backend/frontend boundaries, and implementation foundation. The final application was collaboratively developed, integrated, and refined by both team members.
+
+Both team members are **Software / Computer Engineering** students at **Üsküdar University** and serve in student leadership roles in **AISS** (Artificial Intelligence and Intelligent Systems Club), with Mohamad Barakat as President and Selanur Yurdakul as Vice President.
+
+**Strict Independent Student Boundary:**
+InternMatch AI is an independent student project created and developed directly by Mohamad Barakat and Selanur Yurdakul as a two-person team. It is **NOT** an official AISS Club project, is **NOT** an Üsküdar University project, and is **NOT** submitted on behalf of either institution. Neither AISS Club nor Üsküdar University provided financial support, technical support, development support, institutional project support, or material project support. Academic and club affiliations are stated solely as truthful academic and student-club context relevant to student-track eligibility.
 
 ```
 InternMatch AI
     ↓
-Two-Person Student Team
-    ├── Mohammad (AISS Club President)
-    └── Selen (AISS Club Vice President)
+Collaborative Two-Person Student Team
+    ├── Mohamad Barakat (Software/Computer Eng Student; AISS President)
+    └── Selanur Yurdakul (Software/Computer Eng Student; AISS Vice President)
           ↓
-Affiliation:
+Academic & Student-Club Context (Student Context Only; Zero Institutional Support):
 AISS Club — Üsküdar University
 ```
 
-### 2.1 Responsibility Breakdown
+### 2.2 Primary Contributions & Joint Governance
 
-| Domain / Task | Responsible Member(s) | Primary Scope & Technologies |
+| Area | Lead / Primary Scope | Detailed Contributions |
 | :--- | :--- | :--- |
-| **Backend & Infrastructure** | **Mohammad** | FastAPI (Python 3.13), Supabase PostgreSQL + pgvector, Redis, RQ Worker, Docker, Security, API Contracts, AI Pipeline, RAG/Retrieval, Deployment |
-| **Frontend & Mobile** | **Selen** | React Native (Expo, TypeScript), Next.js (Landing, TypeScript), UI/UX, Mobile Screens, Interaction Design, Product Experience, Frontend API Integration |
-| **Joint Responsibility** | **Both (Mohammad & Selen)** | Product decisions, Architecture review, Hackathon strategy, Testing, Demo video creation, Submission, Product presentation |
+| **Product Concept & Visual Direction** | **Selanur Yurdakul** | Original InternMatch AI product idea, initial frontend foundation, mobile screen layouts, UI/UX design, interaction concepts, and brand visual identity. |
+| **Architecture, Backend & Systems** | **Mohamad Barakat** | System architecture, FastAPI REST gateway (Python 3.13), database design, PostgreSQL/pgvector, Supabase integration, security/JWT verification, Redis/RQ worker queue, Docker runtimes, Python quality/Ruff, API contracts, end-to-end system integration, substantial mobile frontend implementation, and final UI/UX polish (visual consistency, headers, hero areas, colors). |
+| **Joint Responsibilities** | **Mohamad Barakat & Selanur Yurdakul** | Product decisions, feature refinement, application testing, quality review, hackathon strategy, demo video planning, submission preparation, and project presentation. |
 
-**Boundary Principle:** The frontend and backend are strictly decoupled and independently developable. The authoritative API contract (`docs/API_CONTRACT.md`) defines the strict interface boundary between them.
+**Boundary Principle:** The frontend mobile application and backend API services are decoupled and independently testable across the authoritative API contract (`docs/API_CONTRACT.md`).
 
 ---
 
@@ -58,36 +63,36 @@ AISS Club — Üsküdar University
 
 ```mermaid
 graph TD
-    subgraph Client Tier (Selen)
-        MobileApp["Mobile App (React Native / Expo / TS)"]
-        LandingPage["Landing Page (Next.js / Vercel)"]
+    subgraph ClientTier["Client Tier"]
+        MobileApp["Mobile App (React Native / Expo SDK 54 / TS)"]
+        LandingPage["Landing Page Scaffold (Next.js / Optional)"]
     end
 
-    subgraph API Tier (Mohammad)
+    subgraph APITier["API Gateway Tier"]
         FastAPI["FastAPI Gateway (Python 3.13 / Docker)"]
         AuthMiddleware["Supabase Auth / JWT Validation"]
     end
 
-    subgraph Asynchronous Worker Tier (Mohammad)
+    subgraph WorkerTier["Asynchronous Worker Tier"]
         RedisQueue[("Redis Message Queue")]
         RQWorker["Python RQ Worker (Docker)"]
     end
 
-    subgraph Data & Storage Tier (Managed / Supabase)
+    subgraph DataTier["Data & Storage Tier (Managed / Supabase)"]
         SupaAuth["Supabase Auth"]
         SupaDB[("Supabase PostgreSQL + pgvector (RLS Enforced)")]
-        SupaStorage[("Supabase Storage (CVs & Documents)")]
+        SupaStorage[("Supabase Storage (CV & Avatar Buckets)")]
     end
 
-    subgraph External AI Services
-        LLMProvider["OpenAI / Gemini LLM API"]
-        EmbeddingAPI["Text Embeddings API"]
+    subgraph AIServices["External AI Services"]
+        LLMProvider["Google Gemini LLM API<br/>(gemini-3.5-flash)"]
+        EmbeddingAPI["Gemini Embeddings API<br/>(gemini-embedding-2)"]
     end
 
     MobileApp -->|HTTP/REST + JWT| FastAPI
-    LandingPage -->|HTTP/REST| FastAPI
+    LandingPage -.->|Optional / Future| FastAPI
     MobileApp -->|Auth SDK| SupaAuth
-    LandingPage -->|Auth SDK| SupaAuth
+    LandingPage -.->|Auth SDK| SupaAuth
 
     FastAPI --> AuthMiddleware
     AuthMiddleware -->|Validate JWT| SupaAuth
@@ -105,16 +110,16 @@ graph TD
 
 ## 4. Technology Stack & Component Specifications
 
-### 4.1 Frontend Tier (Engineer 2: Selen)
-- **Mobile Application:** React Native built with Expo (TypeScript). Operates in a standard, uncontainerized Expo development environment.
-- **Landing Page:** Next.js (TypeScript) deployed on Vercel. Operates in a standard Next.js environment.
-- **State Management & Data Fetching:** React Query / Axios or native fetch using standard Bearer Token authentication headers.
+### 4.1 Frontend Tier
+- **Mobile Application:** React Native built with Expo SDK 54 (TypeScript). Operates in a standard, uncontainerized Expo development environment.
+- **Landing Page (Optional):** Next.js (TypeScript) web scaffold. Serves as an optional future extension.
+- **State Management & Data Fetching:** Context Providers, React Native Async Storage, and standard Bearer Token authentication headers.
 
-### 4.2 Backend & Service Tier (Engineer 1: Mohammad)
-- **API Framework:** FastAPI (Python 3.13). Lightweight, high-performance async Web framework. Containerized via Docker.
-- **Database & Storage:** Supabase PostgreSQL with `pgvector` extension enabled. Supabase Storage for secure file uploads.
+### 4.2 Backend & Service Tier
+- **API Framework:** FastAPI (Python 3.13). Lightweight, high-performance async Web framework containerized via Docker.
+- **Database & Storage:** Supabase PostgreSQL with `pgvector`; repository migrations target Supabase PostgreSQL 15+ compatibility, while the local Docker reference runtime uses PostgreSQL 17. Supabase Storage supports the CV and avatar flows.
 - **Authentication & Authorization:** Supabase Auth for user sign-in/up; PostgreSQL Row Level Security (RLS) for data isolation.
-- **Task Queue & Async Processing:** Redis + Python RQ (Redis Queue) worker containerized alongside FastAPI.
+- **Task Queue & Async Processing:** Redis 7 + Python RQ (Redis Queue) worker containerized alongside FastAPI.
 - **Pinned AI Model Suite & Centralized Configuration Rules:**
   - **LLM Model:** Google Gemini `gemini-3.5-flash` via `google-genai` SDK (for profile extraction, explanations, and cover letters).
   - **Embedding Model:** Google Gemini `gemini-embedding-2`.
@@ -211,7 +216,6 @@ The persistence and synchronization rules for candidate match recalculation are 
    - Match calculation and persistence operations perform `db.flush()` so ORM state and IDs are available, but NEVER call `db.commit()` or `db.rollback()`.
    - The calling worker or API workflow owns the database transaction lifecycle (`commit`/`rollback`).
 
-
 ### 5.1.3 Candidate Embedding Context Policy — MVP v1 (Authoritative)
 
 The persisted `StudentProfile.summary_embedding` is derived from deterministic structured candidate data.
@@ -235,11 +239,8 @@ The persisted `StudentProfile.summary_embedding` is derived from deterministic s
    - Embedding generation and persistence functions may mutate ORM state and call `db.flush()`, but MUST NOT call `db.commit()` or `db.rollback()`. The calling worker/orchestrator owns transaction lifecycle.
 
 5. **Invalidation Policy:**
-   - Cached `summary_embedding` must be invalidated (`summary_embedding = None`) whenever source profile inputs (`full_name`, `headline`, `cv_storage_path`, or `preferences`) actually change during profile upsert.
-   - Mutation workflows for student skills, education, experience, or projects MUST invalidate `summary_embedding` prior to regeneration.
-
-
-
+   - **Conservative Cache Invalidation:** `summary_embedding` may be invalidated after a broader set of profile mutations than the exact embedding-input field list. Invalidation after changes to fields such as `full_name` or `cv_storage_path` does not imply that those excluded fields are included in the embedding text.
+   - Mutation workflows for student skills, education, experience, or projects MUST invalidate `summary_embedding` before regeneration when embedding-relevant structured data changes.
 
 ```mermaid
 flowchart LR
@@ -268,9 +269,8 @@ flowchart LR
   1. Generate vector embedding for candidate summary & preferences.
   2. Query `internship_listings` table via `pgvector` ($k$-Nearest Neighbors using cosine distance).
   3. Perform deterministic skill match classification ($S_{\text{skill}}$) and candidate preference scoring ($S_{\text{attr}}$).
-  4. Calculate hybrid match score ($\text{overall\_score} = 0.50 \cdot S_{\text{skill}} + 0.30 \cdot S_{\text{vector}} + 0.20 \cdot S_{\text{attr}}$) and rank candidates (future authoritative eligibility filtering may be applied when supported).
+  4. Calculate hybrid match score ($\text{overall\_score} = 0.50 \cdot S_{\text{skill}} + 0.30 \cdot S_{\text{vector}} + 0.20 \cdot S_{\text{attr}}$) and rank candidates (future authoritative eligibility filtering may be supported).
   5. Pass top retrieved candidate matches to the LLM along with candidate profile for grounded explanation generation.
-
 
 ---
 
@@ -280,8 +280,8 @@ Long-running operations (CV parsing, profile extraction, embedding generation, b
 
 ```mermaid
 sequenceDiagram
-    participant Client as Mobile App (Selen)
-    participant API as FastAPI Backend (Mohammad)
+    participant Client as Mobile Client
+    participant API as FastAPI Backend
     participant Queue as Redis Queue
     participant Worker as Python RQ Worker
     participant DB as Supabase DB
@@ -309,11 +309,11 @@ sequenceDiagram
 
 1. **Token Verification:** Every backend API request validates the HTTP Authorization Bearer token against Supabase Auth.
 2. **Identity Derivation:** The backend derives `user_id` exclusively from the verified JWT claims, never from user-supplied request body parameters.
-3. **Database RLS:** Row Level Security policies are enabled on all user-owned tables (`student_profiles`, `applications`, `matches`).
+3. **Database RLS:** Row Level Security is enabled across all twelve application-owned public tables after migrations `001` through `010`; policies differ between candidate-owned data and controlled catalog access.
 4. **Secret Key Isolation:**
    - Frontend apps only receive the public Supabase publishable key.
    - Backend & worker hold Supabase service-role keys, database connection strings, and AI provider API keys in environment variables (`.env`).
-5. **File Upload Security:** Uploaded CVs undergo MIME validation (`application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`), file size limit checking ($\le 10\text{MB}$), and filename sanitization. Storage buckets enforce owner-only read/write access.
+5. **File Upload Security:** Uploaded CVs enforce MIME allowlisting, extension agreement, binary/container signature validation, a maximum size of 10 MiB, and server-generated UUID object keys. The repository-managed `avatars` bucket uses private policies; CV storage is mediated by authenticated backend helpers and a separately configured CV bucket.
 
 ---
 
@@ -322,9 +322,9 @@ sequenceDiagram
 ```
 internmatch-ai/
 ├── apps/
-│   ├── mobile/             # React Native / Expo application (Selen)
-│   └── landing/            # Next.js landing page (Selen)
-├── backend/                # FastAPI application (Mohammad)
+│   ├── mobile/             # React Native / Expo mobile application
+│   └── landing/            # Next.js web landing page (optional scaffold)
+├── backend/                # FastAPI REST API application
 │   ├── app/
 │   │   ├── api/            # API endpoints & routers
 │   │   ├── core/           # Security, config, auth middleware
@@ -333,7 +333,7 @@ internmatch-ai/
 │   │   └── main.py
 │   ├── Dockerfile
 │   └── requirements.txt
-├── worker/                 # Python RQ Worker (Mohammad)
+├── worker/                 # Python RQ Worker
 │   ├── tasks/              # CV parsing, matching, embedding tasks
 │   ├── worker.py
 │   ├── Dockerfile
@@ -342,7 +342,7 @@ internmatch-ai/
 ├── database/
 │   └── migrations/         # Supabase SQL migrations & RLS policies
 ├── docs/                   # Authoritative system documentation
-├── scripts/                # Development & seed scripts (e.g. seed 30-50 listings)
+├── scripts/                # Development & seed scripts
 ├── docker-compose.yml
 ├── .env.example
 ├── .gitignore
@@ -360,7 +360,7 @@ InternMatch AI implements a candidate monetization model powered natively by **R
 | Tier | Entitlement ID | Features & Limits | Price |
 | :--- | :--- | :--- | :--- |
 | **Free Tier** | *(None)* | Standard CV upload and extraction, deterministic hybrid match scoring, basic listing search. | $0 |
-| **Pro Student** | `pro_student` | Full AI Cover Letter Generation, detailed "Why You Match" skill gap recommendations, priority candidate matching. | Test Store Subscription / Live Store Subscription |
+| **Pro Student** | `pro_student` | RevenueCat-backed Pro Student subscription experience; premium feature access is governed by the active `pro_student` entitlement in the mobile client. | RevenueCat Test Store for the hackathon baseline; live store billing is future production scope. |
 
 ### 9.2 RevenueCat Canonical Contract & Boundaries
 - **Canonical Product Contract:**
@@ -375,16 +375,16 @@ InternMatch AI implements a candidate monetization model powered natively by **R
 
 ```mermaid
 graph TD
-    subgraph Mobile Client (Selen)
+    subgraph ClientTier["Mobile Client Tier"]
         ExpoApp["React Native Mobile App (Expo SDK 54)"]
         RCSDK["RevenueCat SDK (react-native-purchases)"]
     end
 
-    subgraph RevenueCat Engine
+    subgraph RCEngine["RevenueCat Engine"]
         RCPlatform["RevenueCat Engine / Test Store"]
     end
 
-    subgraph Backend Infrastructure (Mohammad)
+    subgraph BackendInfra["Backend Infrastructure Tier"]
         FastAPI["FastAPI Gateway"]
         SupaDB[("Supabase DB (Candidate Profile & Metadata Only - NO Payment Data)")]
     end
@@ -401,56 +401,50 @@ graph TD
 
 ## 10. Third-Party Dependency & Licensing Policy
 
-1. **Permissive Open-Source Licensing:** All third-party SDKs, libraries, and frameworks (Expo, React Native, FastAPI, RevenueCat SDK, RapidFuzz, Supabase SDKs) MUST be open-source under permissive licenses (MIT, Apache 2.0, BSD).
-2. **Attribution & Notice Preservation:** All third-party copyright notices and license texts will be preserved in the public repository's `LICENSE` and dependency manifests.
-3. **Original Domain Logic & IP Statement:** InternMatch AI software and original product/domain implementation are developed strictly by Mohammad and Selen. Third-party open-source libraries remain subject to their respective licenses. AISS Club and Üsküdar University represent their student-club affiliation and do not own, sponsor, fund, or hold intellectual property rights to the project or third-party open-source libraries.
+1. **Third-Party License Compliance:** Third-party SDKs, libraries, and frameworks remain subject to their respective licenses, usage terms, and distribution requirements. InternMatch AI does not require every dependency to use the same license family.
+2. **Attribution & Notices:** Third-party attribution and notice obligations are handled according to the applicable dependency licenses and packaging requirements. The root MIT `LICENSE` applies to original InternMatch AI project code and does not replace or supersede third-party licenses.
+3. **Original Project Code & Attribution:** Original InternMatch AI code and product implementation are developed by Mohamad Barakat and Selanur Yurdakul. Third-party components remain subject to their respective licenses. AISS Club and Üsküdar University are referenced only as academic and student-club context and are not represented by this repository as project owners, sponsors, funders, or developers.
 
 ---
 
 ## 11. Internship Data Provenance & Ethics Policy
 
-1. **Synthetic / Demo Dataset Ownership:** The MVP dataset of 30–50 internship listings is fully owned, synthesized, or curated directly by the engineering team (Mohammad and Selen) for demonstration purposes.
-2. **Strict No-Scraping Policy:** **NO scraping of LinkedIn, Indeed, Glassdoor, or any third-party job boards** is performed. All data is statically seeded via controlled SQL scripts (`scripts/seed_internships.py`).
+1. **Synthetic / Demo Dataset Ownership:** The MVP dataset of 30–50 internship listings is fully owned, synthesized, or curated directly by the engineering team (Mohamad Barakat and Selanur Yurdakul) for demonstration purposes.
+2. **Strict No-Scraping Policy:** **NO scraping of LinkedIn, Indeed, Glassdoor, or any third-party job boards** is performed. All demo data is loaded through controlled repository seed assets, including the Python seeder `scripts/seed_internships.py` and SQL seed data under `database/seeds/`.
 
 ---
 
 ## 12. Shipaton 2026 Submission & Next Gen Compliance
 
-- **Team Identity & Affiliation:** Team: Mohammad + Selen. Affiliation: AISS Club — Üsküdar University. The submission MUST NOT be described as a "Üsküdar University project", "University-sponsored project", "University-funded project", or "University-owned project". AISS Club affiliation provides student-club context and credibility, while project authorship and intellectual property remain with Mohammad and Selen.
-- **Next Gen Student Track Eligibility:** Submitted under the Next Gen student category by verified student team members (Mohammad & Selen).
-- **Public Open-Source Repository:** The repository will be made public on GitHub under an OSI-approved open-source license (MIT License) before submission.
-- **English Submission Artifacts:** All documentation, UI strings, API specifications, and demo video narration will be provided strictly in English.
-- **Demo Video Requirement:** A crisp demonstration video under **2 minutes** will showcase the complete user journey (CV upload $\rightarrow$ Profile extraction $\rightarrow$ Hybrid matching $\rightarrow$ Skill Gap $\rightarrow$ Cover Letter generation) and explicitly demonstrate working RevenueCat purchase/paywall integration.
-- **Store Publication Exemption for Next Gen Track:** As a Next Gen student entry, public App Store / Google Play publication is exempt (demonstrable via Expo Go, iOS TestFlight, or Android APK demo build); however, **the RevenueCat SDK integration is fully functional in sandbox/test mode**.
-- **Judge Access:** Pre-configured test accounts and sandbox test instructions will be provided in the submission README.
+- **Next Gen Student Track Innovation:** InternMatch AI is a RevenueCat Shipaton 2026 Next Gen student entry independently developed by Mohamad Barakat and Selanur Yurdakul.
+- **Team Identity & Academic Context:** Mohamad Barakat and Selanur Yurdakul are Software / Computer Engineering students at Üsküdar University and serve as President and Vice President of AISS (Artificial Intelligence and Intelligent Systems Club). InternMatch AI is an independent student hackathon project and MUST NOT be described as an official AISS Club or Üsküdar University project, nor did either institution provide financial, technical, development, institutional, or material support. Affiliation represents academic and student-club context only for student-track eligibility.
+- **Public Open-Source Repository:** The repository is public on GitHub under the OSI-approved MIT License at [https://github.com/AISSCLUB/InternMatch-AI](https://github.com/AISSCLUB/InternMatch-AI).
+- **Language & Localization:** System documentation and submission materials are prepared in English. The mobile application interface provides native support for English, Turkish, and Arabic with dynamic RTL layout.
+- **Demonstration Scope:** The submission demo is designed as a concise under-2-minute walkthrough of the end-to-end candidate journey, including CV upload, profile enrichment, hybrid matching, Why You Match, AI application preparation, localization, and the RevenueCat Pro Student Test Store flow.
+- **Store Publication Exemption for Next Gen Track:** As a Next Gen student entry, public App Store / Google Play publication is exempt (demonstrable via native Android development client and RevenueCat Test Store); **the RevenueCat SDK integration is fully functional in sandbox/test mode**.
+- **Judge Access:** Evaluators create test candidate accounts dynamically via the in-app Supabase Auth sign-up flow.
 
 ---
 
-## 13. Team Ownership, GitHub Hosting & AISS Club Representation Note
+## 13. Team Ownership, GitHub Hosting & Affiliation Note
 
 ### 13.1 Ownership & Affiliation Model
-- **Authors & Developers:** Mohammad (President of AISS Club) and Selen (Vice President of AISS Club).
-- **Affiliation:** AISS Club — Üsküdar University. AISS Club represents the team's student-club affiliation and does not imply university ownership, sponsorship, funding, or intellectual-property ownership. The university itself is NOT a project owner, sponsor, funder, developer, or IP holder.
+- **Authors & Developers:** Mohamad Barakat (President of AISS Club) and Selanur Yurdakul (Vice President of AISS Club), both Software / Computer Engineering students at Üsküdar University.
+- **Affiliation & Independent Boundary:** AISS Club — Üsküdar University. AISS Club represents the team's student-club context and does not imply university ownership, sponsorship, funding, or intellectual property ownership. The university and club are NOT project owners, sponsors, funders, developers, or IP holders, and provided no financial, technical, development, or material support.
 
 ### 13.2 GitHub Organization & Hosting Structure
-The intended repository structure for public code hosting is:
+The repository structure for public code hosting is:
 ```
 AISS Club GitHub Organization (https://github.com/aissclub)
         ↓
-internmatch-ai repository
+InternMatch-AI repository (https://github.com/AISSCLUB/InternMatch-AI)
         ↓
-Mohammad + Selen (Full development & maintainer access)
+Mohamad Barakat & Selanur Yurdakul (Full development & maintainer access)
 ```
 *Note: Hosting the repository under the AISS Club GitHub Organization provides team organization and community visibility but does NOT by itself imply that the university or club owns the software IP.*
 
-### 13.3 Strict Vertex AI Separation
-InternMatch AI is an independent project created by Mohammad and Selen. It MUST remain completely separate from any other company, brand, repository, domain, or project belonging to Mohammad.
-- Vertex AI is NOT a parent company, project owner, GitHub owner, or sponsor of InternMatch AI.
-- InternMatch AI MUST NOT be placed under a Vertex AI repository or use Vertex AI branding.
-- No technical dependencies on Vertex AI exist or may be introduced.
-
-### 13.4 Intellectual Property & Contribution Statement
-The software codebase, architecture designs, dataset definitions, and original product implementation of InternMatch AI are developed by Mohammad and Selen. Third-party open-source libraries remain subject to their respective open-source licenses. Neither AISS Club nor Üsküdar University owns third-party software or InternMatch AI unless explicit written legal documentation is later provided.
+### 13.3 Intellectual Property & Contribution Statement
+InternMatch AI is presented as an independently developed student project by Mohamad Barakat and Selanur Yurdakul. Third-party components remain subject to their respective licenses. This repository does not represent AISS Club or Üsküdar University as a project owner, sponsor, funder, or developer.
 
 ---
 
@@ -466,7 +460,7 @@ The software codebase, architecture designs, dataset definitions, and original p
 3. **UI Locale vs. AI Content Locale Separation:**
    - The application strictly decouples user interface locale (`ui_locale`) from AI-generated document content locale (`content_locale`).
    - *Example:* A candidate navigating the application in Turkish (`ui_locale = "tr"`) can explicitly request an English cover letter or match explanation (`content_locale = "en"`).
-4. **Target Content Locale Injection:** All AI pipeline tasks (CV profile extraction, "Why You Match" explanations, skill gap summaries, and personalized cover letters) accept an explicit target `content_locale` parameter (defaulting to `"en"`) to instruct the LLM generator.
+4. **Target Content Locale Injection:** When a user-facing AI generation endpoint or task exposes `content_locale`, the target locale is passed explicitly to the generator (defaulting to `"en"`). Supported generated-text flows include explanations, skill-gap content, and personalized cover letters. Structured CV profile extraction is not assumed to require a target output locale unless that behavior is explicitly exposed by the implementation.
 5. **Backend Error Message Localization Strategy:** FastAPI error payloads return machine-readable error codes (e.g. `UNAUTHORIZED`, `INVALID_FILE_TYPE`) enabling the frontend client to render localized error strings matching `ui_locale`.
 6. **Database Schema Policy (No Column Duplication):** Database tables MUST NOT duplicate columns for each language (`title_en`, `title_tr`, `title_ar` are strictly prohibited). Master listings persist in `en` with dynamic localization handled via standard translation layers or content locale generation.
 

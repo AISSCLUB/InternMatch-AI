@@ -84,7 +84,7 @@ InternMatch AI implements a native RevenueCat monetization architecture:
       ┌──────┴──────────────────────┐
       ▼                             ▼
 ┌──────────────────────────┐  ┌───────────────────────────┐
-│ PostgreSQL 17 + pgvector │  │     Redis + RQ Worker     │
+│ PostgreSQL + pgvector │  │     Redis + RQ Worker     │
 │ Supabase DB & Storage    │  │ CV Parsing & AI Matching  │
 └──────────────────────────┘  └───────────────────────────┘
 ```
@@ -93,7 +93,11 @@ InternMatch AI implements a native RevenueCat monetization architecture:
 
 ## Why Next Gen
 
-InternMatch AI was built by a two-person student team who experienced firsthand the frustration of finding relevant internships. Rather than building a generic job aggregator, the team focused on solving the fundamental fit problem: helping students understand *why* they match, identifying skill gaps before applying, and providing practical AI tools that turn aspirations into interview invitations.
+InternMatch AI was conceived and developed by a collaborative two-person student team, **Mohamad Barakat** and **Selanur Yurdakul**. Both are Software / Computer Engineering students at Üsküdar University and members of AISS (Artificial Intelligence and Intelligent Systems Club), where Mohamad serves as President and Selanur as Vice President.
+
+Selanur originated the product vision, and Mohamad established the technical architecture and engineering foundation. Together, they designed, implemented, and refined a complete student career copilot that solves the fundamental fit problem: helping students understand *why* they match, identifying skill gaps before applying, and providing practical AI tools that turn aspirations into interview invitations.
+
+*Independent Project Note:* InternMatch AI is an independent student entry created directly by the authors for the RevenueCat Shipaton Next Gen track. It is not an official AISS Club or Üsküdar University project, and neither institution provided financial, technical, development, or material support.
 
 ---
 
@@ -107,21 +111,32 @@ InternMatch AI was built by a two-person student team who experienced firsthand 
 | **0:00 – 0:10** | **Hook & Problem** | *"Finding the right internship shouldn't feel like sending resumes into a black hole. Meet InternMatch AI."* | Rapid montage: app logo, student profile, and internship match score orb. |
 | **0:10 – 0:30** | **Profile & CV Enrichment** | *"Students start by uploading their CV. Our background parser automatically extracts skills and experience into a rich career profile."* | Show candidate profile, tap CV Upload, PDF parses, and extracted skills appear on profile. |
 | **0:30 – 0:50** | **Matching & Why You Match** | *"InternMatch calculates personalized compatibility scores and shows exactly why you match—highlighting key strengths and missing skills."* | Open Matchups tab, tap 94% match, explore **Why You Match** skill alignment and recommendations. |
-| **0:50 – 1:10** | **AI Cover Letter & Tracking** | *"Generate a customized, role-specific cover letter draft in seconds, edit it, and track your application status from applied to offer."* | Tap Draft Application, select tone, generate letter, view application in Application Tracker. |
+| **0:50 – 1:10** | **AI Cover Letter & Tracking** | *"Generate a customized, role-specific cover letter draft in seconds, edit it, and track your application status from Applied through Interviewing to Accepted."* | Tap Draft Application, select tone, generate letter, view application in Application Tracker. |
 | **1:10 – 1:30** | **Localization & Interface** | *"Built for global students with seamless switching between English, Turkish, and Arabic with full RTL support."* | Switch language in settings to Turkish and Arabic, demonstrating fluid RTL layout. |
 | **1:30 – 1:50** | **RevenueCat Pro Subscription** | *"With RevenueCat, candidates upgrade to Pro Student with one tap to manage their premium candidate subscription."* | Open Plans screen, show dynamic Test Store price, tap Upgrade, complete Test Store transaction, see Pro Student tier activate. |
 | **1:50 – 1:55** | **Conclusion & Call to Action** | *"InternMatch AI: smarter matching, better applications, faster careers. Built for RevenueCat Shipaton 2026."* | Closing title screen with GitHub link and team credits. |
 
 ---
 
-## Submission Asset Checklist
+## Submission Deliverables
 
-- [ ] **[TODO] Public Repository URL:** Pinned public GitHub repository link.
-- [x] **Open-Source License:** Canonical MIT License present in repository root.
-- [ ] **[TODO] Public Demo Video:** Hosted on YouTube or Vimeo (unlisted or public, < 2 minutes).
-- [x] **Store Publication Exemption:** Next Gen student track entry (public store publishing exempt; native Test Store demo client verified).
-- [ ] **[TODO] High-Resolution App Icon:** `1024x1024` PNG asset without alpha channel.
-- [ ] **[TODO] Clean Mobile Screenshots:** `1179x2556` PNG screenshots showcasing Matchups, Why You Match, and Plans screens (without device frames).
-- [ ] **[TODO] Student Eligibility:** Valid student email associated with Devpost profile.
-- [x] **Runtime Test Store Purchase Acceptance:** End-to-end Android emulator / development client Test Store purchase verified and active.
-- [ ] **[TODO] Final Submission Commit / Tag:** Tagged release commit on GitHub.
+1. **Public Repository:**
+   - Canonical open-source repository: [https://github.com/AISSCLUB/InternMatch-AI](https://github.com/AISSCLUB/InternMatch-AI)
+   - Licensed under the OSI-approved **MIT License**.
+
+2. **Demonstration Video:**
+   - Designed as a concise walkthrough under 2 minutes (1:55 storyboard).
+   - Covers the principal candidate experience: CV upload, profile enrichment, hybrid matching, Why You Match explanations, AI cover letter drafting, multilingual RTL switching, and native RevenueCat Test Store purchase / Pro Student entitlement activation.
+
+3. **High-Resolution Application Icon:**
+   - 1024×1024 PNG asset conforming to hackathon submission standards without an alpha channel.
+
+4. **Mobile Screenshots:**
+   - High-resolution screen captures showcasing primary user flows including Matchups, Why You Match skill analysis, AI application workflow, and RevenueCat subscription plans.
+
+5. **Student Eligibility Verification:**
+   - Developed by student creators Mohamad Barakat and Selanur Yurdakul, both Software / Computer Engineering students at Üsküdar University.
+   - Student-track eligibility is documented in accordance with the Shipaton Next Gen submission guidelines.
+
+6. **GitHub Release Baseline:**
+   - The final GitHub release serves as the stable, reproducible Shipaton 2026 submission milestone.

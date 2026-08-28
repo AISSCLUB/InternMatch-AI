@@ -1,310 +1,437 @@
-# InternMatch AI — Database Schema & Security Policy
+# InternMatch AI - Database Schema & Security Policy
 
-**Version:** 1.0.0  
-**Status:** Approved & Authoritative  
-**Engine:** Supabase PostgreSQL 15+  
-**Extensions Required:** `pgvector`, `uuid-ossp`
+**Version:** 1.0.0
+**Status:** Approved & Authoritative
+**Migration Compatibility:** Supabase PostgreSQL 15+
+**Local Docker Reference Runtime:** PostgreSQL 17 via `pgvector/pgvector:0.8.6-pg17-bookworm`
+**Required Extensions:** `pgvector`, `uuid-ossp`
 
 ---
 
-## 1. Relational Schema Overview
+## 1. Source of Truth
 
-The database uses a modular PostgreSQL schema hosted on Supabase, leveraging `pgvector` for semantic similarity search over internship listings and student profiles.
+The canonical database definition is the ordered migration chain in `database/migrations/`.
+
+This document describes the effective schema after migrations `001` through `010`. It intentionally avoids duplicating every executable `CREATE TABLE` statement because the migration files remain the authoritative source for provisioning, constraints, indexes, privileges, and Row Level Security policies.
+
+Canonical migration order:
+
+1. `database/migrations/001_initial_schema.sql`
+2. `database/migrations/002_rls_policies.sql`
+3. `database/migrations/003_add_processing_job_progress.sql`
+4. `database/migrations/004_add_application_applied_date.sql`
+5. `database/migrations/005_add_avatar_storage_path.sql`
+6. `database/migrations/006_add_saved_internships.sql`
+7. `database/migrations/007_add_application_status_events.sql`
+8. `database/migrations/008_add_internship_employer_ownership.sql`
+9. `database/migrations/009_add_internship_lifecycle_status.sql`
+10. `database/migrations/010_add_application_interview_schedule.sql`
+
+After schema migrations, `database/supabase_storage_setup.sql` provides the repository-managed Supabase Storage setup described in Section 8.
+
+---
+
+## 2. Effective Relational Model
 
 ```mermaid
 erDiagram
-    users ||--o| student_profiles : "has"
-    student_profiles ||--o{ student_skills : "possesses"
-    skills ||--o{ student_skills : "categorized"
-    student_profiles ||--o{ education_entries : "includes"
-    student_profiles ||--o{ experience_entries : "includes"
-    student_profiles ||--o{ project_entries : "includes"
-    student_profiles ||--o{ matches : "receives"
-    internship_listings ||--o{ matches : "matched to"
-    student_profiles ||--o{ applications : "tracks"
-    internship_listings ||--o{ applications : "applied to"
-    users ||--o{ processing_jobs : "owns"
+    AUTH_USERS ||--o| STUDENT_PROFILES : owns
+    AUTH_USERS ||--o{ INTERNSHIP_LISTINGS : employer_owns
+    AUTH_USERS ||--o{ PROCESSING_JOBS : owns
 
-    users {
-        uuid id PK
-        string email
-    }
+    STUDENT_PROFILES ||--o{ STUDENT_SKILLS : has
+    SKILLS ||--o{ STUDENT_SKILLS : categorizes
 
-    student_profiles {
-        uuid id PK
-        uuid user_id FK
-        string full_name
-        string headline
-        string cv_storage_path
-        vector summary_embedding
-        jsonb preferences
-        timestamp created_at
-    }
+    STUDENT_PROFILES ||--o{ EDUCATION_ENTRIES : has
+    STUDENT_PROFILES ||--o{ EXPERIENCE_ENTRIES : has
+    STUDENT_PROFILES ||--o{ PROJECT_ENTRIES : has
 
-    internship_listings {
-        uuid id PK
-        string title
-        string company
-        string location
-        string work_type
-        text description
-        text_array required_skills
-        text_array preferred_skills
-        vector description_embedding
-        jsonb metadata
-        timestamp created_at
-    }
+    STUDENT_PROFILES ||--o{ MATCHES : receives
+    INTERNSHIP_LISTINGS ||--o{ MATCHES : targets
 
-    matches {
-        uuid id PK
-        uuid student_id FK
-        uuid internship_id FK
-        integer overall_score
-        integer skill_score
-        integer vector_score
-        text why_you_match
-        jsonb skill_gap_analysis
-        timestamp created_at
-    }
+    STUDENT_PROFILES ||--o{ APPLICATIONS : owns
+    INTERNSHIP_LISTINGS ||--o{ APPLICATIONS : receives
 
-    applications {
-        uuid id PK
-        uuid student_id FK
-        uuid internship_id FK
-        string status
-        text generated_cover_letter
-        text notes
-        timestamp updated_at
-    }
+    STUDENT_PROFILES ||--o{ SAVED_INTERNSHIPS : bookmarks
+    INTERNSHIP_LISTINGS ||--o{ SAVED_INTERNSHIPS : bookmarked_as
+
+    APPLICATIONS ||--o{ APPLICATION_STATUS_EVENTS : records
 ```
+
+`AUTH_USERS` represents Supabase `auth.users`; it is managed by Supabase Auth and is not created by the application migrations.
 
 ---
 
-## 2. Table Definitions & Types
+## 3. Effective Table Contract
 
-### 2.1 Core Extensions setup
-```sql
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "vector";
+### 3.1 `student_profiles`
+
+Candidate profile and embedding record.
+
+Key fields:
+
+- `id` - UUID primary key
+- `user_id` - unique FK to `auth.users(id)`, `ON DELETE CASCADE`
+- `full_name`
+- `headline`
+- `cv_storage_path`
+- `avatar_storage_path` - added by migration `005`
+- `preferences` - JSONB
+- `summary_embedding` - `vector(1536)`
+- `created_at`
+- `updated_at`
+
+### 3.2 `skills` and `student_skills`
+
+`skills` stores the shared skill taxonomy.
+
+`student_skills` maps candidate profiles to skills with a composite primary key and candidate ownership through `student_id`.
+
+`student_skills.skill_id` uses `ON DELETE RESTRICT` so taxonomy entries cannot be removed while still referenced.
+
+### 3.3 Structured Candidate Data
+
+The following tables are candidate-owned and reference `student_profiles(id)` with `ON DELETE CASCADE`:
+
+- `education_entries`
+- `experience_entries`
+- `project_entries`
+
+### 3.4 `internship_listings`
+
+Canonical internship opportunity catalog.
+
+Key fields include:
+
+- `id`
+- `title`
+- `company`
+- `location`
+- `work_type` - `remote`, `onsite`, or `hybrid`
+- `description`
+- `required_skills`
+- `preferred_skills`
+- `language`
+- `education_requirements`
+- `experience_requirements`
+- `metadata`
+- `description_embedding` - `vector(1536)`
+- `created_at`
+- `employer_user_id` - added by migration `008`, FK to `auth.users(id)` with `ON DELETE SET NULL`
+- `is_active` - added by migration `009`, defaults to `TRUE`
+
+`employer_user_id` establishes backend-enforced employer ownership. `is_active` provides opportunity lifecycle state without deleting historical records.
+
+### 3.5 `matches`
+
+Persisted candidate-to-internship match results.
+
+Key fields include:
+
+- `student_id`
+- `internship_id`
+- `overall_score`
+- `skill_score`
+- `vector_score`
+- `attribute_score`
+- `why_you_match`
+- `skill_gap_analysis`
+- `created_at`
+
+Scores are constrained to `0..100`.
+
+The pair `(student_id, internship_id)` is unique.
+
+`skill_gap_analysis` JSONB is the canonical persisted source for matching skills, missing skills, summary information, and recommendations. API response fields such as `matching_skills` and `missing_skills` are derived from this structured payload rather than duplicated as database columns.
+
+### 3.6 `applications`
+
+Candidate application and tracker record.
+
+Current fields include:
+
+- `id`
+- `student_id`
+- nullable `internship_id`
+- `status`
+- `generated_cover_letter`
+- `applied_date` - added by migration `004`
+- `notes`
+- `interview_scheduled_at` - added by migration `010`
+- `interview_mode` - `online`, `onsite`, or `NULL`
+- `interview_location`
+- `interview_message`
+- `created_at`
+- `updated_at`
+
+Allowed status values are:
+
+```text
+saved
+applied
+interviewing
+rejected
+accepted
 ```
 
-### 2.2 Table: `student_profiles`
-```sql
-CREATE TABLE public.student_profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-    full_name TEXT NOT NULL,
-    headline TEXT,
-    cv_storage_path TEXT,
-    preferences JSONB DEFAULT '{"work_types": [], "desired_locations": []}'::jsonb,
-    summary_embedding vector(1536),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+`applications.internship_id` uses `ON DELETE SET NULL`, preserving candidate application history if a linked listing is removed.
+
+The application lifecycle is enforced by backend rules, not by treating every status value as candidate-editable:
+
+```text
+Candidate:
+saved -> applied
+
+Employer:
+applied -> interviewing | accepted | rejected
+interviewing -> accepted | rejected
+
+Terminal:
+accepted
+rejected
 ```
 
-### 2.3 Tables: Skills & Candidates Structured Data
-```sql
-CREATE TABLE public.skills (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL UNIQUE,
-    category TEXT
-);
+Candidates cannot manually set `interviewing`, `accepted`, or `rejected`, and a submitted application cannot be reverted to `saved`.
 
-CREATE TABLE public.student_skills (
-    student_id UUID NOT NULL REFERENCES public.student_profiles(id) ON DELETE CASCADE,
-    skill_id UUID NOT NULL REFERENCES public.skills(id) ON DELETE RESTRICT,
-    proficiency_level TEXT DEFAULT 'intermediate',
-    PRIMARY KEY (student_id, skill_id)
-);
+Scheduling an interview for an `applied` application promotes it to `interviewing`.
 
-CREATE TABLE public.education_entries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES public.student_profiles(id) ON DELETE CASCADE,
-    institution TEXT NOT NULL,
-    degree TEXT NOT NULL,
-    start_year INT,
-    end_year INT
-);
+### 3.7 `application_status_events`
 
-CREATE TABLE public.experience_entries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES public.student_profiles(id) ON DELETE CASCADE,
-    company TEXT NOT NULL,
-    role TEXT NOT NULL,
-    description TEXT,
-    start_date DATE,
-    end_date DATE
-);
+Added by migration `007`.
 
-CREATE TABLE public.project_entries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES public.student_profiles(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    tech_stack TEXT[],
-    description TEXT
-);
+This table stores the authoritative chronological application-status timeline.
+
+Key fields:
+
+- `id`
+- `application_id` - FK to `applications(id)`, `ON DELETE CASCADE`
+- `status`
+- `occurred_at`
+
+Allowed event statuses match the canonical application status set.
+
+The chronological index is ordered by:
+
+```text
+application_id, occurred_at ASC, id ASC
 ```
 
-### 2.4 Table: `internship_listings` (Controlled 30–50 Dataset)
-```sql
-CREATE TABLE public.internship_listings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title TEXT NOT NULL,
-    company TEXT NOT NULL,
-    location TEXT NOT NULL,
-    work_type TEXT NOT NULL CHECK (work_type IN ('remote', 'onsite', 'hybrid')),
-    description TEXT NOT NULL,
-    required_skills TEXT[] NOT NULL DEFAULT '{}',
-    preferred_skills TEXT[] DEFAULT '{}',
-    language TEXT DEFAULT 'English',
-    education_requirements TEXT,
-    experience_requirements TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    description_embedding vector(1536),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+### 3.8 `saved_internships`
+
+Added by migration `006`.
+
+Candidate bookmark table with:
+
+- `id`
+- `student_id`
+- `internship_id`
+- `created_at`
+
+The pair `(student_id, internship_id)` is unique.
+
+Deleting a candidate profile or internship cascades to its bookmark records.
+
+### 3.9 `processing_jobs`
+
+Authenticated asynchronous work tracking.
+
+Key fields:
+
+- `id`
+- `user_id` - FK to `auth.users(id)`, `ON DELETE CASCADE`
+- `job_type`
+- `status`
+- `progress_percent` - added by migration `003`, constrained to `0..100`
+- `result`
+- `error`
+- `created_at`
+- `updated_at`
+
+Canonical job types remain:
+
+```text
+cv_extraction
+match_calculation
+application_generation
 ```
 
-### 2.5 Table: `matches`
-```sql
-CREATE TABLE public.matches (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES public.student_profiles(id) ON DELETE CASCADE,
-    internship_id UUID NOT NULL REFERENCES public.internship_listings(id) ON DELETE CASCADE,
-    overall_score INT NOT NULL CHECK (overall_score BETWEEN 0 AND 100),
-    skill_score INT NOT NULL CHECK (skill_score BETWEEN 0 AND 100),
-    vector_score INT NOT NULL CHECK (vector_score BETWEEN 0 AND 100),
-    attribute_score INT NOT NULL CHECK (attribute_score BETWEEN 0 AND 100),
-    why_you_match TEXT,
-    skill_gap_analysis JSONB DEFAULT '{}'::jsonb,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(student_id, internship_id)
-);
+Canonical job statuses are:
+
+```text
+queued
+processing
+completed
+failed
 ```
 
-*Canonical Skill Gap Data Architecture Note:* `skill_gap_analysis` JSONB is the **single canonical persisted source of truth** for match skill gaps and recommendations. It avoids column duplication by storing matching skills, missing skills, and recommendations in a single structured JSON payload:
-```json
-{
-  "matching_skills": ["Python", "FastAPI", "PostgreSQL"],
-  "missing_skills": ["Docker", "Redis"],
-  "summary": "You are missing 2 preferred containerization & caching skills.",
-  "recommendations": [
-    "Complete a 2-hour tutorial on Docker basics and containerize a simple FastAPI service.",
-    "Learn basic Redis key-value caching patterns."
-  ]
-}
-```
-API endpoints (`GET /matches/{id}/explanation`) derive top-level `matching_skills` and `missing_skills` directly from this canonical JSONB column without redundant table columns.
+AI interview preparation is not represented as a new `processing_jobs.job_type` in the current schema.
 
-### 2.6 Table: `applications` (Tracker)
-```sql
-CREATE TABLE public.applications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES public.student_profiles(id) ON DELETE CASCADE,
-    internship_id UUID REFERENCES public.internship_listings(id) ON DELETE SET NULL,
-    status TEXT NOT NULL DEFAULT 'saved' CHECK (status IN ('saved', 'applied', 'interviewing', 'rejected', 'accepted')),
-    generated_cover_letter TEXT,
-    applied_date DATE,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(student_id, internship_id)
-);
-```
+---
 
-*Historical Record Preservation Note:* `applications.internship_id` uses `ON DELETE SET NULL`. If an internship listing is removed or archived, the candidate's historical application record, cover letter text, notes, and application status are preserved for student tracking history rather than being erased.
+## 4. Vector Search & Matching Persistence
 
-*Applied Date Semantics Note:* `applied_date` is `NULL` initially (e.g. for saved applications) and is recorded as the UTC calendar date upon the candidate's first explicit transition to `"applied"`. Subsequent tracker status transitions (to interviewing, rejected, accepted, or back to saved) preserve the original `applied_date`.
+InternMatch AI uses `pgvector` with `1536`-dimension embeddings for:
 
-### 2.7 Foreign Key Delete Policy Summary Matrix
+- `student_profiles.summary_embedding`
+- `internship_listings.description_embedding`
 
-| Foreign Key Relationship | Delete Action | Architectural Rationale |
+The initial schema creates an HNSW cosine-distance index for internship description embeddings.
+
+Hybrid ranking combines vector similarity with skill and structured attribute scoring before persisting final match results.
+
+---
+
+## 5. Referential Integrity & Delete Semantics
+
+| Relationship | Delete Behavior | Purpose |
 | :--- | :--- | :--- |
-| `student_profiles.user_id` $\rightarrow$ `auth.users(id)` | `ON DELETE CASCADE` | Hard deletion of auth account purges profile. |
-| `student_skills.student_id` $\rightarrow$ `student_profiles(id)` | `ON DELETE CASCADE` | Skills belong strictly to student profile. |
-| `student_skills.skill_id` $\rightarrow$ `skills(id)` | `ON DELETE RESTRICT` | Prevents accidental deletion of master taxonomy skills. |
-| `education_entries.student_id` $\rightarrow$ `student_profiles(id)` | `ON DELETE CASCADE` | Education entries belong strictly to profile. |
-| `experience_entries.student_id` $\rightarrow$ `student_profiles(id)` | `ON DELETE CASCADE` | Work entries belong strictly to profile. |
-| `project_entries.student_id` $\rightarrow$ `student_profiles(id)` | `ON DELETE CASCADE` | Projects belong strictly to profile. |
-| `processing_jobs.user_id` $\rightarrow$ `auth.users(id)` | `ON DELETE CASCADE` | Jobs belong to user session. |
-| `matches.student_id` $\rightarrow$ `student_profiles(id)` | `ON DELETE CASCADE` | Match scores belong to candidate profile. |
-| `matches.internship_id` $\rightarrow$ `internship_listings(id)` | `ON DELETE CASCADE` | Matches are ephemeral calculations tied to listing. |
-| `applications.student_id` $\rightarrow$ `student_profiles(id)` | `ON DELETE CASCADE` | Application tracker records belong to candidate. |
-| `applications.internship_id` $\rightarrow$ `internship_listings(id)` | `ON DELETE SET NULL` | Preserves candidate application history & cover letters. |
-
-
-### 2.7 Table: `processing_jobs`
-```sql
-CREATE TABLE public.processing_jobs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    job_type TEXT NOT NULL CHECK (job_type IN ('cv_extraction', 'match_calculation', 'application_generation')),
-    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
-    progress_percent INT NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
-    result JSONB,
-    error TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
+| `student_profiles.user_id -> auth.users.id` | `CASCADE` | Remove candidate-owned profile data with account deletion |
+| candidate structured tables -> `student_profiles.id` | `CASCADE` | Child records belong to candidate profile |
+| `student_skills.skill_id -> skills.id` | `RESTRICT` | Protect referenced taxonomy entries |
+| `matches.student_id -> student_profiles.id` | `CASCADE` | Match results belong to candidate |
+| `matches.internship_id -> internship_listings.id` | `CASCADE` | Match is derived from listing |
+| `applications.student_id -> student_profiles.id` | `CASCADE` | Applications belong to candidate |
+| `applications.internship_id -> internship_listings.id` | `SET NULL` | Preserve application history |
+| `saved_internships.student_id -> student_profiles.id` | `CASCADE` | Bookmark belongs to candidate |
+| `saved_internships.internship_id -> internship_listings.id` | `CASCADE` | Bookmark requires listing |
+| `application_status_events.application_id -> applications.id` | `CASCADE` | Timeline belongs to application |
+| `internship_listings.employer_user_id -> auth.users.id` | `SET NULL` | Preserve opportunity data if employer identity is removed |
+| `processing_jobs.user_id -> auth.users.id` | `CASCADE` | Job state belongs to authenticated user |
 
 ---
 
+## 6. Indexing Strategy
 
-## 3. Database Indexes & Vector Optimization
+The migration chain defines indexes for the primary runtime query paths, including:
 
-```sql
--- Vector Similarity Index (HNSW using cosine distance)
-CREATE INDEX idx_internships_embedding_hnsw 
-ON public.internship_listings 
-USING hnsw (description_embedding vector_cosine_ops);
+- HNSW cosine index on internship embeddings
+- student-profile lookup by `user_id`
+- candidate matches ordered by score
+- application lookup by candidate and status
+- processing-job lookup by user and status
+- saved internships ordered by candidate and creation time
+- saved internship lookup by internship
+- application status-event chronological lookup
+- employer-owned internship lookup
+- active internship filtering
 
--- B-Tree Indexes on Foreign Keys & Query Paths
-CREATE INDEX idx_student_profiles_user_id ON public.student_profiles(user_id);
-CREATE INDEX idx_matches_student_score ON public.matches(student_id, overall_score DESC);
-CREATE INDEX idx_applications_student_status ON public.applications(student_id, status);
-CREATE INDEX idx_processing_jobs_user_status ON public.processing_jobs(user_id, status);
-```
+Indexes are defined by migrations and should not be recreated independently from this document.
 
 ---
 
-## 4. Row Level Security (RLS) Policies
+## 7. Row Level Security & PostgreSQL Privileges
 
-RLS is strictly enforced on all tables containing student data to guarantee complete isolation.
+RLS is enabled by migration `002` on the ten original application tables:
 
-```sql
--- Enable RLS on user-owned tables
-ALTER TABLE public.student_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.education_entries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.experience_entries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.project_entries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.processing_jobs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.internship_listings ENABLE ROW LEVEL SECURITY;
+- `student_profiles`
+- `skills`
+- `student_skills`
+- `education_entries`
+- `experience_entries`
+- `project_entries`
+- `internship_listings`
+- `matches`
+- `applications`
+- `processing_jobs`
 
--- Student Profiles Policy: Owner full access
-CREATE POLICY student_profiles_owner_policy ON public.student_profiles
-    FOR ALL USING (auth.uid() = user_id);
+Migration `006` independently enables RLS for `saved_internships`.
 
--- Matches Policy: Student can view own matches
-CREATE POLICY matches_owner_policy ON public.matches
-    FOR ALL USING (
-        student_id IN (SELECT id FROM public.student_profiles WHERE user_id = auth.uid())
-    );
+Migration `007` independently enables RLS for `application_status_events`.
 
--- Applications Policy: Student can manage own application records
-CREATE POLICY applications_owner_policy ON public.applications
-    FOR ALL USING (
-        student_id IN (SELECT id FROM public.student_profiles WHERE user_id = auth.uid())
-    );
+Therefore, after migrations `001` through `010`, all twelve application-owned public tables have RLS enabled.
 
--- Processing Jobs Policy: User can view own jobs
-CREATE POLICY processing_jobs_owner_policy ON public.processing_jobs
-    FOR ALL USING (auth.uid() = user_id);
+### 7.1 Candidate-Owned Data
 
--- Internship Listings Policy: Read-only for authenticated users
-CREATE POLICY internship_listings_read_policy ON public.internship_listings
-    FOR SELECT TO authenticated USING (true);
+Authenticated candidate access is scoped through `auth.uid()` either directly through `user_id` or indirectly through the owning `student_profiles` record.
+
+Candidate-owned mutable tables include profile data, structured education/experience/project data, student skills, application records, and saved internships according to their migration-defined privileges.
+
+### 7.2 Read-Only Data
+
+`skills` and `internship_listings` provide catalog-style `SELECT` access to `anon` and `authenticated` roles.
+
+`matches` and `processing_jobs` provide authenticated read access scoped by ownership policies.
+
+`application_status_events` provides candidate-owned timeline access according to migration `007`.
+
+### 7.3 Trusted Backend Writes
+
+Privileged backend operations use trusted server-side credentials and remain subject to application authorization rules.
+
+This is particularly important for employer-owned opportunity management and employer-controlled application transitions: direct public PostgreSQL privileges are not the authority for these workflows.
+
+Service-role credentials MUST remain server-side and MUST never be shipped to mobile or web clients.
+
+---
+
+## 8. Supabase Storage Boundary
+
+`database/supabase_storage_setup.sql` currently provisions the private `avatars` bucket.
+
+Current repository-managed avatar storage contract:
+
+- bucket id/name: `avatars`
+- public access: `false`
+- maximum file size: `5 MB`
+- allowed MIME types:
+  - `image/jpeg`
+  - `image/png`
+  - `image/webp`
+
+Avatar upload, deletion, and signed-URL generation are mediated by the FastAPI backend using verified JWT identity and server-side credentials.
+
+The current `database/supabase_storage_setup.sql` file does **not** provision the CV bucket. CV storage uses the separately configured `CV_STORAGE_BUCKET` runtime contract and must not be assumed to be created by this storage SQL file.
+
+---
+
+## 9. Migration & Provisioning Rules
+
+For a fresh database environment:
+
+1. Apply migrations `001` through `010` in numeric order.
+2. Apply `database/supabase_storage_setup.sql` for the repository-managed avatar storage setup.
+3. Configure any additional runtime storage required by the environment, including the configured CV storage bucket.
+4. Keep database, Supabase service-role, and storage-management credentials server-side.
+5. Do not modify an already-applied migration to represent a later schema change; add a new ordered migration instead.
+
+The migration chain is authoritative. SQL examples in documentation are explanatory only.
+
+---
+
+## 10. Compatibility Boundary
+
+The migration files declare compatibility with **Supabase PostgreSQL 15+**.
+
+The canonical local Docker reference currently uses:
+
+```text
+pgvector/pgvector:0.8.6-pg17-bookworm
 ```
+
+which provides the project's PostgreSQL 17 local evaluation baseline.
+
+These statements describe two different boundaries:
+
+- migration compatibility floor: Supabase PostgreSQL 15+
+- current local container baseline: PostgreSQL 17
+
+Documentation MUST NOT infer the exact PostgreSQL version of an external managed Supabase project unless that deployed environment has been independently verified.
+
+---
+
+## 11. Security Invariants
+
+The database layer follows these non-negotiable rules:
+
+- Supabase `auth.users` is the identity source; the application does not create a duplicate public users table.
+- Candidate-owned data is isolated by RLS and backend ownership checks.
+- Employer mutations require authenticated employer authorization and opportunity ownership.
+- Service-role credentials stay exclusively on trusted backend infrastructure.
+- Application terminal states are employer-managed.
+- Historical application timelines are persisted in `application_status_events`.
+- Embeddings use the configured `1536`-dimension contract.
+- Repository migrations, not prose documentation, are the executable schema source of truth.
+
+---
+
+**End of Database Contract**

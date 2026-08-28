@@ -2,14 +2,14 @@
 
 **Version:** 1.0.0  
 **Status:** Approved & Authoritative Interface Boundary  
-**Base URL:** `http://localhost:8000/api/v1` (Local Docker) / `https://api.internmatch.ai/api/v1` (Production)  
+**Base URL:** `http://localhost:8000/api/v1` (canonical local evaluation baseline). A production base URL is deployment-specific and is not claimed as live by this repository.
 **Authentication:** HTTP Authorization Header `Bearer <Supabase_Access_Token>`
 
 ---
 
 ## 1. Overview & General Standards
 
-The API contract defines the exact interface boundary between the Frontend apps (Expo Mobile / Next.js Landing owned by **Selen**) and the Backend API (FastAPI owned by **Mohammad**).
+The API contract defines the authoritative interface boundary between the Frontend client applications (Expo Mobile App / Web Scaffold) and the Backend API Gateway (FastAPI).
 
 ### 1.1 Content Types & Headers
 - All request and response bodies MUST be formatted in valid `application/json` unless handling multipart file uploads (`multipart/form-data`).
@@ -18,24 +18,34 @@ The API contract defines the exact interface boundary between the Frontend apps 
   Authorization: Bearer <SUPABASE_JWT_ACCESS_TOKEN>
   ```
 
-### 1.2 Standard Error Response Schema
-All error responses return standard HTTP error codes ($400, 401, 403, 404, 422, 500$) with the following JSON payload:
+### 1.2 Error Response Behavior
+
+The API does **not** guarantee one universal error-envelope shape for every failure path.
+
+- Endpoint-specific not-found handlers may return a machine-readable payload such as:
+
 ```json
 {
   "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Invalid or expired authentication token.",
+    "code": "NOT_FOUND",
+    "message": "Resource not found.",
     "details": null,
-    "timestamp": "2026-08-10T17:00:00Z"
+    "timestamp": "2026-08-10T17:00:00+00:00"
   }
 }
 ```
 
-### 1.3 Localization & Content Locale Parameters
-- **UI Locale (`ui_locale`):** Frontend clients specify preferred UI language via standard `Accept-Language` HTTP header (e.g. `Accept-Language: tr, en;q=0.9`). Supported MVP UI locales: `en`, `tr`. Future locale: `ar`.
-- **AI Target Content Locale (`content_locale`):** AI generation requests (such as `POST /applications/generate`) accept an optional payload parameter `content_locale` (`"en"`, `"tr"`, `"ar"`; default: `"en"`), decoupling UI language from AI output language.
+- FastAPI `HTTPException` paths use the standard FastAPI `detail` response shape unless an endpoint explicitly formats its own response.
+- Request validation failures use FastAPI / Pydantic HTTP 422 validation responses.
+- Clients MUST branch primarily on HTTP status and the actual response payload; they MUST NOT assume every error is wrapped in the custom `error` object.
 
----
+### 1.3 Localization & Content Locale Parameters
+
+- **UI Localization:** English (`en`), Turkish (`tr`), and Arabic (`ar`) UI localization is handled by the mobile client, including dynamic RTL behavior for Arabic. There is no authoritative `Accept-Language` header contract in the current backend implementation.
+- **Internship Detail Locale:** `GET /internships/{id}` accepts query parameter `locale=en|tr|ar` (default `en`) for localized free-form listing content.
+- **Match Explanation Locale:** `GET /matches/{id}/explanation` accepts query parameter `content_locale=en|tr|ar` (default `en`).
+- **Application Generation Locale:** `POST /applications/generate` accepts body field `content_locale` with values `en`, `tr`, or `ar` (default `en`).
+- **Interview Preparation Locale:** `POST /applications/{id}/interview-prep` accepts query parameter `content_locale`, enabling generated interview-preparation content to use the requested supported locale.
 
 ## 2. Endpoints Specification
 
@@ -129,7 +139,7 @@ Manually updates fields in candidate profile.
 
 #### `GET /internships`
 Retrieves the list of curated internships with optional filtering.
-- **Security:** Optional / Public or Authenticated
+- **Security:** Public read-only
 - **Query Parameters:**
   - `work_type`: string (e.g. `remote`, `onsite`, `hybrid`)
   - `location`: string
@@ -159,7 +169,8 @@ Retrieves the list of curated internships with optional filtering.
 
 #### `GET /internships/{id}`
 Retrieves complete details of a specific internship listing.
-- **Security:** Authenticated / Public
+- **Security:** Public read-only
+- **Query Parameters:** `locale`: `en` | `tr` | `ar` (default `en`)
 - **Response 200 OK:**
   ```json
   {
@@ -220,6 +231,7 @@ Retrieves pre-calculated matches for the authenticated student, sorted by score.
 #### `GET /matches/{id}/explanation`
 Retrieves the grounded LLM explanation ("Why You Match") and Skill Gap analysis for a specific match.
 - **Security:** Authenticated (`Bearer <JWT>`)
+- **Query Parameters:** `content_locale`: `en` | `tr` | `ar` (default `en`)
 - **Data Derivation Note:** `matching_skills` and `missing_skills` in the response payload are derived directly from the canonical `matches.skill_gap_analysis` JSONB column.
 - **Response 200 OK:**
   ```json
@@ -250,7 +262,8 @@ Enqueues grounded AI generation of a tailored cover letter / application note fo
   ```json
   {
     "match_id": "mtc_999",
-    "tone": "professional"
+    "tone": "professional",
+    "content_locale": "en"
   }
   ```
 - **Response 202 Accepted:**
@@ -264,59 +277,174 @@ Enqueues grounded AI generation of a tailored cover letter / application note fo
 
 ---
 
-### 2.6 Application Tracker
+### 2.6 Application Tracker & Candidate Lifecycle
+
+Application status values are:
+
+`saved | applied | interviewing | rejected | accepted`
 
 #### `GET /applications`
-Lists tracked internship applications.
+
+Lists the authenticated candidate's tracked applications.
+
 - **Security:** Authenticated (`Bearer <JWT>`)
-- **Response 200 OK:**
-  ```json
-  {
-    "applications": [
-      {
-        "id": "app_555",
-        "internship_id": "int_001",
-        "company_name": "CloudTech Inc.",
-        "job_title": "Backend Engineering Intern",
-        "status": "applied",
-        "generated_cover_letter": "Dear Hiring Manager...",
-        "applied_date": "2026-08-10",
-        "notes": "Submitted application via portal."
-      }
-    ]
-  }
-  ```
+- **Response:** `ApplicationListResponse`
+
+#### `GET /applications/{id}`
+
+Retrieves full application detail, including chronological status timeline and interview scheduling metadata when present.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
+- **Response:** `ApplicationDetailResponse`
+- **Timeline Fields:** status events expose `status` and `occurred_at`.
+- **Interview Fields:** `interview_scheduled_at`, `interview_mode`, `interview_location`, and `interview_message`.
+
+#### `POST /applications/{id}/submit`
+
+Explicitly submits an eligible candidate application.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
+- **Request:** Optional edited `cover_letter` and optional candidate `notes`.
+- The backend owns the valid submit-state transition rules.
 
 #### `PATCH /applications/{id}/status`
-Updates tracker state (`saved`, `applied`, `interviewing`, `rejected`, `accepted`).
+
+Updates candidate-managed tracker state subject to backend lifecycle validation.
+
 - **Security:** Authenticated (`Bearer <JWT>`)
-- **Request Body:**
-  ```json
-  {
-    "status": "interviewing",
-    "notes": "Recruiter scheduled initial screening call."
-  }
-  ```
-- **Response 200 OK:** Updated application object.
+- Candidates MUST NOT manually set `interviewing`, `accepted`, or `rejected`; those states are employer-managed.
+- A submitted application cannot be reverted to a `saved` draft.
+- Employer-controlled transitions are performed through employer-owned applicant endpoints.
+
+#### `POST /applications/{id}/interview-prep`
+
+Generates AI interview-preparation content for an internship-linked application.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
+- **Query:** `content_locale` (supported locale, default `en`)
+- Available only while the application is in `interviewing` status.
+
+#### `DELETE /applications/{id}`
+
+Discards an eligible candidate application draft according to backend state rules.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
 
 ---
 
-### 2.7 Polling Asynchronous Jobs
+### 2.7 Saved Internships
+
+Candidate bookmarks are authenticated and tenant-scoped to the current Supabase identity.
+
+#### `GET /saved-internships`
+
+Returns saved internships newest-first with real internship summary data.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
+- **Query:** `limit` (default 20, max 50), `offset` (default 0)
+
+#### `POST /saved-internships/{internship_id}`
+
+Saves/bookmarks an internship.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
+- Operation is idempotent.
+
+#### `DELETE /saved-internships/{internship_id}`
+
+Removes a candidate bookmark.
+
+- **Security:** Authenticated (`Bearer <JWT>`)
+- Operation is idempotent and does not delete the internship listing or application.
+
+---
+
+### 2.8 Employer Opportunity & Applicant Lifecycle
+
+Employer operations require an authenticated employer identity and enforce ownership of the affected opportunity.
+
+Canonical employer lifecycle:
+
+```text
+applied -> interviewing | accepted | rejected
+interviewing -> accepted | rejected
+accepted -> terminal
+rejected -> terminal
+saved -> not employer-transitionable
+```
+
+Scheduling an interview for an `applied` candidate promotes the application into the `interviewing` state.
+
+Interview scheduling accepts:
+
+- an ISO-8601 timestamp with timezone information,
+- mode (`online` or `onsite`),
+- a required location or meeting URL,
+- and an optional employer message.
+
+The exact current employer routes are included in the source-derived route inventory below.
+
+---
+
+### 2.9 Polling Asynchronous Jobs
 
 #### `GET /jobs/{job_id}`
-Polls status of long-running operations (CV parsing, profile extraction, match calculation, document generation).
+
+Retrieves an asynchronous processing job owned by the authenticated user.
+
 - **Security:** Authenticated (`Bearer <JWT>`)
-- **Response 200 OK:**
-  ```json
-  {
-    "job_id": "job_cv_123456",
-    "status": "completed",
-    "progress_percent": 100,
-    "result": {
-      "profile_id": "prof_123"
-    },
-    "error": null,
-    "updated_at": "2026-08-10T17:01:00Z"
-  }
-  ```
-  *(Status values: `queued` | `processing` | `completed` | `failed`)*
+- Job lookup is scoped by both `job_id` and authenticated `user_id`.
+- **Response Model:** `ProcessingJobResponse`
+
+Current source-defined response fields:
+
+- `job_id`: `UUID`
+- `status`: `Literal['queued', 'processing', 'completed', 'failed']`
+- `progress_percent`: `int`
+- `result`: `Optional[Dict[str, Any]]`
+- `error`: `Optional[str]`
+- `updated_at`: `datetime`
+
+Endpoint-specific not-found behavior returns the machine-readable `NOT_FOUND` error object documented in Section 1.2.
+
+---
+
+### 2.10 Current Source-Derived Route Inventory
+
+The following inventory is generated from the currently mounted FastAPI route decorators in `backend/app/api/v1/endpoints/`.
+
+It represents the implemented HTTP surface at the time of this documentation reconciliation.
+
+| Method | Route | Access | Source Handler |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/health` | Public | `get_readiness` |
+| `POST` | `/api/v1/auth/sync` | Authenticated JWT | `sync_authenticated_user` |
+| `GET` | `/api/v1/profile` | Authenticated JWT | `get_my_profile` |
+| `PUT` | `/api/v1/profile` | Authenticated JWT | `upsert_my_profile` |
+| `POST` | `/api/v1/profile/cv` | Authenticated JWT | `upload_candidate_cv` |
+| `POST` | `/api/v1/profile/avatar` | Authenticated JWT | `upload_profile_avatar` |
+| `DELETE` | `/api/v1/profile/avatar` | Authenticated JWT | `delete_profile_avatar` |
+| `POST` | `/api/v1/internships` | Employer JWT | `create_internship` |
+| `GET` | `/api/v1/internships` | Public | `list_internships` |
+| `GET` | `/api/v1/internships/mine` | Employer JWT | `list_my_internships` |
+| `GET` | `/api/v1/internships/{id}/applicants` | Employer JWT | `list_internship_applicants` |
+| `POST` | `/api/v1/internships/{id}/close` | Employer JWT | `close_internship_opportunity` |
+| `GET` | `/api/v1/internships/{id}/applicants/{application_id}` | Employer JWT | `get_internship_applicant_detail` |
+| `POST` | `/api/v1/internships/{id}/applicants/{application_id}/interview` | Employer JWT | `schedule_employer_applicant_interview` |
+| `PATCH` | `/api/v1/internships/{id}/applicants/{application_id}/status` | Employer JWT | `update_employer_applicant_status` |
+| `GET` | `/api/v1/internships/{id}` | Public | `get_internship_detail` |
+| `GET` | `/api/v1/saved-internships` | Authenticated JWT | `list_saved_internships` |
+| `POST` | `/api/v1/saved-internships/{internship_id}` | Authenticated JWT | `save_internship` |
+| `DELETE` | `/api/v1/saved-internships/{internship_id}` | Authenticated JWT | `unsave_internship` |
+| `GET` | `/api/v1/jobs/{job_id}` | Authenticated JWT | `get_job_status` |
+| `GET` | `/api/v1/matches` | Authenticated JWT | `get_my_matches` |
+| `POST` | `/api/v1/matches/calculate` | Authenticated JWT | `calculate_matches` |
+| `GET` | `/api/v1/matches/{id}/explanation` | Authenticated JWT | `get_match_explanation` |
+| `GET` | `/api/v1/applications` | Authenticated JWT | `get_my_applications` |
+| `GET` | `/api/v1/applications/{id}` | Authenticated JWT | `get_application_detail` |
+| `DELETE` | `/api/v1/applications/{id}` | Authenticated JWT | `discard_saved_application_draft` |
+| `POST` | `/api/v1/applications/generate` | Authenticated JWT | `generate_application` |
+| `POST` | `/api/v1/applications/{id}/submit` | Authenticated JWT | `submit_application` |
+| `PATCH` | `/api/v1/applications/{id}/status` | Authenticated JWT | `update_application_status` |
+| `POST` | `/api/v1/applications/{id}/interview-prep` | Authenticated JWT | `generate_interview_prep` |
+| `GET` | `/health` | Public | root infrastructure liveness |

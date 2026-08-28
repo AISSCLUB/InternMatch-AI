@@ -10,7 +10,7 @@ This runbook guides you through reproducing the full end-to-end system:
 1. **Infrastructure & Backend:** Dockerized FastAPI service, Redis task queue, Python RQ worker, and PostgreSQL with `pgvector`.
 2. **Database & AI Services:** Schema migrations, demo internship datasets, semantic vector search, and Gemini AI application generation.
 3. **Cross-Platform Mobile Client:** Expo SDK 54 / React Native client running on the Android Emulator or physical device.
-4. **RevenueCat In-App Purchases:** Native RevenueCat Test Store integration demonstrating Candidate **Pro Student** subscription flow, RevenueCat CustomerInfo entitlement updates, dynamic pricing, and instant tier activation.
+4. **RevenueCat In-App Purchases:** Native RevenueCat Test Store integration demonstrating Candidate **Pro Student** subscription flow, RevenueCat `CustomerInfo` entitlement updates, dynamic pricing, and entitlement-driven tier updates.
 
 ---
 
@@ -22,7 +22,7 @@ Ensure your host environment has the following software installed:
 |---|---|---|
 | **Git** | `v2.40+` | Source control & repository cloning |
 | **Python** | `3.13.x` | Backend runtime & local test runner |
-| **Node.js** | `v20.x` or `v22.x` (LTS) | Mobile JavaScript runtime |
+| **Node.js** | `v22.x` LTS | Mobile JavaScript runtime (matches CI reference runtime) |
 | **npm** | `v10.x+` | Package manager for mobile app |
 | **Docker Desktop** | `v24+` (with Compose v2) | Containerized backend, Redis, and database |
 | **Android Studio** | Latest (Android SDK 34+) | Android Emulator & native Android build tooling |
@@ -38,8 +38,8 @@ Ensure your host environment has the following software installed:
 Clone the repository and enter the project root:
 
 ```bash
-git clone <repository-url>
-cd "InternMatch AI"
+git clone https://github.com/AISSCLUB/InternMatch-AI.git
+cd InternMatch-AI
 ```
 
 The repository structure:
@@ -82,6 +82,7 @@ SUPABASE_SERVICE_ROLE_KEY=sb_serv_...
 SUPABASE_JWT_SECRET=your_supabase_jwt_secret
 DATABASE_URL=postgresql://postgres:<password>@<db-host>:5432/postgres
 CV_STORAGE_BUCKET=cvs
+AVATAR_STORAGE_BUCKET=avatars
 
 # Redis Task Queue (Docker Compose default)
 REDIS_URL=redis://redis:6379/0
@@ -114,7 +115,10 @@ If using an external Supabase instance, execute the SQL migration scripts in ord
 5. database/migrations/005_add_avatar_storage_path.sql
 6. database/migrations/006_add_saved_internships.sql
 7. database/migrations/007_add_application_status_events.sql
-8. database/supabase_storage_setup.sql
+8. database/migrations/008_add_internship_employer_ownership.sql
+9. database/migrations/009_add_internship_lifecycle_status.sql
+10. database/migrations/010_add_application_interview_schedule.sql
+11. database/supabase_storage_setup.sql
 ```
 
 For complete database schema details, see [docs/DATABASE.md](docs/DATABASE.md).
@@ -263,13 +267,13 @@ Follow this workflow in the mobile app to evaluate features:
    - Tap a match to open **Why You Match** -> View skill alignment breakdown and personalized skill gap recommendations.
 5. **AI Application Preparation:**
    - From internship detail, tap **Draft Application** -> Select tone (e.g., Enthusiastic, Professional) -> Generate job-tailored cover letter.
-   - Track status in **Applications** tab (Applied, Interviewing, Offered).
+   - Track status in **Applications** tab (Applied, Interviewing, Accepted).
 6. **RevenueCat Pro Student Subscription Flow:**
    - Open **Settings** -> **Plans & Upgrade** (or tap the Pro badge on Profile).
    - Verify dynamic pricing is loaded from RevenueCat (e.g., `$4.99 / month`).
    - Tap **Upgrade to Pro** -> Complete Test Store transaction.
    - Observe entitlement state update: `CustomerInfo` updates `pro_student` to active, Pro Student becomes the current plan, and PlanBadge reflects Pro status.
-   - *Note on Test Store Behavior:* Test Store subscriptions use accelerated test renewal cycles and expire quickly by design. In Test Store mode, store receipt restoration is disabled as direct sandbox purchases provide instantaneous entitlement activation.
+   - *Note on Test Store Behavior:* Test Store subscriptions use accelerated test renewal cycles and expire quickly by design. In Test Store mode, store receipt restoration is disabled; direct sandbox purchases drive the entitlement state used by the demo flow.
 
 ---
 
@@ -289,7 +293,7 @@ python -m pytest
 
 ### Python Linting & Formatting
 ```bash
-ruff check .
+python -m ruff check backend/app worker tests --output-format=concise
 ```
 
 ### Mobile TypeScript Validation

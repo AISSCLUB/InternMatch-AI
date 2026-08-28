@@ -3,7 +3,7 @@
 **Version:** 1.0.0  
 **Status:** Approved & Authoritative  
 **Target Environments:**
-- **Current Hackathon & Evaluation Baseline:** Docker Compose (FastAPI, Redis, RQ Worker, PostgreSQL/Supabase), Expo Native Development Client (Android / Test Store)
+- **Current Hackathon & Evaluation Baseline:** Docker Compose (FastAPI, Redis, RQ Worker) + Supabase PostgreSQL/Auth/Storage + Expo Native Android Development Client + RevenueCat Test Store.
 - **Future Production Roadmap:** Managed Cloud Containers (Cloud Run / Render), Expo EAS Standalone Builds, Supabase Cloud, Optional Next.js Web Deployment
 
 ---
@@ -11,23 +11,23 @@
 ## 1. Deployment Models
 
 ### 1.1 Current Hackathon Demonstration Model (Canonical)
-For evaluator reproduction and hackathon judging, the entire stack runs locally and containerized without external commercial dependencies:
+For evaluator reproduction and hackathon judging, the backend runtime is orchestrated locally with Docker Compose, the mobile application runs as a native Expo Android development client, and configured Supabase, Gemini, and RevenueCat Test Store services provide managed data, AI, and subscription capabilities:
 - **Backend & Worker:** Docker Compose orchestrating FastAPI, Redis, and RQ Worker.
 - **Mobile Client:** Expo SDK 54 Native Android Development Client (`npx expo run:android` / `npx expo start --dev-client`).
 - **RevenueCat Sandbox:** RevenueCat Test Store via public SDK key (`EXPO_PUBLIC_REVENUECAT_API_KEY`) with zero Play Store / App Store console overhead.
 
 ### 1.2 Future Production Target Matrix
 
-| Application Component | Target Platform | Deployment Strategy | Responsible Engineer |
+| Application Component | Target Platform | Deployment Strategy | Notes |
 | :--- | :--- | :--- | :--- |
-| **Mobile Application** | Expo Application Services (EAS) | Standalone iOS & Android App Store Builds | Selen |
-| **Backend Gateway** | Managed Docker Host (Cloud Run / Render) | Containerized FastAPI Docker Build | Mohammad |
-| **Background Worker** | Managed Docker Host / Worker Service | Containerized RQ Worker Docker Build | Mohammad |
-| **Database & Vector DB** | Supabase Cloud | Managed PostgreSQL 17 (`pgvector`) | Mohammad |
-| **Authentication & Auth** | Supabase Auth | Managed Supabase Identity Provider | Mohammad |
-| **Object Storage** | Supabase Storage | Private Bucket (`cvs`, `avatars`) | Mohammad |
-| **Redis Queue** | Managed Redis (Upstash / Redis Cloud) | Managed Redis Instance | Mohammad |
-| **Landing Page (Optional)** | Vercel | Native Next.js Git Deployment | Selen |
+| **Mobile Application** | Expo Application Services (EAS) | Standalone iOS & Android App Store Builds | Native store binaries with production RevenueCat keys |
+| **Backend Gateway** | Managed Docker Host (Cloud Run / Render) | Containerized FastAPI Docker Build | Horizontally scalable stateless API service |
+| **Background Worker** | Managed Docker Host / Worker Service | Containerized RQ Worker Docker Build | Asynchronous document parsing and match processing |
+| **Database & Vector DB** | Supabase Cloud | Managed PostgreSQL + `pgvector` (repository migrations target PostgreSQL 15+ compatibility) | Relational database with vector search |
+| **Authentication & Auth** | Supabase Auth | Managed Supabase Identity Provider | User session management and JWT authentication |
+| **Object Storage** | Supabase Storage | Configured storage buckets (`cvs`, `avatars`); repository script provisions `avatars`, while CV storage is configured separately | Private object storage boundary for candidate files |
+| **Redis Queue** | Managed Redis (Upstash / Redis Cloud) | Managed Redis Instance | Distributed message queue for background jobs |
+| **Landing Page (Optional)** | Vercel | Native Next.js Git Deployment | Marketing and product overview web client (scaffold) |
 
 ---
 
@@ -99,14 +99,13 @@ The mobile application defines two internal APK build profiles in `apps/mobile/e
    - `005_add_avatar_storage_path.sql`
    - `006_add_saved_internships.sql`
    - `007_add_application_status_events.sql`
-2. **Cloud Migration Execution:**
-   ```bash
-   # Link project
-   supabase link --project-ref <SUPABASE_PROJECT_REF>
-   
-   # Apply ordered migrations to production database
-   supabase db push
-   ```
+   - `008_add_internship_employer_ownership.sql`
+   - `009_add_internship_lifecycle_status.sql`
+   - `010_add_application_interview_schedule.sql`
+2. **Migration Execution:**
+   - Apply the versioned SQL migration files in numeric order (`001` through `010`) against the target Supabase PostgreSQL environment or an equivalent PostgreSQL migration execution workflow.
+   - After the ordered schema migrations, apply `database/supabase_storage_setup.sql` for the repository-managed private `avatars` bucket and its policies; provision/configure the CV bucket separately through `CV_STORAGE_BUCKET`.
+   - Migration execution credentials and database secrets remain server-side and must never be embedded in client applications.
 
 ---
 
@@ -130,7 +129,7 @@ The mobile application defines two internal APK build profiles in `apps/mobile/e
 
 1. **Provision Environment Variables:** Configure `.env` (`SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `GEMINI_API_KEY`, etc.).
 2. **Validate Configuration:** Automatic validation occurs on application and worker startup.
-3. **Apply Migrations:** Execute `001`–`007` SQL scripts.
+3. **Apply Migrations:** Execute versioned migrations `001` through `010` in numeric order, then apply `database/supabase_storage_setup.sql` for the repository-managed `avatars` bucket/policies and separately configure CV storage through `CV_STORAGE_BUCKET`.
 4. **Seed Curated Listings:** Execute `python scripts/seed_internships.py`.
 5. **Start Redis & RQ Worker:** Launch background worker service.
 6. **Start API Server:** Launch FastAPI backend (`uvicorn app.main:app`).
@@ -149,7 +148,7 @@ The mobile application defines two internal APK build profiles in `apps/mobile/e
 
 ### 7.2 Future Live Store Production Setup
 When preparing for commercial App Store and Google Play publication:
-1. **Apple App Store Connect:** Link In-App Purchase Shared Secret or App Store Connect API Key in RevenueCat dashboard.
-2. **Google Play Console:** Link Service Account JSON key with Financial access.
-3. **Store Subscriptions:** Configure matching store subscriptions in App Store Connect and Google Play Console.
-4. **Production Keys:** Inject platform-specific production SDK keys during production EAS build workflows.
+1. **Store Integrations:** Configure the required App Store Connect and Google Play integrations in RevenueCat according to the production store requirements active at deployment time.
+2. **Store Products:** Configure corresponding production subscription products and map them to the canonical RevenueCat offering, package, and entitlement contract.
+3. **Production SDK Keys:** Inject the appropriate public production RevenueCat SDK keys through the production EAS build environment.
+4. **Credential Isolation:** Store-management credentials, private API keys, and merchant configuration must remain outside client code and public repository content.
