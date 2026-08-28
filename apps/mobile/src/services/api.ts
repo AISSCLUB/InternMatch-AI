@@ -1,7 +1,42 @@
+import Constants from 'expo-constants';
 import { supabase } from '../lib/supabase';
 import { normalizeLocale, DEFAULT_LOCALE } from '../localization/i18n';
 
-const apiBaseUrl = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
+function resolveExpoDevelopmentHost(): string | null {
+  const hostUri = Constants.expoConfig?.hostUri?.trim();
+
+  if (!hostUri) {
+    return null;
+  }
+
+  try {
+    const normalizedHostUri = hostUri.includes('://')
+      ? hostUri
+      : `http://${hostUri}`;
+
+    return new URL(normalizedHostUri).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveApiBaseUrl(): string {
+  const configuredApiBaseUrl = (
+    process.env.EXPO_PUBLIC_API_URL ?? ''
+  ).replace(/\/+$/, '');
+
+  if (__DEV__) {
+    const developmentHost = resolveExpoDevelopmentHost();
+
+    if (developmentHost) {
+      return `http://${developmentHost}:8000/api/v1`;
+    }
+  }
+
+  return configuredApiBaseUrl;
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 
 export class ApiError extends Error {
   status: number;
@@ -756,6 +791,17 @@ export async function submitApplication(
     {
       method: 'POST',
       body: payload ? JSON.stringify(payload) : JSON.stringify({}),
+    }
+  );
+}
+
+export async function discardApplicationDraft(
+  applicationId: string
+): Promise<void> {
+  await apiRequest<void>(
+    `/applications/${encodeURIComponent(applicationId)}`,
+    {
+      method: 'DELETE',
     }
   );
 }

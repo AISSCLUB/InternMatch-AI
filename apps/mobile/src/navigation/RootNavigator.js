@@ -30,27 +30,76 @@ import {
   isPasswordRecoveryUrl,
   consumePasswordRecoveryUrl,
 } from '../services/passwordRecovery';
+import { EMAIL_CONFIRMATION_REDIRECT_URL } from '../services/auth';
 import { useProfile } from '../context/ProfileContext';
 
 const Stack = createNativeStackNavigator();
 
 export const navigationRef = createNavigationContainerRef();
 
+function isEmailConfirmationUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+
+  const normalizedUrl = url.trim().toLowerCase();
+  const expectedUrl = EMAIL_CONFIRMATION_REDIRECT_URL.toLowerCase();
+
+  return (
+    normalizedUrl === expectedUrl ||
+    normalizedUrl.startsWith(`${expectedUrl}?`) ||
+    normalizedUrl.startsWith(`${expectedUrl}#`)
+  );
+}
+
 export default function RootNavigator() {
   const lastProcessedUrlRef = useRef(null);
   const currentProcessingIdRef = useRef(0);
   const { clearProfile } = useProfile();
   const [initialRecoveryParams, setInitialRecoveryParams] = useState(null);
+  const [initialEmailConfirmed, setInitialEmailConfirmed] = useState(false);
   const [initialUrlResolved, setInitialUrlResolved] = useState(false);
 
   const handleIncomingUrl = useCallback(async (url, navigate = true) => {
     if (!url || typeof url !== 'string') return;
-    if (!isPasswordRecoveryUrl(url)) return;
+
+    const isRecoveryUrl = isPasswordRecoveryUrl(url);
+    const isConfirmationUrl = isEmailConfirmationUrl(url);
+
+    if (!isRecoveryUrl && !isConfirmationUrl) return;
 
     if (lastProcessedUrlRef.current === url) {
       return;
     }
     lastProcessedUrlRef.current = url;
+
+    if (isConfirmationUrl) {
+      if (!navigate) {
+        return { emailConfirmed: true };
+      }
+
+      const navigateToSignIn = () => {
+        if (navigationRef.isReady()) {
+          navigationRef.reset({
+            index: 0,
+            routes: [{ name: 'SignIn' }],
+          });
+        }
+      };
+
+      if (navigationRef.isReady()) {
+        navigateToSignIn();
+      } else {
+        const intervalId = setInterval(() => {
+          if (navigationRef.isReady()) {
+            clearInterval(intervalId);
+            navigateToSignIn();
+          }
+        }, 50);
+
+        setTimeout(() => clearInterval(intervalId), 4000);
+      }
+
+      return { emailConfirmed: true };
+    }
 
     const processingId = ++currentProcessingIdRef.current;
 
@@ -140,6 +189,12 @@ export default function RootNavigator() {
           if (isMounted && params) {
             setInitialRecoveryParams(params);
           }
+        } else if (initialUrl && isEmailConfirmationUrl(initialUrl)) {
+          const result = await handleIncomingUrl(initialUrl, false);
+
+          if (isMounted && result?.emailConfirmed === true) {
+            setInitialEmailConfirmed(true);
+          }
         }
       })
       .catch(() => {})
@@ -167,8 +222,23 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef} onReady={() => setInitialRecoveryParams(null)}>
-      <Stack.Navigator initialRouteName={initialRecoveryParams ? "ResetPassword" : "Splash"} screenOptions={{ headerShown: false }}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        setInitialRecoveryParams(null);
+        setInitialEmailConfirmed(false);
+      }}
+    >
+      <Stack.Navigator
+        initialRouteName={
+          initialRecoveryParams
+            ? 'ResetPassword'
+            : initialEmailConfirmed
+              ? 'SignIn'
+              : 'Splash'
+        }
+        screenOptions={{ headerShown: false }}
+      >
         {/* Auth flow */}
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="SignIn" component={SignInScreen} />

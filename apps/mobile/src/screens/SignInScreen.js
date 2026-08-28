@@ -197,11 +197,68 @@ export default function SignInScreen({ navigation, route }) {
   };
 
   const handleGoogle = async () => {
+    if (loading) return;
+
+    setLoading(true);
+
     try {
-      await signInWithGoogle();
-      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
-    } catch (e) {
-      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
+      const result = await signInWithGoogle();
+
+      if (result.cancelled) {
+        return;
+      }
+
+      const session = result.session;
+
+      if (!session?.access_token) {
+        throw new Error(t('errors.unauthorized'));
+      }
+
+      setPendingConfirmationEmail('');
+
+      const syncResult = await syncAuthenticatedUser();
+
+      if (syncResult.has_profile) {
+        await refreshProfile();
+        navigation.replace('MainTabs');
+        return;
+      }
+
+      const meta = session.user?.user_metadata || {};
+
+      const metaName =
+        typeof meta.full_name === 'string'
+          ? meta.full_name.trim()
+          : typeof meta.name === 'string'
+            ? meta.name.trim()
+            : '';
+
+      if (metaName) {
+        const created = await upsertProfile({
+          full_name: metaName,
+          headline: null,
+          preferences: {
+            account_type: 'intern',
+            department: null,
+          },
+        });
+
+        setProfile(created);
+        navigation.replace('MainTabs');
+        return;
+      }
+
+      navigation.replace('OnboardingProfile');
+    } catch (error) {
+      console.warn('Google sign-in failed:', error);
+      haptics.error();
+
+      Alert.alert(
+        t('auth.googleSignIn'),
+        t('errors.authSignInFailed')
+      );
+    } finally {
+      setLoading(false);
     }
   };
 

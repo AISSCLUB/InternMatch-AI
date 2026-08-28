@@ -5,6 +5,8 @@ import {
 } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+export const EMAIL_CONFIRMATION_REDIRECT_URL = 'internmatch://auth-confirmed';
+
 export type SignUpMetadata = {
   full_name?: string;
   department?: string;
@@ -71,18 +73,24 @@ export async function signUpWithEmail(
   return await supabase.auth.signUp({
     email,
     password,
-    options: metadata ? { data: metadata } : undefined,
+    options: {
+      ...(metadata ? { data: metadata } : {}),
+      emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL,
+    },
   });
 }
 
 /**
  * Resend the signup confirmation email to the specified user email address.
- * Uses pure Supabase auth.resend without custom redirect URL.
+ * Uses the canonical InternMatch signup confirmation redirect.
  */
 export async function resendSignupConfirmation(email: string) {
   return await supabase.auth.resend({
     type: 'signup',
     email,
+    options: {
+      emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL,
+    },
   });
 }
 

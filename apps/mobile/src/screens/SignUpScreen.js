@@ -41,7 +41,7 @@ export default function SignUpScreen({ navigation }) {
   const [department, setDepartment] = useState('');
   const [focusedField, setFocusedField] = useState(null);
   const [loading, setLoading] = useState(false);
-  const { setProfile } = useProfile();
+  const { refreshProfile, setProfile } = useProfile();
 
   const handleCreateAccount = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -123,11 +123,70 @@ export default function SignUpScreen({ navigation }) {
   };
 
   const handleGoogle = async () => {
+    if (loading) return;
+
+    setLoading(true);
+
     try {
-      await signInWithGoogle();
-      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
-    } catch (e) {
-      Alert.alert(t('auth.googleSignIn'), t('auth.googleNotAvailable'));
+      const result = await signInWithGoogle();
+
+      if (result.cancelled) {
+        return;
+      }
+
+      const session = result.session;
+
+      if (!session?.access_token) {
+        throw new Error(t('errors.unauthorized'));
+      }
+
+      const syncResult = await syncAuthenticatedUser();
+
+      if (syncResult.has_profile) {
+        await refreshProfile();
+        navigation.replace('MainTabs');
+        return;
+      }
+
+      const normalizedName = fullName.trim();
+      const normalizedDepartment = department.trim();
+      const meta = session.user?.user_metadata || {};
+
+      const googleName =
+        typeof meta.full_name === 'string'
+          ? meta.full_name.trim()
+          : typeof meta.name === 'string'
+            ? meta.name.trim()
+            : '';
+
+      const canonicalName = normalizedName || googleName;
+
+      if (!canonicalName) {
+        navigation.replace('OnboardingProfile');
+        return;
+      }
+
+      const createdProfile = await upsertProfile({
+        full_name: canonicalName,
+        headline: null,
+        preferences: {
+          account_type: accountType,
+          department: normalizedDepartment || null,
+        },
+      });
+
+      setProfile(createdProfile);
+      navigation.replace('MainTabs');
+    } catch (error) {
+      console.warn('Google sign-up failed:', error);
+      haptics.error();
+
+      Alert.alert(
+        t('auth.googleSignIn'),
+        t('errors.authSignUpFailed')
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
