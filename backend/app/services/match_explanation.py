@@ -331,6 +331,132 @@ def get_or_create_match_explanation(
             ),
         )
 
+    def _build_deterministic_fallback_response() -> MatchExplanationResponse:
+        """
+        Provider-independent, strictly grounded fallback.
+
+        Uses only canonical persisted match score and canonical skill-gap lists.
+        It never invents candidate, employer, or internship facts and never
+        mutates the database.
+        """
+        score = match.overall_score
+        matched = [str(item).strip() for item in matching_skills if str(item).strip()]
+        missing = [str(item).strip() for item in missing_skills if str(item).strip()]
+
+        matched_text = ", ".join(matched)
+        missing_text = ", ".join(missing)
+
+        if content_locale == "ar":
+            if matched:
+                why_you_match = (
+                    f"\u062f\u0631\u062c\u0629 \u062a\u0648\u0627\u0641\u0642\u0643 "
+                    f"\u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0647\u064a {score}%. "
+                    f"\u0645\u0646 \u0627\u0644\u0645\u0647\u0627\u0631\u0627\u062a "
+                    f"\u0627\u0644\u0645\u062a\u0648\u0627\u0641\u0642\u0629: {matched_text}."
+                )
+            else:
+                why_you_match = (
+                    f"\u062f\u0631\u062c\u0629 \u0627\u0644\u062a\u0648\u0627\u0641\u0642 "
+                    f"\u0627\u0644\u062d\u0627\u0644\u064a\u0629 \u0647\u064a {score}%. "
+                    "\u0644\u0645 \u064a\u062a\u0645 \u062a\u062d\u062f\u064a\u062f "
+                    "\u0645\u0647\u0627\u0631\u0627\u062a "
+                    "\u0645\u062a\u0637\u0627\u0628\u0642\u0629 "
+                    "\u0645\u062d\u062f\u062f\u0629 \u0641\u064a "
+                    "\u0628\u064a\u0627\u0646\u0627\u062a "
+                    "\u0627\u0644\u062a\u0648\u0627\u0641\u0642."
+                )
+
+            if missing:
+                summary = (
+                    "\u0627\u0644\u0645\u0647\u0627\u0631\u0627\u062a "
+                    f"\u0627\u0644\u062a\u064a \u062a\u062d\u062a\u0627\u062c "
+                    f"\u0625\u0644\u0649 \u062a\u0637\u0648\u064a\u0631: {missing_text}."
+                )
+                recommendations = [
+                    f"\u0631\u0643\u0651\u0632 \u0639\u0644\u0649 \u062a\u0637\u0648\u064a\u0631 "
+                    f"\u062e\u0628\u0631\u0629 \u0639\u0645\u0644\u064a\u0629 \u0641\u064a {skill}."
+                    for skill in missing[:3]
+                ]
+            else:
+                summary = (
+                    "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0647\u0627\u0631\u0627\u062a "
+                    "\u0646\u0627\u0642\u0635\u0629 \u0645\u062d\u062f\u062f\u0629 "
+                    "\u0641\u064a \u0628\u064a\u0627\u0646\u0627\u062a "
+                    "\u0627\u0644\u062a\u0648\u0627\u0641\u0642."
+                )
+                recommendations = [
+                    "\u0627\u0633\u062a\u0639\u062f \u0644\u0634\u0631\u062d "
+                    "\u0623\u0645\u062b\u0644\u0629 \u0639\u0645\u0644\u064a\u0629 "
+                    "\u062a\u0648\u0636\u062d \u0643\u064a\u0641 "
+                    "\u0627\u0633\u062a\u062e\u062f\u0645\u062a "
+                    "\u0645\u0647\u0627\u0631\u0627\u062a\u0643 "
+                    "\u0641\u064a \u0645\u0634\u0627\u0631\u064a\u0639 "
+                    "\u062d\u0642\u064a\u0642\u064a\u0629."
+                ]
+
+        elif content_locale == "tr":
+            if matched:
+                why_you_match = (
+                    f"Mevcut uyum puan\u0131n\u0131z %{score}. "
+                    f"E\u015fle\u015fen becerileriniz aras\u0131nda {matched_text} bulunuyor."
+                )
+            else:
+                why_you_match = (
+                    f"Mevcut uyum puan\u0131n\u0131z %{score}. "
+                    "E\u015fle\u015fme verilerinde belirli bir "
+                    "e\u015fle\u015fen beceri listelenmedi."
+                )
+
+            if missing:
+                summary = f"Geli\u015ftirmeniz gereken beceriler: {missing_text}."
+                recommendations = [
+                    f"{skill} konusunda uygulamal\u0131 deneyim geli\u015ftirmeye odaklan\u0131n."
+                    for skill in missing[:3]
+                ]
+            else:
+                summary = "E\u015fle\u015fme verilerinde belirli bir eksik beceri bulunmuyor."
+                recommendations = [
+                    "Mevcut becerilerinizi ger\u00e7ek proje "
+                    "\u00f6rnekleriyle a\u00e7\u0131klamaya "
+                    "haz\u0131rlan\u0131n."
+                ]
+
+        else:
+            if matched:
+                why_you_match = (
+                    f"Your current match score is {score}%. "
+                    f"Your matching skills include {matched_text}."
+                )
+            else:
+                why_you_match = (
+                    f"Your current match score is {score}%. "
+                    "No specific matching skills are listed in the canonical match data."
+                )
+
+            if missing:
+                summary = f"Skills to develop: {missing_text}."
+                recommendations = [
+                    f"Build practical experience with {skill}."
+                    for skill in missing[:3]
+                ]
+            else:
+                summary = "No specific missing skills are listed in the canonical match data."
+                recommendations = [
+                    "Prepare concrete project examples that demonstrate your current strengths."
+                ]
+
+        return MatchExplanationResponse(
+            match_id=match.id,
+            overall_score=match.overall_score,
+            why_you_match=why_you_match,
+            matching_skills=matching_skills,
+            missing_skills=missing_skills,
+            skill_gap_analysis=SkillGapAnalysisResponse(
+                summary=summary,
+                recommendations=recommendations,
+            ),
+        )
+
     # -----------------------------------------------------------------------
     # 1. ENGLISH LOCALE PATH (Preserve DB persistence behavior)
     # -----------------------------------------------------------------------
@@ -500,7 +626,7 @@ def get_or_create_match_explanation(
             )
             if has_valid_english_db_cache:
                 return _build_canonical_english_response()
-            raise ValueError("Match explanation service is temporarily unavailable.")
+            return _build_deterministic_fallback_response()
     except ValueError:
         raise
     except Exception as redis_err:
@@ -584,7 +710,7 @@ def get_or_create_match_explanation(
             pass
         if has_valid_english_db_cache:
             return _build_canonical_english_response()
-        raise ValueError(f"Failed to generate match explanation: {gen_err}") from gen_err
+        return _build_deterministic_fallback_response()
 
     # E. Store localized narrative in Redis (NO DB MUTATION!)
     payload = LocalizedMatchExplanationPayload(

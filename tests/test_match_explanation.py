@@ -1538,3 +1538,222 @@ def test_match_explanation_context_hash_changes_when_authoritative_context_chang
 
     assert first_hash == identical_hash
     assert first_hash != changed_hash
+def test_get_match_explanation_ar_provider_failure_without_english_cache_returns_grounded_fallback(
+    client: TestClient, monkeypatch
+):
+    """Provider outage must not make Why Me unavailable when canonical match data exists."""
+    from google.genai.errors import ServerError
+
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(
+            id=uuid4(),
+            user_id=user_id,
+            full_name="Fallback Candidate",
+        )
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="Fallback Co",
+            location="Remote",
+            work_type="remote",
+            description="Backend work.",
+            required_skills=["Python", "Redis"],
+            preferred_skills=[],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=82,
+            skill_score=82,
+            vector_score=82,
+            attribute_score=82,
+            why_you_match=None,
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": ["Redis"],
+                "summary": "",
+                "recommendations": [],
+            },
+        )
+        db.add(match)
+        db.commit()
+        target_match_id = match.id
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    gemini_mock = MagicMock(
+        side_effect=ServerError(
+            503,
+            {
+                "error": {
+                    "code": 503,
+                    "message": "High demand",
+                    "status": "UNAVAILABLE",
+                }
+            },
+            None,
+        )
+    )
+
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=ar",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["overall_score"] == 82
+    assert data["matching_skills"] == ["Python"]
+    assert data["missing_skills"] == ["Redis"]
+    assert "82" in data["why_you_match"]
+    assert "Python" in data["why_you_match"]
+    assert "Redis" in data["skill_gap_analysis"]["summary"]
+    assert gemini_mock.call_count == 1
+
+
+def test_get_match_explanation_active_sentinel_without_english_cache_returns_grounded_fallback(
+    client: TestClient, monkeypatch
+):
+    """Active provider sentinel must return canonical-data fallback without another Gemini call."""
+    from app.services.match_explanation import (
+        CACHE_VERSION,
+        compute_match_explanation_context_hash,
+    )
+
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(
+            id=uuid4(),
+            user_id=user_id,
+            full_name="Sentinel Candidate",
+        )
+        db.add(profile)
+        db.flush()
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="Sentinel Co",
+            location="Remote",
+            work_type="remote",
+            description="Backend work.",
+            required_skills=["Python", "Redis"],
+            preferred_skills=[],
+        )
+        db.add(listing)
+        db.flush()
+
+        match = Match(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            overall_score=82,
+            skill_score=82,
+            vector_score=82,
+            attribute_score=82,
+            why_you_match=None,
+            skill_gap_analysis={
+                "matching_skills": ["Python"],
+                "missing_skills": ["Redis"],
+                "summary": "",
+                "recommendations": [],
+            },
+        )
+        db.add(match)
+        db.commit()
+
+        target_match_id = match.id
+        profile_id = profile.id
+    finally:
+        db.close()
+
+    db = TestingSessionLocal()
+    try:
+        profile = db.query(StudentProfile).filter(StudentProfile.id == profile_id).one()
+
+        candidate_skills = []
+
+        exact_hash = compute_match_explanation_context_hash(
+            match_id=target_match_id,
+            overall_score=82,
+            matching_skills=["Python"],
+            missing_skills=["Redis"],
+            candidate_skills=candidate_skills,
+            education_entries=[],
+            experience_entries=[],
+            project_entries=[],
+            candidate_name="Sentinel Candidate",
+            candidate_headline=None,
+            internship_title="Backend Intern",
+            internship_company="Sentinel Co",
+            internship_location="Remote (remote)",
+            internship_description="Backend work.",
+            internship_required_skills=["Python", "Redis"],
+            internship_preferred_skills=[],
+        )
+    finally:
+        db.close()
+
+    fake_redis = FakeMatchExplanationRedis()
+
+    sentinel_key = (
+        f"internmatch:i18n:match-explanation:{CACHE_VERSION}:failure:"
+        f"{target_match_id}:ar:{exact_hash}"
+    )
+
+    fake_redis.store[sentinel_key] = "1"
+
+    monkeypatch.setattr(
+        "app.services.match_explanation._get_redis_client",
+        lambda: fake_redis,
+    )
+
+    gemini_mock = MagicMock()
+
+    monkeypatch.setattr(
+        "app.services.match_explanation.generate_grounded_match_explanation",
+        gemini_mock,
+    )
+
+    response = client.get(
+        f"/api/v1/matches/{target_match_id}/explanation?content_locale=ar",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["overall_score"] == 82
+    assert data["matching_skills"] == ["Python"]
+    assert data["missing_skills"] == ["Redis"]
+    assert "82" in data["why_you_match"]
+    assert "Python" in data["why_you_match"]
+    assert "Redis" in data["skill_gap_analysis"]["summary"]
+    gemini_mock.assert_not_called()
