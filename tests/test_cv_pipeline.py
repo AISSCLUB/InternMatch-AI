@@ -770,7 +770,10 @@ def test_validate_cv_document_plausible_cv_passes(monkeypatch):
     mock_client.models.generate_content.return_value = mock_response
 
     monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
-
+    monkeypatch.setattr(
+        "app.core.config.settings.GEMINI_API_KEY",
+        "gemini-valid-test-key",
+    )
     sample_cv = (
         "Jane Doe\n"
         "jane.doe@university.edu\n"
@@ -795,7 +798,10 @@ def test_validate_cv_document_unrelated_text_rejected_by_semantic_classifier(mon
     mock_client.models.generate_content.return_value = mock_response
 
     monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
-
+    monkeypatch.setattr(
+        "app.core.config.settings.GEMINI_API_KEY",
+        "gemini-valid-test-key",
+    )
     invoice_text = (
         "INVOICE #98765\n"
         "Billed To: ACME Corporation\n"
@@ -819,7 +825,10 @@ def test_validate_cv_document_low_confidence_rejected(monkeypatch):
     mock_client.models.generate_content.return_value = mock_response
 
     monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
-
+    monkeypatch.setattr(
+        "app.core.config.settings.GEMINI_API_KEY",
+        "gemini-valid-test-key",
+    )
     text = "Some random text fragment discussing computer programming and software development."
     with pytest.raises(InvalidCVDocumentError):
         validate_cv_document(text, content_locale="en")
@@ -831,7 +840,10 @@ def test_validate_cv_document_provider_error_raises_service_error(monkeypatch):
     mock_client.models.generate_content.side_effect = RuntimeError("API connection timeout")
 
     monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
-
+    monkeypatch.setattr(
+        "app.core.config.settings.GEMINI_API_KEY",
+        "gemini-valid-test-key",
+    )
     text = "Jane Doe Computer Science Student Resume Python SQL"
     with pytest.raises(CVValidationServiceError, match="LLM classification service error"):
         validate_cv_document(text, content_locale="en")
@@ -845,7 +857,10 @@ def test_validate_cv_document_turkish_and_arabic_supported(monkeypatch):
     mock_client.models.generate_content.return_value = mock_response
 
     monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
-
+    monkeypatch.setattr(
+        "app.core.config.settings.GEMINI_API_KEY",
+        "gemini-valid-test-key",
+    )
     turkish_cv = (
         "Ahmet Yılmaz\n"
         "Özgeçmiş\n"
