@@ -125,11 +125,63 @@ export async function consumePasswordRecoveryUrl(
     };
   }
 
+  const tokenHash = params.token_hash;
+  const recoveryType = params.type;
   const code = params.code;
   const accessToken = params.access_token;
   const refreshToken = params.refresh_token;
 
-  // 2. PKCE recovery flow: code present
+  // 2. Token-hash recovery flow: verify the one-time credential
+  // directly with Supabase and establish an authenticated session.
+  if (tokenHash) {
+    if (recoveryType !== 'recovery') {
+      return {
+        status: 'expired_or_invalid',
+        error: 'Invalid recovery type',
+      };
+    }
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: 'recovery',
+      });
+
+      if (error) {
+        const errorMsg = error.message?.toLowerCase() || '';
+
+        if (
+          errorMsg.includes('expired') ||
+          errorMsg.includes('invalid') ||
+          errorMsg.includes('token') ||
+          errorMsg.includes('otp')
+        ) {
+          return {
+            status: 'expired_or_invalid',
+            error: error.message,
+          };
+        }
+
+        return {
+          status: 'session_error',
+          error: error.message,
+        };
+      }
+
+      if (data?.session?.access_token && data?.user) {
+        return { status: 'success' };
+      }
+
+      return {
+        status: 'session_error',
+        error: 'Missing session or user after recovery verification',
+      };
+    } catch {
+      return { status: 'session_error' };
+    }
+  }
+
+  // 3. PKCE recovery flow: code present
   if (code) {
     try {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
@@ -156,7 +208,7 @@ export async function consumePasswordRecoveryUrl(
     }
   }
 
-  // 3. Implicit recovery flow: access_token + refresh_token
+  // 4. Implicit recovery flow: access_token + refresh_token
   if (accessToken) {
     // Never accept an access token without a refresh token
     if (!refreshToken) {
