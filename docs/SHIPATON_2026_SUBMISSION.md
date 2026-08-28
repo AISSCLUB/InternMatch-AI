@@ -43,7 +43,7 @@ InternMatch AI provides an intelligent, end-to-end candidate copilot:
 - [x] **Skill Gap Analysis:** Interactive explanation modals breaking down match strengths and missing competencies.
 - [x] **AI Cover Letter Generation:** Context-aware cover letter draft generator powered by Gemini AI.
 - [x] **Application Tracker:** Interactive timeline tracking application status progression.
-- [x] **RevenueCat Monetization Integration:** Pro Student candidate tier with Test Store in-app purchase flow and entitlement restoration.
+- [x] **RevenueCat Monetization Integration:** Pro Student candidate tier with Test Store in-app purchase flow and entitlement synchronization.
 - [x] **Multilingual UI:** Full internationalization in English (`en`), Turkish (`tr`), and Arabic (`ar`) with RTL support.
 
 ---
@@ -62,7 +62,7 @@ InternMatch AI implements a native RevenueCat monetization architecture:
 4. **Identity Synchronization:** RevenueCat App User ID is strictly bound to the authenticated Supabase user UUID (`session.user.id`). Identity transitions are guarded with generation counters to prevent cross-user entitlement leaks.
 5. **Dynamic Localization & Pricing:** Store package pricing is resolved dynamically from RevenueCat at runtime (`pkg.product.priceString`), supporting multi-currency and regional pricing without hardcoded strings.
 6. **Graceful Error & Cancellation Handling:** Differentiates between user cancellations (`PURCHASE_CANCELLED_ERROR`) and actual store failures to maintain seamless UX without intrusive error popups.
-7. **Entitlement Restoration:** One-tap **Restore Purchases** allows candidates to sync active subscriptions across devices.
+7. **Test Store Sandbox Workflow:** Fast, seamless in-app purchase demonstration without live merchant or console billing dependencies.
 
 ---
 
@@ -119,9 +119,9 @@ InternMatch AI was built by a two-person student team who experienced firsthand 
 - [ ] **[TODO] Public Repository URL:** Pinned public GitHub repository link.
 - [x] **Open-Source License:** Canonical MIT License present in repository root.
 - [ ] **[TODO] Public Demo Video:** Hosted on YouTube or Vimeo (unlisted or public, < 2 minutes).
-- [ ] **[TODO] App Store / Google Play Link:** *(Not applicable for pre-store development demo).*
+- [x] **Store Publication Exemption:** Next Gen student track entry (public store publishing exempt; native Test Store demo client verified).
 - [ ] **[TODO] High-Resolution App Icon:** `1024x1024` PNG asset without alpha channel.
 - [ ] **[TODO] Clean Mobile Screenshots:** `1179x2556` PNG screenshots showcasing Matchups, Why You Match, and Plans screens (without device frames).
 - [ ] **[TODO] Student Eligibility:** Valid student email associated with Devpost profile.
-- [ ] **[TODO] Runtime Test Store Purchase Acceptance:** End-to-end Android emulator / device Test Store purchase verification.
+- [x] **Runtime Test Store Purchase Acceptance:** End-to-end Android emulator / development client Test Store purchase verified and active.
 - [ ] **[TODO] Final Submission Commit / Tag:** Tagged release commit on GitHub.

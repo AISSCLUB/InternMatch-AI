@@ -103,42 +103,41 @@ npm run dev
 ```
 *Landing page will be accessible at `http://localhost:3000`.*
 
-### 3.5 RevenueCat Sandbox Development Setup (Engineer 2: Selen)
-The mobile app uses `react-native-purchases` for in-app subscription management in sandbox/test mode.
+### 3.5 RevenueCat Test Store Development Setup
+The mobile app uses `react-native-purchases` for in-app subscription management in Test Store mode.
 
-1. **Configure RevenueCat Project:**
-   - Create a project on the [RevenueCat Dashboard](https://app.revenuecat.com/).
-   - Define entitlement `internmatch_pro` and link to an offering containing a monthly/annual package.
-   - Configure StoreKit configuration file (`StoreKit.storekit`) for local iOS testing or Google Play Sandbox testing credentials for Android.
+1. **RevenueCat Canonical Identifiers:**
+   - Entitlement: `pro_student`
+   - Offering: `default`
+   - Package: `$rc_monthly`
+   - Product: `internmatch_pro_student_monthly`
 2. **Environment Configuration (`apps/mobile/.env`):**
    ```env
-   EXPO_PUBLIC_REVENUECAT_APPLE_KEY=appl_sandbox_key_here
-   EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY=goog_sandbox_key_here
+   EXPO_PUBLIC_REVENUECAT_API_KEY=test_your_public_api_key_here
    ```
 3. **Local Testing Execution:**
-   - On iOS Simulator: Use Xcode StoreKit configuration to test `$0.00` sandbox purchase of `internmatch_pro`.
-   - On Android Emulator: Use Google Play License Testing account to verify entitlement unlocking.
+   - Launch with the native Android development client: `npx expo run:android` or `npx expo start --dev-client`.
+   - Complete Test Store transactions in the Plans screen; entitlements update immediately in `CustomerInfo`.
+   - No Apple App Store Connect or Google Play Console billing setup is required for the hackathon Test Store workflow.
 
 ---
 
 ## 4. Development Conventions & Workflow Rules
 
-1. **Independent Frontend/Backend Operations:** Selen can develop UI components independently by relying on the defined endpoints in `docs/API_CONTRACT.md`.
+1. **Independent Frontend/Backend Operations:** Frontend components develop cleanly against the defined endpoints in `docs/API_CONTRACT.md`.
 2. **Database Schema Changes:** All database modifications must be saved as versioned SQL scripts in `database/migrations/` (e.g. `001_initial_schema.sql`).
 3. **No Hardcoded Secrets:** Never hardcode secrets, API keys, or private URLs in code. Always load from `.env`.
 4. **Git Branching Strategy:**
-   - `main`: Production-ready branch.
-   - `feature/backend-<feature>`: Backend work (Mohammad).
-   - `feature/frontend-<feature>`: Mobile/Landing UI work (Selen).
-
+   - `main`: Primary integration branch.
+   - `feature/<scope>-<description>`: Isolated feature branches.
 
 ---
 
 ## Current Mobile Runtime Notes
 
-- Current integrated mobile baseline uses Expo SDK 54.
-- Start Metro / Expo with: npm start
-- Start React Native Web for rapid desktop UI inspection with: npm run web
-- Expo Go is used for physical-device development smoke testing.
-- React Native Web is not a substitute for physical-device verification of native features.
-- Do not add newArchEnabled=false to app.json.
+- Current integrated mobile baseline uses Expo SDK 54 (`react-native` 0.81.5).
+- Start Metro in dev-client mode: `npx expo start --dev-client`.
+- Native RevenueCat billing requires a native development client build (`npx expo run:android`).
+- Standard Expo Go does not bundle native store billing modules.
+- React Native Web is available for rapid layout checks (`npm run web`), but native device/emulator execution is canonical for RevenueCat testing.
+- Do not add `newArchEnabled=false` to `app.json`.

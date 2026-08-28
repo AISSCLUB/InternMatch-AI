@@ -32,7 +32,7 @@ InternMatch AI delivers an end-to-end candidate copilot:
 - **AI Cover Letter Drafting:** Context-aware, tone-customizable application drafts generated using Gemini AI.
 - **Application Tracking:** Visual status timeline tracking progress across Applied, Interviewing, and Accepted stages.
 - **Multilingual UI:** Complete internationalization in English (`en`), Turkish (`tr`), and Arabic (`ar`) with dynamic RTL layout support.
-- **RevenueCat In-App Purchases:** Candidate monetization tier (**Pro Student**) featuring native RevenueCat subscription management, dynamic pricing, and purchase restoration.
+- **RevenueCat In-App Purchases:** Candidate monetization tier (**Pro Student**) featuring native RevenueCat Test Store subscription management, dynamic pricing, and instant entitlement activation.
 
 > [!NOTE]
 > **Employer Scope:** Candidate discovery, matching, and application workflows are fully functional. Employer workspace tools (job posting and applicant management) are currently presented in role-aware preview mode.
@@ -76,7 +76,7 @@ Monetization in InternMatch AI is built natively with the **RevenueCat React Nat
 - **Identity-Bound Lifecycle:** The RevenueCat App User ID is synchronized to the authenticated Supabase user UUID (`session.user.id`). Identity transitions are guarded with generation counters to prevent cross-user state leaks.
 - **Dynamic Pricing:** Plans Screen dynamically renders localized store package pricing (`pkg.product.priceString`) loaded at runtime from RevenueCat.
 - **Graceful Error Handling:** User cancellations (`PURCHASE_CANCELLED_ERROR`) are handled quietly without jarring error dialogs.
-- **Entitlement Restoration:** Seamless **Restore Purchases** flow synchronizes active entitlements across devices.
+- **Test Store Workflow:** The hackathon demonstration runs natively on the RevenueCat Test Store sandbox with zero merchant account or store console dependencies.
 
 ---
 
@@ -86,7 +86,7 @@ Monetization in InternMatch AI is built natively with the **RevenueCat React Nat
 flowchart TD
     subgraph Client["Client Layer"]
         Mobile["Expo React Native Mobile App<br/>(SDK 54 / React Native 0.81.5)"]
-        Web["Next.js Landing Page"]
+        Web["Next.js Web Client (Optional)"]
     end
 
     subgraph AuthMonetization["Auth & Monetization"]
@@ -108,8 +108,8 @@ flowchart TD
 
     Mobile -->|Bearer JWT| API
     Mobile -->|Auth Session| SupaAuth
-    Mobile -->|Purchase / Restore| RC
-    Web -->|Browse / Marketing| Mobile
+    Mobile -->|Purchase / Sync| RC
+    Web -.->|Future / Optional| Mobile
 
     API -->|Validate JWT| SupaAuth
     API -->|Enqueue Jobs| Redis
@@ -133,7 +133,7 @@ flowchart TD
 | **Background Processing** | Redis 7, Python RQ (Redis Queue), RapidFuzz (Skill Match) |
 | **Database & Vector Search** | PostgreSQL 17, `pgvector` (1536-dim embeddings), Row-Level Security (RLS) |
 | **AI & LLM Services** | Google Gemini (`gemini-3.5-flash`, `gemini-embedding-2`) via `google-genai` SDK |
-| **Web Landing Page** | Next.js 14, React 18, Tailwind CSS |
+| **Web Frontend (Optional)** | Next.js 14, React 18, Tailwind CSS |
 | **Infrastructure & CI** | Docker, Docker Compose, GitHub Actions, EAS Build |
 
 ---
@@ -144,14 +144,14 @@ flowchart TD
 .
 ├── apps/
 │   ├── mobile/             # React Native / Expo mobile application
-│   └── landing/            # Next.js marketing landing page
+│   └── landing/            # Next.js marketing landing page (optional)
 ├── backend/                # FastAPI application, routers, services, and models
 ├── database/               # SQL migrations, RLS policies, and seed data
 │   ├── migrations/         # Numbered schema migrations (001–007)
 │   └── seeds/              # Demo dataset scripts
 ├── docs/                   # System documentation, architecture, and security
 ├── scripts/                # Database seeding and management utilities
-├── tests/                  # Automated pytest test suite (31 test files)
+├── tests/                  # Automated pytest test suite (518+ unit, integration, and security tests)
 ├── worker/                 # RQ worker tasks (CV parsing, match calculation, cover letters)
 ├── docker-compose.yml      # Local container orchestration
 └── JUDGE_RUNBOOK.md        # Comprehensive judge reproduction guide
@@ -208,7 +208,7 @@ npx expo run:android
 Run the test suite and static analysis tools:
 
 ```bash
-# Run backend pytest suite (31 test files)
+# Run backend pytest suite
 python -m pytest
 
 # Run Python linter & code formatting check
@@ -241,7 +241,7 @@ For full vulnerability management and security architecture details, see **[docs
 - **[Database Schema](docs/DATABASE.md)** — Relational structure, RLS, and vector indexing
 - **[Security Policy](docs/SECURITY.md)** — Security controls and threat model
 - **[Development Guide](docs/DEVELOPMENT.md)** — Contributor guidelines and workflow
-- **[Deployment Runbook](docs/DEPLOYMENT.md)** — Production infrastructure specifications
+- **[Deployment Runbook](docs/DEPLOYMENT.md)** — Deployment models and infrastructure specifications
 
 ---
 

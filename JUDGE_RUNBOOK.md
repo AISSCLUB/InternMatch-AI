@@ -10,7 +10,7 @@ This runbook guides you through reproducing the full end-to-end system:
 1. **Infrastructure & Backend:** Dockerized FastAPI service, Redis task queue, Python RQ worker, and PostgreSQL with `pgvector`.
 2. **Database & AI Services:** Schema migrations, demo internship datasets, semantic vector search, and Gemini AI application generation.
 3. **Cross-Platform Mobile Client:** Expo SDK 54 / React Native client running on the Android Emulator or physical device.
-4. **RevenueCat In-App Purchases:** Native RevenueCat Test Store integration demonstrating Candidate **Pro Student** subscription flow, RevenueCat CustomerInfo entitlement updates, dynamic pricing, and purchase restoration.
+4. **RevenueCat In-App Purchases:** Native RevenueCat Test Store integration demonstrating Candidate **Pro Student** subscription flow, RevenueCat CustomerInfo entitlement updates, dynamic pricing, and instant tier activation.
 
 ---
 
@@ -47,12 +47,12 @@ The repository structure:
 .
 ├── apps/
 │   ├── mobile/             # React Native / Expo SDK 54 mobile application
-│   └── landing/            # Next.js web landing page
+│   └── landing/            # Next.js web landing page (optional)
 ├── backend/                # FastAPI application & core domain logic
 ├── database/               # SQL migrations, RLS policies, and seed data
 ├── docs/                   # System architecture, API contracts, and security guides
 ├── scripts/                # Utility scripts (internship seeding)
-├── tests/                  # Pytest test suite (31 test files)
+├── tests/                  # Pytest test suite (518+ tests)
 ├── worker/                 # Python RQ background job workers
 └── docker-compose.yml      # Orchestration for backend, worker, redis, and postgres
 ```
@@ -269,7 +269,7 @@ Follow this workflow in the mobile app to evaluate features:
    - Verify dynamic pricing is loaded from RevenueCat (e.g., `$4.99 / month`).
    - Tap **Upgrade to Pro** -> Complete Test Store transaction.
    - Observe entitlement state update: `CustomerInfo` updates `pro_student` to active, Pro Student becomes the current plan, and PlanBadge reflects Pro status.
-   - Tap **Restore Purchases** to test receipt validation and state recovery from RevenueCat.
+   - *Note on Test Store Behavior:* Test Store subscriptions use accelerated test renewal cycles and expire quickly by design. In Test Store mode, store receipt restoration is disabled as direct sandbox purchases provide instantaneous entitlement activation.
 
 ---
 
@@ -282,7 +282,7 @@ Follow this workflow in the mobile app to evaluate features:
 
 ## 14. Running Automated Tests
 
-### Backend Unit & Integration Tests (31 test files)
+### Backend Unit & Integration Tests
 ```bash
 python -m pytest
 ```
