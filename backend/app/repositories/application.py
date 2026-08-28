@@ -197,6 +197,19 @@ class ApplicationRepository:
         return new_app
 
     @staticmethod
+    def delete(
+        db: Session,
+        application: Application,
+    ) -> None:
+        """
+        Delete an Application row.
+        Caller is responsible for enforcing ownership and lifecycle rules.
+        Performs db.flush() but does NOT commit or rollback.
+        """
+        db.delete(application)
+        db.flush()
+
+    @staticmethod
     def list_applicants_for_employer_internship(
         db: Session,
         internship_id: UUID,

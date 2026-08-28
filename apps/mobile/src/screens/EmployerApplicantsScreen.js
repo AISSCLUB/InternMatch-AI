@@ -298,7 +298,10 @@ export default function EmployerApplicantsScreen({ route, navigation }) {
                     <View style={[styles.cardFooter, isRTL && styles.rowRTL]}>
                       <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
                         <Text style={[styles.statusPillText, { color: statusStyle.fg }]}>
-                          {item.status}
+                          {t(
+                            `applicationStatusLabels.${item.status}`,
+                            item.status
+                          )}
                         </Text>
                       </View>
 

@@ -1003,3 +1003,120 @@ def test_post_applications_generate_rate_limited_returns_429(client: TestClient,
         assert len(jobs) == 0
     finally:
         db.close()
+
+# ---------------------------------------------------------------------------
+# QA-4C ? DISCARD SAVED APPLICATION DRAFT
+# ---------------------------------------------------------------------------
+
+
+def _create_application_for_discard_test(*, user_id, status_value="saved"):
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(
+            id=uuid4(),
+            user_id=user_id,
+            full_name="Discard Test Candidate",
+        )
+        db.add(profile)
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="Discard Test Co",
+            location="Remote",
+            work_type="remote",
+            description="Test internship for draft discard behavior.",
+        )
+        db.add(listing)
+        db.flush()
+
+        application = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            status=status_value,
+            generated_cover_letter="Generated draft that may be discarded.",
+        )
+        db.add(application)
+        db.commit()
+
+        return application.id
+    finally:
+        db.close()
+
+
+def test_owner_can_discard_saved_application_draft(client: TestClient):
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+    application_id = _create_application_for_discard_test(
+        user_id=user_id,
+        status_value="saved",
+    )
+
+    response = client.delete(
+        f"/api/v1/applications/{application_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Application).filter_by(id=application_id).first()
+        assert persisted is None
+    finally:
+        db.close()
+
+
+def test_discard_draft_enforces_tenant_isolation(client: TestClient):
+    owner_user_id = uuid4()
+    other_user_id = uuid4()
+    other_token = f"valid-user-{other_user_id}"
+
+    application_id = _create_application_for_discard_test(
+        user_id=owner_user_id,
+        status_value="saved",
+    )
+
+    response = client.delete(
+        f"/api/v1/applications/{application_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Application not found."
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Application).filter_by(id=application_id).first()
+        assert persisted is not None
+        assert persisted.status == "saved"
+    finally:
+        db.close()
+
+
+def test_submitted_application_cannot_be_discarded(client: TestClient):
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    application_id = _create_application_for_discard_test(
+        user_id=user_id,
+        status_value="applied",
+    )
+
+    response = client.delete(
+        f"/api/v1/applications/{application_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+    assert "Only saved application drafts can be discarded" in response.json()["detail"]
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Application).filter_by(id=application_id).first()
+        assert persisted is not None
+        assert persisted.status == "applied"
+    finally:
+        db.close()

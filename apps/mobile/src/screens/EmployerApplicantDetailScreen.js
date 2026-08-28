@@ -400,7 +400,10 @@ export default function EmployerApplicantDetailScreen({ route, navigation }) {
                 <View style={[styles.statusRow, isRTL && styles.rowRTL]}>
                   <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
                     <Text style={[styles.statusPillText, { color: statusStyle.fg }]}>
-                      {applicant.status}
+                      {t(
+                        `applicationStatusLabels.${applicant.status}`,
+                        applicant.status
+                      )}
                     </Text>
                   </View>
                   {appliedDateStr ? (

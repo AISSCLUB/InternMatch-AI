@@ -92,6 +92,57 @@ def get_application_detail(
     )
 
 
+@router.delete(
+    "/{id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def discard_saved_application_draft(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently discard an unsubmitted candidate application draft.
+
+    Only applications currently in status 'saved' may be deleted.
+    Submitted application history is never deleted through this endpoint.
+    Ownership is enforced through the authenticated Supabase JWT subject.
+    """
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, _internship = record
+
+    if application.status != "saved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only saved application drafts can be discarded "
+                f"(current status: '{application.status}')."
+            ),
+        )
+
+    try:
+        ApplicationRepository.delete(
+            db=db,
+            application=application,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return None
+
+
 @router.post(
     "/generate",
     response_model=ApplicationGenerateAcceptedResponse,

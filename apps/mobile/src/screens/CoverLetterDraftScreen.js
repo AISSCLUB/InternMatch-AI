@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -21,7 +22,7 @@ import AIPulse from '../components/motion/AIPulse';
 import Reveal from '../components/motion/Reveal';
 import BrandedAILoader from '../components/motion/BrandedAILoader';
 import { useApplicationGeneration } from '../hooks/useApplicationGeneration';
-import { getApplications } from '../services/api';
+import { discardApplicationDraft, getApplications } from '../services/api';
 import { getLocalizedErrorMessage } from '../localization/errorMessages';
 import haptics from '../services/haptics';
 
@@ -42,6 +43,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
   const [application, setApplication] = useState(null);
   const [loadingExisting, setLoadingExisting] = useState(true);
   const [resolveError, setResolveError] = useState(null);
+  const [isDiscarding, setIsDiscarding] = useState(false);
 
   const {
     isGenerating,
@@ -121,6 +123,43 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
           setResolveError('SYNC_FAILED');
         }
       }
+    );
+  };
+
+  const handleDiscardDraft = () => {
+    if (!application || application.status !== 'saved' || isDiscarding) {
+      return;
+    }
+
+    Alert.alert(
+      t('coverLetterDraft.discardTitle'),
+      t('coverLetterDraft.discardMessage'),
+      [
+        {
+          text: t('coverLetterDraft.discardCancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('coverLetterDraft.discardConfirm'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsDiscarding(true);
+              await discardApplicationDraft(application.id);
+              setApplication(null);
+              navigation.goBack();
+            } catch (error) {
+              console.warn('Failed to discard application draft:', error);
+              Alert.alert(
+                t('coverLetterDraft.discardErrorTitle'),
+                t('coverLetterDraft.discardErrorMessage')
+              );
+            } finally {
+              setIsDiscarding(false);
+            }
+          },
+        },
+      ]
     );
   };
 
@@ -354,7 +393,7 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
               </Card>
 
               <GradientButton
-                title={t('coverLetterDraft.reviewAndEdit')}
+                title={t('coverLetterDraft.reviewEdit')}
                 color={colors.accentStrong || colors.tealDark}
                 onPress={handleProceedToEdit}
                 style={{ marginTop: spacing.lg }}
@@ -374,6 +413,28 @@ export default function CoverLetterDraftScreen({ route, navigation }) {
                 />
                 <Text style={styles.recreateBtnText}>{t('coverLetterDraft.regenerate')}</Text>
               </TouchableOpacity>
+
+              {application.status === 'saved' ? (
+                <TouchableOpacity
+                  style={styles.discardBtn}
+                  onPress={handleDiscardDraft}
+                  disabled={isDiscarding}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('coverLetterDraft.discardAction')}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={16}
+                    color={colors.error || '#B42318'}
+                    style={styles.recreateIcon}
+                  />
+                  <Text style={styles.discardBtnText}>
+                    {isDiscarding
+                      ? t('coverLetterDraft.discarding')
+                      : t('coverLetterDraft.discardAction')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           </Reveal>
         ) : null}
@@ -635,6 +696,22 @@ const styles = StyleSheet.create({
   recreateBtnText: {
     ...typography.button,
     color: colors.accentStrong || colors.tealDark,
+    fontSize: 13,
+  },
+  discardBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.error || '#B42318',
+    borderRadius: spacing.radii.md,
+    minHeight: spacing.minimumTouchTarget,
+  },
+  discardBtnText: {
+    ...typography.button,
+    color: colors.error || '#B42318',
     fontSize: 13,
   },
   recreateIcon: {
