@@ -1217,5 +1217,23 @@ export default {
     candidateCardTitle: 'M?lakat Bilgileri',
     candidateCardSubtitle: '??vereniniz sizin i?in bir m?lakat planlad?.',
     employerMessageTitle: '??verenden Mesaj',
+  },
+  employerCandidateRanking: {
+    rankLabel: '#{{rank}} AI S?ras?',
+    fit: {
+      top: 'En y?ksek e?le?me',
+      strong: 'G??l? uyum',
+      good: '?yi uyum',
+      developing: 'Geli?en uyum',
+      unscored: 'E?le?me hesaplanmad?',
+    },
+    matchingEvidence: 'E?le?en beceriler: {{skills}}',
+    noMatchingEvidence: 'Hen?z e?le?en beceri kan?t? bulunmuyor.',
+    analysisTitle: 'AI E?le?me Analizi',
+    analysisSubtitle: 'Aday profili ve ilan gereksinimlerine dayal?d?r.',
+    strengths: 'E?le?en g??l? y?nler',
+    gaps: '?ncelenecek beceriler',
+    noKnownGaps: 'Belirtilen bir beceri a???? tespit edilmedi.',
+    disclaimer: 'AI s?ralamas? yaln?zca karar deste?idir. ??e al?m karar? vermeden ?nce aday profilini ve ba?vurusunu inceleyin.',
   }
 };

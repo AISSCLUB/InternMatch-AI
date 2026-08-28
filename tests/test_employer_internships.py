@@ -1145,3 +1145,186 @@ def test_employer_interview_schedule_and_reschedule_is_canonical(
 
     assert terminal_response.status_code == 400
     assert "terminal" in terminal_response.json()["detail"].lower()
+
+
+
+def test_employer_applicants_are_ranked_by_canonical_match_score(
+    client: TestClient,
+):
+    """
+    Employer applicant list is ranked by persisted canonical Match.overall_score,
+    independent of application submission order.
+
+    Also exposes authoritative matching/missing skill evidence.
+    """
+    employer_user_id = uuid4()
+
+    _create_profile(
+        employer_user_id,
+        "Ranking Employer",
+        account_type="employer",
+    )
+
+    headers = {
+        "Authorization": f"Bearer valid-user-{employer_user_id}"
+    }
+
+    create_response = client.post(
+        "/api/v1/internships",
+        json={
+            "title": "AI Ranking Intern",
+            "company": "Ranking Labs",
+            "location": "Istanbul",
+            "work_type": "hybrid",
+            "description": "Canonical candidate ranking test role.",
+            "required_skills": ["Python", "FastAPI", "Docker"],
+        },
+        headers=headers,
+    )
+
+    assert create_response.status_code == 201
+
+    listing_id = UUID(create_response.json()["id"])
+
+    # Deliberately create applications in an order that does NOT match scores.
+    candidate_specs = [
+        (
+            "Low Score Candidate",
+            48,
+            ["Python"],
+            ["FastAPI", "Docker"],
+        ),
+        (
+            "Top Score Candidate",
+            91,
+            ["Python", "FastAPI", "Docker"],
+            [],
+        ),
+        (
+            "Middle Score Candidate",
+            74,
+            ["Python", "FastAPI"],
+            ["Docker"],
+        ),
+    ]
+
+    db = TestingSessionLocal()
+
+    try:
+        for index, (
+            name,
+            score,
+            matching_skills,
+            missing_skills,
+        ) in enumerate(candidate_specs):
+            candidate_user_id = uuid4()
+
+            profile = StudentProfile(
+                id=uuid4(),
+                user_id=candidate_user_id,
+                full_name=name,
+                headline="Ranking Candidate",
+                preferences={
+                    "account_type": "intern",
+                    "department": "Computer Science",
+                },
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+
+            db.add(profile)
+            db.flush()
+
+            application = Application(
+                id=uuid4(),
+                student_id=profile.id,
+                internship_id=listing_id,
+                status="applied",
+                applied_date=datetime.now(timezone.utc).date(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
+            )
+
+            db.add(application)
+            db.flush()
+
+            match = Match(
+                id=uuid4(),
+                student_id=profile.id,
+                internship_id=listing_id,
+                overall_score=score,
+                skill_score=score,
+                vector_score=score,
+                attribute_score=score,
+                skill_gap_analysis={
+                    "matching_skills": matching_skills,
+                    "missing_skills": missing_skills,
+                    "summary": "",
+                    "recommendations": [],
+                },
+                created_at=datetime.now(timezone.utc),
+            )
+
+            db.add(match)
+
+        db.commit()
+
+    finally:
+        db.close()
+
+    response = client.get(
+        f"/api/v1/internships/{listing_id}/applicants",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    payload = response.json()
+
+    assert payload["total"] == 3
+
+    items = payload["items"]
+
+    assert [item["match_score"] for item in items] == [
+        91,
+        74,
+        48,
+    ]
+
+    assert [item["ai_rank"] for item in items] == [
+        1,
+        2,
+        3,
+    ]
+
+    assert [
+        item["candidate"]["full_name"]
+        for item in items
+    ] == [
+        "Top Score Candidate",
+        "Middle Score Candidate",
+        "Low Score Candidate",
+    ]
+
+    assert items[0]["matching_skills"] == [
+        "Python",
+        "FastAPI",
+        "Docker",
+    ]
+    assert items[0]["missing_skills"] == []
+
+    assert items[1]["matching_skills"] == [
+        "Python",
+        "FastAPI",
+    ]
+    assert items[1]["missing_skills"] == [
+        "Docker",
+    ]
+
+    assert items[2]["matching_skills"] == [
+        "Python",
+    ]
+    assert items[2]["missing_skills"] == [
+        "FastAPI",
+        "Docker",
+    ]

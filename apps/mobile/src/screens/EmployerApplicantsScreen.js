@@ -194,6 +194,17 @@ export default function EmployerApplicantsScreen({ route, navigation }) {
                 ? formatLocalizedDate(item.applied_date, locale)
                 : '';
 
+              const fitKey =
+                typeof item.match_score !== 'number'
+                  ? 'unscored'
+                  : item.match_score >= 80
+                    ? 'top'
+                    : item.match_score >= 65
+                      ? 'strong'
+                      : item.match_score >= 50
+                        ? 'good'
+                        : 'developing';
+
               return (
                 <Reveal key={item.application_id} delay={index * 30}>
                   <PressableCard
@@ -208,6 +219,36 @@ export default function EmployerApplicantsScreen({ route, navigation }) {
                     }
                     accessibilityLabel={`${item.candidate?.full_name}, status: ${item.status}`}
                   >
+                    <View style={[styles.rankRow, isRTL && styles.rowRTL]}>
+                      {typeof item.ai_rank === 'number' ? (
+                        <View style={[styles.rankBadge, item.ai_rank <= 3 && styles.rankBadgeTop]}>
+                          <Ionicons
+                            name={item.ai_rank === 1 ? 'sparkles' : 'analytics-outline'}
+                            size={14}
+                            color={
+                              item.ai_rank <= 3
+                                ? (colors.accentStrong || colors.tealDark)
+                                : (colors.textSecondary || colors.textMuted)
+                            }
+                          />
+                          <Text
+                            style={[
+                              styles.rankBadgeText,
+                              item.ai_rank <= 3 && styles.rankBadgeTextTop,
+                            ]}
+                          >
+                            {t('employerCandidateRanking.rankLabel', {
+                              rank: item.ai_rank,
+                            })}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      <Text style={[styles.fitLabel, isRTL && styles.rtlText]}>
+                        {t(`employerCandidateRanking.fit.${fitKey}`)}
+                      </Text>
+                    </View>
+
                     {/* Header: Candidate Name, Status Badge, Match Badge */}
                     <View style={[styles.cardHeader, isRTL && styles.rowRTL]}>
                       <View style={styles.nameBlock}>
@@ -225,6 +266,26 @@ export default function EmployerApplicantsScreen({ route, navigation }) {
                         <MatchBadge score={item.match_score} />
                       )}
                     </View>
+
+                    {(item.matching_skills?.length > 0 || item.missing_skills?.length > 0) && (
+                      <View style={styles.aiEvidenceRow}>
+                        <Ionicons
+                          name="sparkles-outline"
+                          size={14}
+                          color={colors.accent || colors.teal}
+                        />
+                        <Text
+                          style={[styles.aiEvidenceText, isRTL && styles.rtlText]}
+                          numberOfLines={2}
+                        >
+                          {item.matching_skills?.length > 0
+                            ? t('employerCandidateRanking.matchingEvidence', {
+                                skills: item.matching_skills.slice(0, 3).join(', '),
+                              })
+                            : t('employerCandidateRanking.noMatchingEvidence')}
+                        </Text>
+                      </View>
+                    )}
 
                     {/* Department / Meta */}
                     {item.candidate?.department ? (
@@ -364,6 +425,53 @@ const styles = StyleSheet.create({
   },
   applicantCard: {
     marginBottom: spacing.sm,
+  },
+  rankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  rankBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: spacing.radii.pill,
+    backgroundColor: colors.surfaceMuted || '#F1F5F9',
+  },
+  rankBadgeTop: {
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+  },
+  rankBadgeText: {
+    ...typography.badge,
+    fontSize: 11,
+    color: colors.textSecondary || colors.textMuted,
+    fontWeight: '700',
+  },
+  rankBadgeTextTop: {
+    color: colors.accentStrong || colors.tealDark,
+  },
+  fitLabel: {
+    ...typography.caption,
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary || colors.textMuted,
+  },
+  aiEvidenceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  aiEvidenceText: {
+    ...typography.caption,
+    flex: 1,
+    color: colors.textSecondary || colors.textMuted,
+    lineHeight: 17,
   },
   cardHeader: {
     flexDirection: 'row',

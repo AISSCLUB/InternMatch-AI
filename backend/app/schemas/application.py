@@ -227,6 +227,9 @@ class EmployerApplicantResponse(BaseModel):
     applied_date: Optional[date] = None
     generated_cover_letter: Optional[str] = None
     match_score: Optional[int] = None
+    ai_rank: Optional[int] = None
+    matching_skills: List[str] = Field(default_factory=list)
+    missing_skills: List[str] = Field(default_factory=list)
     interview_scheduled_at: Optional[datetime] = None
     interview_mode: Optional[Literal["online", "onsite"]] = None
     interview_location: Optional[str] = None
@@ -244,9 +247,25 @@ class EmployerApplicantResponse(BaseModel):
         profile: Any,
         match: Optional[Any],
         skills: Optional[List[str]] = None,
+        ai_rank: Optional[int] = None,
     ) -> "EmployerApplicantResponse":
         """Factory mapping Application, StudentProfile, and optional Match."""
         dept = (profile.preferences or {}).get("department") if profile.preferences else None
+
+        raw_gap = (
+            match.skill_gap_analysis
+            if match is not None and isinstance(match.skill_gap_analysis, dict)
+            else {}
+        )
+
+        matching_skills = raw_gap.get("matching_skills", [])
+        if not isinstance(matching_skills, list):
+            matching_skills = []
+
+        missing_skills = raw_gap.get("missing_skills", [])
+        if not isinstance(missing_skills, list):
+            missing_skills = []
+
         return cls(
             application_id=application.id,
             internship_id=application.internship_id,
@@ -254,6 +273,9 @@ class EmployerApplicantResponse(BaseModel):
             applied_date=application.applied_date,
             generated_cover_letter=application.generated_cover_letter,
             match_score=match.overall_score if match is not None else None,
+            ai_rank=ai_rank,
+            matching_skills=matching_skills,
+            missing_skills=missing_skills,
             interview_scheduled_at=application.interview_scheduled_at,
             interview_mode=application.interview_mode,
             interview_location=application.interview_location,

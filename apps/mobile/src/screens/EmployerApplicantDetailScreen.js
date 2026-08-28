@@ -740,6 +740,69 @@ export default function EmployerApplicantDetailScreen({ route, navigation }) {
               </Card>
             </Reveal>
 
+            {typeof applicant.match_score === 'number' && (
+              <Reveal delay={45}>
+                <Card style={styles.aiRankingCard} padding="md">
+                  <View style={[styles.aiRankingHeader, isRTL && styles.rowRTL]}>
+                    <View style={styles.aiRankingIcon}>
+                      <Ionicons
+                        name="sparkles"
+                        size={19}
+                        color={colors.accentStrong || colors.tealDark}
+                      />
+                    </View>
+
+                    <View style={styles.aiRankingHeaderText}>
+                      <Text style={[styles.sectionTitle, isRTL && styles.rtlText]}>
+                        {t('employerCandidateRanking.analysisTitle')}
+                      </Text>
+                      <Text style={[styles.aiRankingSubtitle, isRTL && styles.rtlText]}>
+                        {t('employerCandidateRanking.analysisSubtitle')}
+                      </Text>
+                    </View>
+
+                    <MatchBadge score={applicant.match_score} />
+                  </View>
+
+                  {applicant.matching_skills?.length > 0 ? (
+                    <View style={styles.aiRankingSection}>
+                      <Text style={[styles.aiRankingLabel, isRTL && styles.rtlText]}>
+                        {t('employerCandidateRanking.strengths')}
+                      </Text>
+                      <View style={[styles.skillsChipRow, isRTL && styles.rowRTL]}>
+                        {applicant.matching_skills.map((skill) => (
+                          <Chip
+                            key={`match-${skill}`}
+                            label={skill}
+                            variant="skill"
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {applicant.missing_skills?.length > 0 ? (
+                    <View style={styles.aiRankingSection}>
+                      <Text style={[styles.aiRankingLabel, isRTL && styles.rtlText]}>
+                        {t('employerCandidateRanking.gaps')}
+                      </Text>
+                      <Text style={[styles.aiRankingGapText, isRTL && styles.rtlText]}>
+                        {applicant.missing_skills.join(', ')}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.aiRankingGapText, isRTL && styles.rtlText]}>
+                      {t('employerCandidateRanking.noKnownGaps')}
+                    </Text>
+                  )}
+
+                  <Text style={[styles.aiRankingDisclaimer, isRTL && styles.rtlText]}>
+                    {t('employerCandidateRanking.disclaimer')}
+                  </Text>
+                </Card>
+              </Reveal>
+            )}
+
             {/* Sequence 3: Candidate Skills */}
             <Reveal delay={60}>
               <Card style={styles.skillsCard} padding="md">
@@ -892,6 +955,51 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 13,
     color: colors.textSecondary || colors.textMuted,
+  },
+  aiRankingCard: {
+    marginBottom: spacing.xs,
+  },
+  aiRankingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  aiRankingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+  },
+  aiRankingHeaderText: {
+    flex: 1,
+  },
+  aiRankingSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+  },
+  aiRankingSection: {
+    marginTop: spacing.sm,
+  },
+  aiRankingLabel: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: colors.textPrimary || colors.textDark,
+    marginBottom: spacing.xs,
+  },
+  aiRankingGapText: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.textSecondary || colors.textMuted,
+    lineHeight: 19,
+  },
+  aiRankingDisclaimer: {
+    ...typography.caption,
+    color: colors.textTertiary || colors.textMuted,
+    marginTop: spacing.md,
+    lineHeight: 17,
   },
   metaCard: {
     marginBottom: spacing.xs,

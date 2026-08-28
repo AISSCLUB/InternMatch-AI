@@ -603,6 +603,9 @@ export type EmployerApplicantItem = {
   applied_date: string | null;
   generated_cover_letter: string | null;
   match_score: number | null;
+  ai_rank: number | null;
+  matching_skills: string[];
+  missing_skills: string[];
   interview_scheduled_at: string | null;
   interview_mode: 'online' | 'onsite' | null;
   interview_location: string | null;

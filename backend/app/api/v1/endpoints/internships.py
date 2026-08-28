@@ -201,8 +201,22 @@ def list_internship_applicants(
         employer_user_id=current_user.user_id,
     )
 
+    # Employer AI ranking uses the canonical persisted hybrid match score.
+    # Candidates without a calculated Match are placed after scored candidates.
+    # Stable application timestamps provide deterministic tie-breaking.
+    ranked_records = sorted(
+        records,
+        key=lambda record: (
+            record[2] is None,
+            -(record[2].overall_score if record[2] is not None else -1),
+            record[0].applied_date is None,
+            -(record[0].applied_date.toordinal() if record[0].applied_date else 0),
+            str(record[0].id),
+        ),
+    )
+
     items = []
-    for app, profile, match in records:
+    for rank, (app, profile, match) in enumerate(ranked_records, start=1):
         skills = MatchingDataRepository.get_skill_names_for_student(db, profile.id)
         items.append(
             EmployerApplicantResponse.from_orm_data(
@@ -210,6 +224,7 @@ def list_internship_applicants(
                 profile=profile,
                 match=match,
                 skills=skills,
+                ai_rank=rank,
             )
         )
 

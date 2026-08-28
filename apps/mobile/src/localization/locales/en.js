@@ -1217,5 +1217,23 @@ export default {
     candidateCardTitle: 'Interview Details',
     candidateCardSubtitle: 'Your employer has scheduled an interview.',
     employerMessageTitle: 'Message from Employer',
+  },
+  employerCandidateRanking: {
+    rankLabel: '#{{rank}} AI Rank',
+    fit: {
+      top: 'Top match',
+      strong: 'Strong fit',
+      good: 'Good fit',
+      developing: 'Developing fit',
+      unscored: 'Match not calculated',
+    },
+    matchingEvidence: 'Matches: {{skills}}',
+    noMatchingEvidence: 'No matching-skill evidence available yet.',
+    analysisTitle: 'AI Match Analysis',
+    analysisSubtitle: 'Grounded in the candidate profile and opportunity requirements.',
+    strengths: 'Matching strengths',
+    gaps: 'Skills to review',
+    noKnownGaps: 'No stated skill gaps were identified.',
+    disclaimer: 'AI ranking is decision support only. Review the candidate profile and application before making a hiring decision.',
   }
 };
