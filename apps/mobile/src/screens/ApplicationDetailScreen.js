@@ -23,6 +23,7 @@ import Card from '../components/Card';
 import PressableScale from '../components/PressableScale';
 import {
   getApplicationDetail,
+  generateInterviewPrep,
   updateApplicationStatus,
   ApiError,
 } from '../services/api';
@@ -94,6 +95,10 @@ export default function ApplicationDetailScreen({ route, navigation }) {
     route?.params?.application?.id;
 
   const [detail, setDetail] = useState(null);
+  const [interviewPrep, setInterviewPrep] = useState(null);
+  const [interviewPrepLoading, setInterviewPrepLoading] = useState(false);
+  const [interviewPrepError, setInterviewPrepError] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -195,6 +200,33 @@ export default function ApplicationDetailScreen({ route, navigation }) {
     if (!dateString) return null;
     return formatLocalizedDate(dateString, locale);
   };
+
+
+  const handleGenerateInterviewPrep = async () => {
+    if (!applicationId || interviewPrepLoading) {
+      return;
+    }
+
+    setInterviewPrepLoading(true);
+    setInterviewPrepError(false);
+
+    try {
+      const result = await generateInterviewPrep(
+        applicationId,
+        locale
+      );
+
+      setInterviewPrep(result);
+      haptics.success();
+    } catch (err) {
+      console.warn('Failed to generate interview prep:', err);
+      setInterviewPrepError(true);
+      haptics.error();
+    } finally {
+      setInterviewPrepLoading(false);
+    }
+  };
+
 
   return (
     <ScreenContainer edges={['top', 'bottom']}>
@@ -562,6 +594,198 @@ export default function ApplicationDetailScreen({ route, navigation }) {
                 </Card>
               )}
 
+              {detail.status === 'interviewing' &&
+                detail.interview_scheduled_at ? (
+                <Card style={styles.interviewPrepCard} padding="md">
+                  <View style={styles.interviewPrepHeader}>
+                    <View style={styles.interviewPrepIconWrap}>
+                      <Ionicons
+                        name="sparkles"
+                        size={20}
+                        color={colors.accentStrong || colors.tealDark}
+                      />
+                    </View>
+
+                    <View style={styles.interviewPrepHeaderText}>
+                      <Text style={styles.sectionTitle}>
+                        {t('interviewPrep.title', 'AI Interview Prep')}
+                      </Text>
+                      <Text style={styles.sectionSubtitle}>
+                        {t(
+                          'interviewPrep.subtitle',
+                          'Personalized preparation grounded in your profile and this opportunity.'
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {!interviewPrep ? (
+                    <>
+                      <Text style={styles.interviewPrepIntro}>
+                        {t(
+                          'interviewPrep.intro',
+                          'Get likely practice questions, focus areas, strengths to highlight, and useful questions to ask.'
+                        )}
+                      </Text>
+
+                      {interviewPrepError ? (
+                        <Text style={styles.interviewPrepError}>
+                          {t(
+                            'interviewPrep.error',
+                            'Interview preparation could not be generated. Please try again.'
+                          )}
+                        </Text>
+                      ) : null}
+
+                      <TouchableOpacity
+                        style={styles.interviewPrepGenerateBtn}
+                        onPress={handleGenerateInterviewPrep}
+                        disabled={interviewPrepLoading}
+                        accessibilityRole="button"
+                        accessibilityLabel={t(
+                          'interviewPrep.generate',
+                          'Generate AI Interview Prep'
+                        )}
+                      >
+                        {interviewPrepLoading ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.textInverse || colors.white}
+                          />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="sparkles-outline"
+                              size={17}
+                              color={colors.textInverse || colors.white}
+                            />
+                            <Text style={styles.interviewPrepGenerateText}>
+                              {t(
+                                'interviewPrep.generate',
+                                'Generate AI Interview Prep'
+                              )}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <View style={styles.interviewPrepContent}>
+                      <Text style={styles.interviewPrepSummary}>
+                        {interviewPrep.preparation_summary}
+                      </Text>
+
+                      {interviewPrep.likely_questions?.length > 0 ? (
+                        <View style={styles.interviewPrepSection}>
+                          <Text style={styles.interviewPrepSectionTitle}>
+                            {t('interviewPrep.likelyQuestions', 'Practice Questions')}
+                          </Text>
+                          {interviewPrep.likely_questions.map((item, index) => (
+                            <View
+                              key={`question-${index}`}
+                              style={styles.interviewPrepBulletRow}
+                            >
+                              <Text style={styles.interviewPrepBullet}>
+                                {index + 1}.
+                              </Text>
+                              <Text style={styles.interviewPrepBulletText}>
+                                {item}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      {interviewPrep.focus_areas?.length > 0 ? (
+                        <View style={styles.interviewPrepSection}>
+                          <Text style={styles.interviewPrepSectionTitle}>
+                            {t('interviewPrep.focusAreas', 'Focus Areas')}
+                          </Text>
+                          {interviewPrep.focus_areas.map((item, index) => (
+                            <View
+                              key={`focus-${index}`}
+                              style={styles.interviewPrepBulletRow}
+                            >
+                              <Ionicons
+                                name="flag-outline"
+                                size={15}
+                                color={colors.accent || colors.teal}
+                              />
+                              <Text style={styles.interviewPrepBulletText}>
+                                {item}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+
+                      {interviewPrep.strengths_to_highlight?.length > 0 ? (
+                        <View style={styles.interviewPrepSection}>
+                          <Text style={styles.interviewPrepSectionTitle}>
+                            {t(
+                              'interviewPrep.strengths',
+                              'Strengths to Highlight'
+                            )}
+                          </Text>
+                          {interviewPrep.strengths_to_highlight.map(
+                            (item, index) => (
+                              <View
+                                key={`strength-${index}`}
+                                style={styles.interviewPrepBulletRow}
+                              >
+                                <Ionicons
+                                  name="checkmark-circle-outline"
+                                  size={15}
+                                  color={colors.success || '#10B981'}
+                                />
+                                <Text style={styles.interviewPrepBulletText}>
+                                  {item}
+                                </Text>
+                              </View>
+                            )
+                          )}
+                        </View>
+                      ) : null}
+
+                      {interviewPrep.questions_to_ask?.length > 0 ? (
+                        <View style={styles.interviewPrepSection}>
+                          <Text style={styles.interviewPrepSectionTitle}>
+                            {t(
+                              'interviewPrep.questionsToAsk',
+                              'Questions You Can Ask'
+                            )}
+                          </Text>
+                          {interviewPrep.questions_to_ask.map(
+                            (item, index) => (
+                              <View
+                                key={`ask-${index}`}
+                                style={styles.interviewPrepBulletRow}
+                              >
+                                <Ionicons
+                                  name="chatbubble-ellipses-outline"
+                                  size={15}
+                                  color={colors.accent || colors.teal}
+                                />
+                                <Text style={styles.interviewPrepBulletText}>
+                                  {item}
+                                </Text>
+                              </View>
+                            )
+                          )}
+                        </View>
+                      ) : null}
+
+                      <Text style={styles.interviewPrepDisclaimer}>
+                        {t(
+                          'interviewPrep.disclaimer',
+                          'These are AI-generated preparation suggestions, not guaranteed employer questions.'
+                        )}
+                      </Text>
+                    </View>
+                  )}
+                </Card>
+              ) : null}
+
               {/* Status Timeline Card */}
               <Card style={styles.sectionCard} padding="md">
                 <Text style={styles.sectionTitle}>{t('applicationDetail.timelineTitle')}</Text>
@@ -910,6 +1134,95 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textPrimary || colors.textDark,
     fontWeight: '600',
+  },
+  interviewPrepCard: {
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.accentSoft || '#CCFBF1',
+  },
+  interviewPrepHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  interviewPrepIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accentSoft || '#E6F4F6',
+    marginEnd: spacing.sm,
+  },
+  interviewPrepHeaderText: {
+    flex: 1,
+  },
+  interviewPrepIntro: {
+    ...typography.bodyMedium,
+    color: colors.textSecondary || colors.textMuted,
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  interviewPrepError: {
+    ...typography.caption,
+    color: colors.danger || '#EF4444',
+    marginBottom: spacing.sm,
+  },
+  interviewPrepGenerateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: spacing.minimumTouchTarget,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: spacing.radiusSm || 8,
+    backgroundColor: colors.accent || colors.teal,
+  },
+  interviewPrepGenerateText: {
+    ...typography.bodyMedium,
+    color: colors.textInverse || colors.white,
+    fontWeight: '700',
+  },
+  interviewPrepContent: {
+    marginTop: spacing.xs,
+  },
+  interviewPrepSummary: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary || colors.textDark,
+    lineHeight: 21,
+  },
+  interviewPrepSection: {
+    marginTop: spacing.md,
+  },
+  interviewPrepSectionTitle: {
+    ...typography.bodyMedium,
+    color: colors.textPrimary || colors.textDark,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  interviewPrepBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  interviewPrepBullet: {
+    ...typography.caption,
+    minWidth: 18,
+    color: colors.accentStrong || colors.tealDark,
+    fontWeight: '700',
+  },
+  interviewPrepBulletText: {
+    ...typography.bodyMedium,
+    flex: 1,
+    color: colors.textSecondary || colors.textMuted,
+    lineHeight: 20,
+  },
+  interviewPrepDisclaimer: {
+    ...typography.caption,
+    color: colors.textTertiary || colors.textMuted,
+    lineHeight: 17,
+    marginTop: spacing.md,
   },
   sectionCard: {
     marginBottom: spacing.md,

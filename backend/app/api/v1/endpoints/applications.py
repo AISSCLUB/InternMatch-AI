@@ -22,7 +22,9 @@ from app.schemas.application import (
     ApplicationSubmitRequest,
     ApplicationTrackerResponse,
 )
+from app.schemas.interview_prep import InterviewPrepResponse
 from app.services.application_enqueue import enqueue_application_generation
+from app.services.interview_prep import get_or_create_interview_prep
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -304,3 +306,69 @@ def update_application_status(
         application=updated_app,
         internship=internship,
     )
+
+
+@router.post(
+    "/{id}/interview-prep",
+    response_model=InterviewPrepResponse,
+)
+def generate_interview_prep(
+    id: UUID,
+    content_locale: str = "en",
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate or retrieve cached AI interview preparation for the
+    authenticated candidate's scheduled interview.
+    """
+    enforce_rate_limit(
+        user_id=current_user.user_id,
+        scope="interview_prep",
+    )
+
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, internship = record
+
+    if internship is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Interview preparation requires an internship-linked application.",
+        )
+
+    if application.status != "interviewing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Interview preparation is available only during the interviewing stage.",
+        )
+
+    if application.interview_scheduled_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Interview preparation requires a scheduled interview.",
+        )
+
+    try:
+        return get_or_create_interview_prep(
+            db=db,
+            application=application,
+            internship=internship,
+            user_id=current_user.user_id,
+            content_locale=content_locale,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI interview preparation is temporarily unavailable.",
+        ) from exc

@@ -512,6 +512,16 @@ export type ApplicationListResponse = {
   applications: ApplicationTrackerItem[];
 };
 
+export type InterviewPrepResponse = {
+  application_id: string;
+  interview_scheduled_at: string;
+  preparation_summary: string;
+  likely_questions: string[];
+  focus_areas: string[];
+  strengths_to_highlight: string[];
+  questions_to_ask: string[];
+};
+
 export type ApplicationGenerateAcceptedResponse = {
   job_id: string;
   status: 'queued';
@@ -542,6 +552,22 @@ export async function getApplicationDetail(
     `/applications/${encodeURIComponent(applicationId)}`,
     {
       method: 'GET',
+    }
+  );
+}
+
+
+export async function generateInterviewPrep(
+  applicationId: string,
+  contentLocale?: string
+): Promise<InterviewPrepResponse> {
+  const normalizedLocale =
+    normalizeLocale(contentLocale) || DEFAULT_LOCALE;
+
+  return apiRequest<InterviewPrepResponse>(
+    `/applications/${encodeURIComponent(applicationId)}/interview-prep?content_locale=${encodeURIComponent(normalizedLocale)}`,
+    {
+      method: 'POST',
     }
   );
 }

@@ -1235,5 +1235,17 @@ export default {
     gaps: 'Skills to review',
     noKnownGaps: 'No stated skill gaps were identified.',
     disclaimer: 'AI ranking is decision support only. Review the candidate profile and application before making a hiring decision.',
+  },
+  interviewPrep: {
+    title: 'AI Interview Prep',
+    subtitle: 'Personalized preparation grounded in your profile and this opportunity.',
+    intro: 'Get likely practice questions, focus areas, strengths to highlight, and useful questions to ask.',
+    generate: 'Generate AI Interview Prep',
+    error: 'Interview preparation could not be generated. Please try again.',
+    likelyQuestions: 'Practice Questions',
+    focusAreas: 'Focus Areas',
+    strengths: 'Strengths to Highlight',
+    questionsToAsk: 'Questions You Can Ask',
+    disclaimer: 'These are AI-generated preparation suggestions, not guaranteed employer questions.',
   }
 };

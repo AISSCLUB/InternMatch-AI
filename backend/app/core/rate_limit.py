@@ -18,6 +18,7 @@ RATE_LIMIT_POLICIES: Dict[str, Dict[str, int]] = {
     "match_calculate": {"limit": 10, "window_seconds": 600},
     "match_explanation": {"limit": 30, "window_seconds": 600},
     "application_generate": {"limit": 10, "window_seconds": 600},
+    "interview_prep": {"limit": 10, "window_seconds": 600},
 }
 
 _RATE_LIMIT_LUA = """

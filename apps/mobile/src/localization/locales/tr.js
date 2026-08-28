@@ -1235,5 +1235,17 @@ export default {
     gaps: '?ncelenecek beceriler',
     noKnownGaps: 'Belirtilen bir beceri a???? tespit edilmedi.',
     disclaimer: 'AI s?ralamas? yaln?zca karar deste?idir. ??e al?m karar? vermeden ?nce aday profilini ve ba?vurusunu inceleyin.',
+  },
+  interviewPrep: {
+    title: 'AI M?lakat Haz?rl???',
+    subtitle: 'Profilinize ve bu f?rsata dayal? ki?iselle?tirilmi? haz?rl?k.',
+    intro: 'Olas? pratik sorular?, odak alanlar?n?, ?ne ??karabilece?iniz g??l? y?nleri ve sorabilece?iniz faydal? sorular? haz?rlay?n.',
+    generate: 'AI M?lakat Haz?rl??? Olu?tur',
+    error: 'M?lakat haz?rl??? olu?turulamad?. L?tfen tekrar deneyin.',
+    likelyQuestions: 'Pratik Sorular?',
+    focusAreas: 'Odak Alanlar?',
+    strengths: '?ne ??kar?lacak G??l? Y?nler',
+    questionsToAsk: 'Sorabilece?iniz Sorular',
+    disclaimer: 'Bunlar AI taraf?ndan olu?turulan haz?rl?k ?nerileridir; i?verenin kesin olarak soraca?? sorular de?ildir.',
   }
 };
