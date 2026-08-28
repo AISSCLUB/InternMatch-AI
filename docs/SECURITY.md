@@ -48,18 +48,19 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
 │                    PUBLIC / CLIENT TIER                   │
 │   (Expo Mobile App / Next.js Landing — Selen's Scope)    │
 │                                                           │
-│   Allowed Key:                                            │
-│   - SUPABASE_PUBLISHABLE_KEY                              │
-│   - EXPO_PUBLIC_REVENUECAT_APPLE_KEY                      │
-│   - EXPO_PUBLIC_REVENUECAT_GOOGLE_KEY                     │
-│   - NEXT_PUBLIC_API_URL / EXPO_PUBLIC_API_URL            │
+│   Allowed Keys:                                           │
+│   - EXPO_PUBLIC_SUPABASE_URL                              │
+│   - EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY                  │
+│   - EXPO_PUBLIC_REVENUECAT_API_KEY                        │
+│   - EXPO_PUBLIC_API_URL / NEXT_PUBLIC_API_URL            │
 │                                                           │
 │   STRICTLY FORBIDDEN IN CLIENT CODE:                      │
 │   - SUPABASE_SERVICE_ROLE_KEY                             │
+│   - SUPABASE_JWT_SECRET                                   │
 │   - REVENUECAT_SECRET_KEY                                 │
 │   - DATABASE_URL / POSTGRES_PASSWORD                      │
-│   - OPENAI_API_KEY / GEMINI_API_KEY                       │
-│   - REDIS_PASSWORD                                        │
+│   - GEMINI_API_KEY / OPENAI_API_KEY                       │
+│   - REDIS_PASSWORD / REDIS_URL                            │
 └─────────────────────────────┬─────────────────────────────┘
                               │
                               │ REST HTTP Requests (JWT Header)
@@ -70,9 +71,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
 │                                                           │
 │   Secure Environment Variables (.env):                    │
 │   - SUPABASE_SERVICE_ROLE_KEY                             │
+│   - SUPABASE_JWT_SECRET                                   │
 │   - REVENUECAT_SECRET_KEY                                 │
 │   - DATABASE_URL                                          │
-│   - OPENAI_API_KEY / GEMINI_API_KEY                       │
+│   - GEMINI_API_KEY                                        │
 │   - REDIS_URL                                             │
 └───────────────────────────────────────────────────────────┘
 ```
@@ -90,7 +92,7 @@ Uploaded CVs represent a potential threat vector (malicious files, execution exp
    - Validation performed via magic bytes (file signature), not relying solely on file extension header.
 2. **File Size Enforcement:** Maximum file size is strictly capped at **10 MB** ($10 \times 1024 \times 1024$ bytes). Requests exceeding this limit receive HTTP 413 Payload Too Large.
 3. **Safe Filename Handling:** Uploaded filenames are discarded. Files are assigned a random UUID (e.g. `raw_cv_<UUID>.pdf`) before being saved to storage.
-4. **Isolated Storage:** Files are stored in a private Supabase Storage bucket (`student-cvs`). Buckets prohibit public read access; download links are generated as short-lived Signed URLs.
+4. **Isolated Storage:** Files are stored in private Supabase Storage buckets (`cvs`, `avatars`). Buckets prohibit public read access; download links are generated as short-lived Signed URLs.
 5. **Non-Executable Processing:** Processing parsers (`pypdf`, `python-docx`) parse plain text into memory inside isolated RQ worker containers. Uploaded files are never executed or evaluated as scripts.
 
 ---

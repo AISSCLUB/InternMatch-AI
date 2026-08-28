@@ -18,6 +18,7 @@ if str(worker_dir) not in sys.path:
 
 from app.db.models import (  # noqa: E402
     EducationEntry,
+    InternshipListing,
     Match,
     StudentProfile,
     StudentSkill,
@@ -30,6 +31,11 @@ from app.services.cv_profile_extraction import (  # noqa: E402
     ExtractedPreferences,
     ExtractedProject,
     ExtractedSkill,
+)
+from app.services.cv_validation import (  # noqa: E402
+    CVValidationResult,
+    CVValidationServiceError,
+    InvalidCVDocumentError,
 )
 from app.services.match_calculation import (  # noqa: E402
     MatchCalculationPreconditionError,
@@ -50,6 +56,12 @@ def override_worker_sessionlocal(monkeypatch):
     monkeypatch.setattr("tasks.cv_extraction.SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(
         "tasks.application_generation.SessionLocal", TestingSessionLocal
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.validate_cv_document",
+        lambda **kwargs: CVValidationResult(
+            is_cv=True, confidence=0.95, reason_code="valid_cv"
+        ),
     )
 
 
@@ -366,6 +378,22 @@ def test_run_match_calculation_calculation_exception_rolls_back_and_marks_failed
     internship_id = uuid4()
     db = TestingSessionLocal()
     try:
+        profile = StudentProfile(
+            id=student_id,
+            user_id=user_id,
+            full_name="Rollback Worker",
+            summary_embedding=[0.1] * 768,
+        )
+        listing = InternshipListing(
+            id=internship_id,
+            title="Rollback Internship",
+            company="Rollback Co",
+            location="Remote",
+            work_type="remote",
+            description="Rollback lifecycle test.",
+        )
+        db.add_all([profile, listing])
+        db.flush()
         job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="match_calculation")
         db.commit()
         job_id = job.id
@@ -948,5 +976,100 @@ def test_run_cv_extraction_failure_persists_safe_error_and_hides_raw_exception(m
         assert persisted.status == "failed"
         assert persisted.error == "CV processing failed."
         assert "SECRET" not in (persisted.error or "")
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_semantic_validation_rejects_non_cv_without_profile_write(monkeypatch):
+    """Test 29: Invalid CV fails job with client-safe error and leaves profile untouched."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        "tasks.cv_extraction.download_candidate_cv",
+        lambda *, user_id, storage_path: b"%PDF non-cv document content",
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_cv_text",
+        lambda *, storage_path, content: (
+            "Invoice #12345\nTotal: $500.00\nPayment due upon receipt."
+        ),
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.validate_cv_document",
+        MagicMock(
+            side_effect=InvalidCVDocumentError(
+                "The uploaded document does not appear to be a valid CV or resume. "
+                "Please upload a valid resume.",
+                reason_code="invoice_or_financial",
+            )
+        ),
+    )
+    mock_extract = MagicMock()
+    monkeypatch.setattr("tasks.cv_extraction.extract_structured_candidate_profile", mock_extract)
+
+    with pytest.raises(InvalidCVDocumentError):
+        run_cv_extraction(job_id=job_id, user_id=user_id, storage_path=f"{user_id}/invoice.pdf")
+
+    # Profile extraction and write should NEVER have been called
+    assert mock_extract.call_count == 0
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted_job = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted_job is not None
+        assert persisted_job.status == "failed"
+        assert persisted_job.progress_percent == 100
+        assert persisted_job.result is None
+        assert "does not appear to be a valid CV or resume" in (persisted_job.error or "")
+
+        # Candidate profile must not exist
+        profile = fresh_db.query(StudentProfile).filter_by(user_id=user_id).first()
+        assert profile is None
+    finally:
+        fresh_db.close()
+
+
+def test_run_cv_extraction_validation_service_error_marks_generic_failure(monkeypatch):
+    """Test 30: Validation service failure is treated as generic processing error, not non-CV."""
+    user_id = uuid4()
+    db = TestingSessionLocal()
+    try:
+        job = ProcessingJobRepository.create(db=db, user_id=user_id, job_type="cv_extraction")
+        db.commit()
+        job_id = job.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        "tasks.cv_extraction.download_candidate_cv",
+        lambda *, user_id, storage_path: b"%PDF valid content",
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.extract_cv_text",
+        lambda *, storage_path, content: "Jane Doe Software Engineer Resume",
+    )
+    monkeypatch.setattr(
+        "tasks.cv_extraction.validate_cv_document",
+        MagicMock(side_effect=CVValidationServiceError("Gemini API connection timeout")),
+    )
+
+    with pytest.raises(CVValidationServiceError):
+        run_cv_extraction(job_id=job_id, user_id=user_id, storage_path=f"{user_id}/resume.pdf")
+
+    fresh_db = TestingSessionLocal()
+    try:
+        persisted_job = ProcessingJobRepository.get_by_id(fresh_db, job_id=job_id)
+        assert persisted_job is not None
+        assert persisted_job.status == "failed"
+        assert persisted_job.progress_percent == 100
+        # Generic error message, NOT invalid CV
+        assert persisted_job.error == "CV processing failed."
     finally:
         fresh_db.close()

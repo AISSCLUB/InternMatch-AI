@@ -7,7 +7,9 @@ from typing import Any, Dict, Union
 from uuid import UUID
 
 from app.db.session import SessionLocal
+from app.repositories.matching_data import MatchingDataRepository
 from app.repositories.processing_job import ProcessingJobRepository
+from app.services.candidate_embedding import generate_and_persist_candidate_embedding
 from app.services.match_calculation import calculate_and_persist_matches
 
 
@@ -71,6 +73,17 @@ def run_match_calculation(
         job.result = None
         job.error = None
         db.flush()
+
+        # Recover a missing cached candidate embedding.
+        profile = MatchingDataRepository.get_profile_by_user_id(
+            db=db,
+            user_id=norm_user_id,
+        )
+        if profile is not None and not profile.summary_embedding:
+            generate_and_persist_candidate_embedding(
+                db=db,
+                user_id=norm_user_id,
+            )
 
         # Call Gate 2.19 match calculation service
         matches = calculate_and_persist_matches(

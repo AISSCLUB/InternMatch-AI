@@ -19,12 +19,14 @@ if str(backend_dir) not in sys.path:
 from app.core.config import settings  # noqa: E402
 from app.db.models import (  # noqa: E402,F401
     Application,
+    ApplicationStatusEvent,
     EducationEntry,
     ExperienceEntry,
     InternshipListing,
     Match,
     ProcessingJob,
     ProjectEntry,
+    SavedInternship,
     Skill,
     StudentProfile,
     StudentSkill,
@@ -134,6 +136,8 @@ def setup_test_database():
         "processing_jobs",
         "matches",
         "applications",
+        "application_status_events",
+        "saved_internships",
     ]
     for table_name in required_tables:
         if table_name not in Base.metadata.tables:

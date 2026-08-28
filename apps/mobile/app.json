@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "InternMatch AI",
+    "slug": "internmatch-ai",
+    "scheme": "internmatch",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "android": {
+      "package": "com.aissclub.internmatchai"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-localization",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0c2b7e7c-71da-4236-951b-0580ef71476e"
+      }
+    },
+    "owner": "aiss-uskudar",
+    "ios": {
+      "bundleIdentifier": "com.aissclub.internmatchai"
+    }
+  }
+}

@@ -371,8 +371,8 @@ def test_upsert_changing_preferences_clears_summary_embedding():
         db.close()
 
 
-def test_upsert_changing_full_name_clears_summary_embedding():
-    """Test 15: Changing full_name clears existing summary_embedding."""
+def test_upsert_changing_full_name_preserves_summary_embedding():
+    """Test 15: Changing full_name preserves existing summary_embedding."""
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
@@ -383,13 +383,13 @@ def test_upsert_changing_full_name_clears_summary_embedding():
         updated = StudentProfileRepository.upsert_by_user_id(
             db, user_id=user_id, full_name="New Name"
         )
-        assert updated.summary_embedding is None
+        assert updated.summary_embedding == [0.1] * len(updated.summary_embedding)
     finally:
         db.close()
 
 
-def test_upsert_changing_cv_storage_path_clears_summary_embedding():
-    """Test 16: Changing cv_storage_path clears existing summary_embedding."""
+def test_upsert_changing_cv_storage_path_preserves_summary_embedding():
+    """Test 16: Changing cv_storage_path preserves existing summary_embedding."""
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
@@ -402,7 +402,7 @@ def test_upsert_changing_cv_storage_path_clears_summary_embedding():
         updated = StudentProfileRepository.upsert_by_user_id(
             db, user_id=user_id, full_name="Student", cv_storage_path="cv2.pdf"
         )
-        assert updated.summary_embedding is None
+        assert updated.summary_embedding == [0.1] * len(updated.summary_embedding)
     finally:
         db.close()
 

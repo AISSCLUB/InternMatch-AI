@@ -511,6 +511,67 @@ def test_generate_grounded_cover_letter_missing_api_key_fails(monkeypatch):
         )
 
 
+def test_generate_grounded_cover_letter_unescapes_html_entities(monkeypatch):
+    """Test regression: generate_grounded_cover_letter unescapes HTML entities in generated text."""
+    profile = StudentProfile(
+        id=uuid4(),
+        user_id=uuid4(),
+        full_name="Caner Yılmaz",
+        headline="Yazılım Mühendisi",
+    )
+    listing = InternshipListing(
+        id=uuid4(),
+        title="Gömülü Sistemler Stajyeri",
+        company="Teknoloji & Araştırma A.Ş.",
+        location="İstanbul",
+        work_type="hybrid",
+        description="Gömülü sensör sistemleri geliştirme.",
+        required_skills=["C++", "Sensör"],
+    )
+    match = Match(
+        id=uuid4(),
+        student_id=profile.id,
+        internship_id=listing.id,
+        overall_score=90,
+        skill_score=90,
+        vector_score=90,
+        attribute_score=90,
+        skill_gap_analysis={"matching_skills": ["C++", "Sensör"]},
+    )
+
+    escaped_cover_letter = (
+        "Sayın Yetkili, &#220;niversitesi m&#252;hendisliği öğrencisi olarak "
+        "g&#246;mülü sens&#246;r sistemleri &amp; yazılım alanındaki staj pozisyonuna başvuruyorum."
+    )
+    mock_llm_output = LLMCoverLetter(
+        generated_cover_letter=escaped_cover_letter
+    )
+    _mock_gemini_cover_letter_generate(monkeypatch, mock_llm_output)
+
+    result = generate_grounded_cover_letter(
+        profile=profile,
+        internship=listing,
+        match=match,
+        tone="professional",
+        candidate_skills=["C++", "Sensör"],
+        education_entries=["Boğaziçi Üniversitesi"],
+        content_locale="tr",
+    )
+
+    expected_cover_letter = (
+        "Sayın Yetkili, Üniversitesi mühendisliği öğrencisi olarak "
+        "gömülü sensör sistemleri & yazılım alanındaki staj pozisyonuna başvuruyorum."
+    )
+    assert result == expected_cover_letter
+    assert "&#220;niversitesi" not in result
+    assert "Üniversitesi" in result
+    assert "mühendisliği" in result
+    assert "gömülü" in result
+    assert "sensör" in result
+    assert "&amp;" not in result
+    assert "&" in result
+
+
 # ---------------------------------------------------------------------------
 # 3. APPLICATION PERSISTENCE & REGENERATION SEMANTICS (14 - 17)
 # ---------------------------------------------------------------------------
@@ -940,5 +1001,122 @@ def test_post_applications_generate_rate_limited_returns_429(client: TestClient,
     try:
         jobs = db.query(ProcessingJob).filter_by(user_id=user_id).all()
         assert len(jobs) == 0
+    finally:
+        db.close()
+
+# ---------------------------------------------------------------------------
+# QA-4C ? DISCARD SAVED APPLICATION DRAFT
+# ---------------------------------------------------------------------------
+
+
+def _create_application_for_discard_test(*, user_id, status_value="saved"):
+    db = TestingSessionLocal()
+    try:
+        profile = StudentProfile(
+            id=uuid4(),
+            user_id=user_id,
+            full_name="Discard Test Candidate",
+        )
+        db.add(profile)
+
+        listing = InternshipListing(
+            id=uuid4(),
+            title="Backend Intern",
+            company="Discard Test Co",
+            location="Remote",
+            work_type="remote",
+            description="Test internship for draft discard behavior.",
+        )
+        db.add(listing)
+        db.flush()
+
+        application = Application(
+            id=uuid4(),
+            student_id=profile.id,
+            internship_id=listing.id,
+            status=status_value,
+            generated_cover_letter="Generated draft that may be discarded.",
+        )
+        db.add(application)
+        db.commit()
+
+        return application.id
+    finally:
+        db.close()
+
+
+def test_owner_can_discard_saved_application_draft(client: TestClient):
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+    application_id = _create_application_for_discard_test(
+        user_id=user_id,
+        status_value="saved",
+    )
+
+    response = client.delete(
+        f"/api/v1/applications/{application_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Application).filter_by(id=application_id).first()
+        assert persisted is None
+    finally:
+        db.close()
+
+
+def test_discard_draft_enforces_tenant_isolation(client: TestClient):
+    owner_user_id = uuid4()
+    other_user_id = uuid4()
+    other_token = f"valid-user-{other_user_id}"
+
+    application_id = _create_application_for_discard_test(
+        user_id=owner_user_id,
+        status_value="saved",
+    )
+
+    response = client.delete(
+        f"/api/v1/applications/{application_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Application not found."
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Application).filter_by(id=application_id).first()
+        assert persisted is not None
+        assert persisted.status == "saved"
+    finally:
+        db.close()
+
+
+def test_submitted_application_cannot_be_discarded(client: TestClient):
+    user_id = uuid4()
+    token = f"valid-user-{user_id}"
+
+    application_id = _create_application_for_discard_test(
+        user_id=user_id,
+        status_value="applied",
+    )
+
+    response = client.delete(
+        f"/api/v1/applications/{application_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 409
+    assert "Only saved application drafts can be discarded" in response.json()["detail"]
+
+    db = TestingSessionLocal()
+    try:
+        persisted = db.query(Application).filter_by(id=application_id).first()
+        assert persisted is not None
+        assert persisted.status == "applied"
     finally:
         db.close()

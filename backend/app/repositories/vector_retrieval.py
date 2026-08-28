@@ -46,7 +46,10 @@ def build_nearest_internships_statement(
 
     stmt = (
         select(InternshipListing, distance_expr)
-        .where(InternshipListing.description_embedding.is_not(None))
+        .where(
+            InternshipListing.description_embedding.is_not(None),
+            InternshipListing.is_active.is_(True),
+        )
         .order_by(distance_expr.asc())
         .limit(limit)
     )

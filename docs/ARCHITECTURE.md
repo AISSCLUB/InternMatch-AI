@@ -116,8 +116,8 @@ graph TD
 - **Authentication & Authorization:** Supabase Auth for user sign-in/up; PostgreSQL Row Level Security (RLS) for data isolation.
 - **Task Queue & Async Processing:** Redis + Python RQ (Redis Queue) worker containerized alongside FastAPI.
 - **Pinned AI Model Suite & Centralized Configuration Rules:**
-  - **LLM Model:** OpenAI `gpt-4o-mini` (for profile extraction, explanations, and cover letters).
-  - **Embedding Model:** OpenAI `text-embedding-3-small`.
+  - **LLM Model:** Google Gemini `gemini-3.5-flash` via `google-genai` SDK (for profile extraction, explanations, and cover letters).
+  - **Embedding Model:** Google Gemini `gemini-embedding-2`.
   - **Embedding Dimensions:** `1536` vector dimensions.
   - **Centralized Configuration Rule:** Model identifiers, API endpoints, and embedding dimensions MUST come from centralized configuration (`core/config.py` or environment variables `LLM_MODEL_NAME`, `EMBEDDING_MODEL_NAME`, `EMBEDDING_DIMENSION`), and NEVER be hardcoded across business logic files.
 
@@ -141,7 +141,7 @@ $$\text{Final Score} = \left( w_{\text{skill}} \cdot S_{\text{skill}} \right) + 
    - Deterministic preference matching on structured candidate fields (in MVP v1: `work_types` location preference and `desired_locations`).
    - *Target Architecture Scope:* True eligibility filtering (language proficiency, work authorization, education-level eligibility) represents future targeted architecture capabilities when authoritative candidate data and policy exist. In MVP v1, candidate preferences serve as soft scoring signals and are NOT destructive hard eligibility filters. No candidate is discarded merely because work type or location does not match.
 4. **LLM Role (Strictly Constrained):**
-   - Executed using pinned `gpt-4o-mini` **ONLY** for qualitative outputs:
+   - Executed using pinned `gemini-3.5-flash` **ONLY** for qualitative outputs:
      - "Why You Match" natural language summary.
      - Skill Gap explanation and actionable learning recommendations.
      - Personalized application cover letter / note generation.
@@ -355,43 +355,45 @@ internmatch-ai/
 ## 9. RevenueCat Monetization & Entitlement Architecture (Shipaton 2026 Compliance)
 
 ### 9.1 Monetization Model
-InternMatch AI implements a simple, high-impact freemium tier model powered by **RevenueCat**:
+InternMatch AI implements a candidate monetization model powered natively by **RevenueCat**:
 
 | Tier | Entitlement ID | Features & Limits | Price |
 | :--- | :--- | :--- | :--- |
-| **Free Tier** | *(None)* | Up to 3 CV extractions/month, standard deterministic match score, basic listing search. | $0 |
-| **Premium Tier** | `internmatch_pro` | Unlimited CV extractions, AI Personalized Cover Letter Generation, Detailed Skill Gap Analysis, Priority AI matching queue. | In-App Purchase / Subscription |
+| **Free Tier** | *(None)* | Standard CV upload and extraction, deterministic hybrid match scoring, basic listing search. | $0 |
+| **Pro Student** | `pro_student` | Full AI Cover Letter Generation, detailed "Why You Match" skill gap recommendations, priority candidate matching. | Test Store Subscription / Live Store Subscription |
 
-### 9.2 RevenueCat System Boundaries & Client Entitlement Checks
-- **Mobile Integration:** The React Native / Expo application embeds the official RevenueCat SDK (`react-native-purchases`).
-- **Entitlement Determination:** The mobile app queries RevenueCat directly via `Purchases.getCustomerInfo()`. If the `internmatch_pro` entitlement is active, premium features (such as cover letter generation UI) are unlocked.
-- **Zero Card Data Storage Policy:** Our backend (`FastAPI`) and database (`Supabase`) **NEVER store or handle payment card numbers, CVVs, or billing credentials**. All financial transactions are processed securely by Apple App Store / Google Play Store via RevenueCat.
-- **Backend Entitlement Boundary:** When requesting premium backend operations (e.g. `POST /applications/generate`), the mobile client sends its verified Supabase JWT. FastAPI optional webhook integration (`POST /webhooks/revenuecat`) or server-side RevenueCat REST API checks verify active entitlement status when executing premium tasks.
+### 9.2 RevenueCat Canonical Contract & Boundaries
+- **Canonical Product Contract:**
+  - **Entitlement ID:** `pro_student`
+  - **Offering ID:** `default`
+  - **Monthly Package ID:** `$rc_monthly`
+  - **Product ID:** `internmatch_pro_student_monthly`
+- **Mobile Integration:** The React Native / Expo application embeds the official RevenueCat SDK (`react-native-purchases` 10.7.2).
+- **Entitlement Determination:** The mobile app derives subscription authority strictly via `Purchases.getCustomerInfo()`. If `CustomerInfo.entitlements.active['pro_student']` is active, Pro Student candidate features are unlocked.
+- **Zero Card Data Storage Policy:** Our backend (`FastAPI`) and database (`Supabase`) **NEVER store or handle payment card numbers, CVVs, or billing credentials**. All in-app purchase transactions are processed securely via RevenueCat and platform stores.
+- **Test Store Demonstration:** For the Shipaton 2026 Next Gen hackathon workflow, the application operates against the RevenueCat Test Store with public SDK key (`EXPO_PUBLIC_REVENUECAT_API_KEY`), enabling zero-friction evaluation without live store billing setup.
 
 ```mermaid
 graph TD
     subgraph Mobile Client (Selen)
-        ExpoApp["React Native Mobile App"]
+        ExpoApp["React Native Mobile App (Expo SDK 54)"]
         RCSDK["RevenueCat SDK (react-native-purchases)"]
     end
 
-    subgraph Store & RevenueCat
-        AppStores["App Store / Google Play"]
-        RevenueCatCloud["RevenueCat Platform"]
+    subgraph RevenueCat Engine
+        RCPlatform["RevenueCat Engine / Test Store"]
     end
 
     subgraph Backend Infrastructure (Mohammad)
         FastAPI["FastAPI Gateway"]
-        SupaDB[("Supabase DB (User Profile & Metadata Only - NO Payment Data)")]
+        SupaDB[("Supabase DB (Candidate Profile & Metadata Only - NO Payment Data)")]
     end
 
-    ExpoApp -->|Purchase / Restore| RCSDK
-    RCSDK -->|Process Billing| AppStores
-    AppStores -->|Verify Receipt| RevenueCatCloud
-    RevenueCatCloud -->|Entitlement Info (internmatch_pro)| RCSDK
+    ExpoApp -->|Purchase Package| RCSDK
+    RCSDK -->|Process Test Store / Store Billing| RCPlatform
+    RCPlatform -->|CustomerInfo (pro_student active)| RCSDK
     
-    ExpoApp -->|Check Active Entitlement| RCSDK
-    RevenueCatCloud -.->|Optional Webhook Events| FastAPI
+    ExpoApp -->|Query Active Entitlement| RCSDK
     FastAPI -->|Check Entitlement / User Data| SupaDB
 ```
 
@@ -454,20 +456,30 @@ The software codebase, architecture designs, dataset definitions, and original p
 
 ## 14. Multi-Language Localization Architecture Specification
 
-*Status Note: ARCHITECTURALLY DEFINED — IMPLEMENTATION PENDING IN GATE 2+*
+*Status Note: IMPLEMENTED & VERIFIED — Full support for English (`en`), Turkish (`tr`), and Arabic (`ar`) with dynamic RTL layout.*
 
 1. **Locale Standards & Identifiers:** All locale codes follow stable **BCP-47** string identifiers (`en`, `tr`, `ar`).
-2. **Supported MVP Locales:**
+2. **Supported Locales:**
    - **English (`en`)**: Primary default system locale.
-   - **Turkish (`tr`)**: Supported MVP interface locale.
-3. **Future-Ready Locale:**
-   - **Arabic (`ar`)**: Architecturally planned for post-MVP expansion.
-4. **UI Locale vs. AI Content Locale Separation:**
+   - **Turkish (`tr`)**: Fully localized interface.
+   - **Arabic (`ar`)**: Fully localized interface with dynamic RTL support.
+3. **UI Locale vs. AI Content Locale Separation:**
    - The application strictly decouples user interface locale (`ui_locale`) from AI-generated document content locale (`content_locale`).
    - *Example:* A candidate navigating the application in Turkish (`ui_locale = "tr"`) can explicitly request an English cover letter or match explanation (`content_locale = "en"`).
-5. **Target Content Locale Injection:** All AI pipeline tasks (CV profile extraction, "Why You Match" explanations, skill gap summaries, and personalized cover letters) accept an explicit target `content_locale` parameter (defaulting to `"en"`) to instruct the LLM generator.
-6. **Backend Error Message Localization Strategy:** FastAPI error payloads return machine-readable error codes (e.g. `UNAUTHORIZED`, `INVALID_FILE_TYPE`) enabling the frontend client to render localized error strings matching `ui_locale`.
-7. **Database Schema Policy (No Column Duplication):** Database tables MUST NOT duplicate columns for each language (`title_en`, `title_tr`, `title_ar` are strictly prohibited). Master listings persist in `en` with dynamic localization handled via standard translation layers or content locale generation.
-8. **Implementation Boundary:** No i18n libraries, translation dictionaries, or database translation tables are introduced in Gate 1 scaffolding.
+4. **Target Content Locale Injection:** All AI pipeline tasks (CV profile extraction, "Why You Match" explanations, skill gap summaries, and personalized cover letters) accept an explicit target `content_locale` parameter (defaulting to `"en"`) to instruct the LLM generator.
+5. **Backend Error Message Localization Strategy:** FastAPI error payloads return machine-readable error codes (e.g. `UNAUTHORIZED`, `INVALID_FILE_TYPE`) enabling the frontend client to render localized error strings matching `ui_locale`.
+6. **Database Schema Policy (No Column Duplication):** Database tables MUST NOT duplicate columns for each language (`title_en`, `title_tr`, `title_ar` are strictly prohibited). Master listings persist in `en` with dynamic localization handled via standard translation layers or content locale generation.
 
+---
 
+## 15. Mobile Runtime & Integration Contract
+
+- Mobile runtime: Expo SDK 54, React 19.1, React Native 0.81.5.
+- React Native New Architecture uses the Expo SDK 54 default; do not set newArchEnabled=false.
+- React Navigation route params must remain serializable; do not pass callbacks or state setters through route params.
+- Timers/intervals must be cleared on stop and unmount.
+- Supabase Auth is the mobile identity provider (supporting Email/Password and Google OAuth).
+- Protected FastAPI requests must send Authorization: Bearer <SUPABASE_ACCESS_TOKEN>.
+- Backend identity is derived exclusively from verified Supabase JWT claims.
+- CV flow uses `POST /api/v1/profile/cv`, RQ background processing jobs, and `GET /api/v1/profile`.
+- RevenueCat integration uses native development client (`npx expo run:android` / `npx expo start --dev-client`) and public Test Store SDK key.

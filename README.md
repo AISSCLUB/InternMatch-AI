@@ -1,138 +1,260 @@
-# InternMatch AI — Engineering Foundation & Monorepo
+# InternMatch AI
 
-**Product:** AI-Powered Personalized Internship Matching & Application Assistant  
-**License:** [MIT License](LICENSE)
+InternMatch AI helps students discover internships that fit their skills, understand why they match, and prepare stronger applications through an AI-assisted workflow.
 
----
-
-## 1. Project Identity & Team
-
-- **Authors & Developers:** Mohamad Barakat & Selanur Yurdakul (Two-Person Student Team)
-- **Team Responsibilities:**
-  - **Mohamad:** Backend Gateway, Database Schemas, Infrastructure, APIs, AI Pipeline, Vector Search, Security, Containerization, Deployment.
-  - **Selanur:** Mobile Application (React Native / Expo), Next.js Landing Page, UI/UX, Interaction Design, RevenueCat Integration, Frontend API Integration.
-  - **Both:** Product Strategy, Architecture Review, Testing, Demo Video Creation, Submission.
-- **Affiliation:** **AISS Club — Üsküdar University**  
-  *Mohammad serves as President of AISS Club; Selanur serves as Vice President of AISS Club.*  
-  *(Note: AISS Club represents the team's student-club affiliation and does not imply university ownership, sponsorship, funding, or intellectual property holding.*
-- **Code Repository:** `https://github.com/aissclub/internmatch-ai`
+*Built for RevenueCat Shipaton 2026 — Next Gen Track.*
 
 ---
 
-## 2. System Architecture Overview
+## Why InternMatch AI
+
+Finding an internship as a student is often overwhelming, opaque, and inefficient:
+- **Fragmented Discovery:** Students jump between generic job boards that lack student-specific context.
+- **Opaque Qualification Fit:** Lengthy job descriptions make it difficult for applicants to know how their skills actually compare against requirements.
+- **Application Fatigue:** Writing tailored cover letters for dozens of roles is exhausting, leading to generic, low-conversion submissions.
+- **Lack of Actionable Feedback:** When skills do not align, students are rarely given constructive guidance on what competencies to develop.
+
+InternMatch AI transforms this process by combining semantic matching, automated CV profile extraction, personalized skill gap analysis, and tailored application drafting into an intuitive mobile experience.
+
+---
+
+## What It Does
+
+InternMatch AI delivers an end-to-end candidate copilot:
+
+- **Authentication & Security:** Email and password sign-up, sign-in, and account confirmation powered by Supabase Auth.
+- **Candidate Onboarding & Profile:** Structured profile management covering education, experience, technical skills, and portfolio projects.
+- **CV Upload & Background Parsing:** Asynchronous CV parser (PDF/DOCX) that extracts structured experience and skill keywords to enrich candidate profiles.
+- **Internship Catalog & Search:** Filterable directory of curated internships by work type (Remote, Hybrid, On-site), location, and required skills.
+- **Saved Opportunities:** Fast bookmarking and tracking of favorite internship listings.
+- **Hybrid Semantic & Skill Matching:** Real-time match scoring combining exact/fuzzy skill overlap with pgvector semantic similarity.
+- **"Why You Match" Intelligence:** Interactive compatibility breakdown detailing matching skills, missing requirements, and targeted learning recommendations.
+- **AI Cover Letter Drafting:** Context-aware, tone-customizable application drafts generated using Gemini AI.
+- **Application Tracking:** Visual status timeline tracking progress across Applied, Interviewing, and Accepted stages.
+- **Multilingual UI:** Complete internationalization in English (`en`), Turkish (`tr`), and Arabic (`ar`) with dynamic RTL layout support.
+- **RevenueCat In-App Purchases:** Candidate monetization tier (**Pro Student**) featuring native RevenueCat Test Store subscription management, dynamic pricing, and instant entitlement activation.
+
+> [!NOTE]
+> **Employer Scope:** Candidate discovery, matching, and application workflows are fully functional. Employer workspace tools (job posting and applicant management) are currently presented in role-aware preview mode.
+
+---
+
+## RevenueCat Integration
+
+Monetization in InternMatch AI is built natively with the **RevenueCat React Native SDK (`react-native-purchases` 10.7.2)**:
 
 ```
-[Mobile App (Expo / React Native)]    [Landing Page (Next.js)]
-                │                               │
-                └───────────────┬───────────────┘
-                                │ REST HTTP (Bearer JWT)
-                                v
-               [FastAPI Gateway (Python 3.13 / Docker)]
-                                │
-                 ┌──────────────┴──────────────┐
-                 ▼                             ▼
-   [Supabase DB / pgvector]           [Redis Task Queue]
-                                               │
-                                               v
-                                     [Python RQ Worker]
+┌────────────────────────────────────────────────────────┐
+│                   Mobile Client                        │
+│          RevenueCatProvider + PlansScreen              │
+└────────────┬───────────────────────────────┬───────────┘
+             │                               │
+    1. Bind App User ID            2. Purchases.purchasePackage()
+             │                               │
+             v                               v
+┌─────────────────────────┐     ┌─────────────────────────┐
+│      Supabase Auth      │     │    RevenueCat Engine    │
+│  User Session (UUID)    │     │   Test Store / Receipts │
+└─────────────────────────┘     └────────────┬────────────┘
+                                             │
+                                   3. CustomerInfo.entitlements
+                                             │
+                                             v
+                                ┌─────────────────────────┐
+                                │   pro_student Active    │
+                                │   Candidate Plan State  │
+                                └─────────────────────────┘
+```
+
+### Key Integration Highlights
+- **Canonical Product Contract:**
+  - **Entitlement ID:** `pro_student`
+  - **Offering ID:** `default`
+  - **Monthly Package ID:** `$rc_monthly`
+  - **Product ID:** `internmatch_pro_student_monthly`
+- **Zero Local Trust:** Subscription state is derived strictly from RevenueCat-provided `CustomerInfo.entitlements.active['pro_student']`. No local flags or unverified storage values dictate subscription status.
+- **Identity-Bound Lifecycle:** The RevenueCat App User ID is synchronized to the authenticated Supabase user UUID (`session.user.id`). Identity transitions are guarded with generation counters to prevent cross-user state leaks.
+- **Dynamic Pricing:** Plans Screen dynamically renders localized store package pricing (`pkg.product.priceString`) loaded at runtime from RevenueCat.
+- **Graceful Error Handling:** User cancellations (`PURCHASE_CANCELLED_ERROR`) are handled quietly without jarring error dialogs.
+- **Test Store Workflow:** The hackathon demonstration runs natively on the RevenueCat Test Store sandbox with zero merchant account or store console dependencies.
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    subgraph Client["Client Layer"]
+        Mobile["Expo React Native Mobile App<br/>(SDK 54 / React Native 0.81.5)"]
+        Web["Next.js Web Client (Optional)"]
+    end
+
+    subgraph AuthMonetization["Auth & Monetization"]
+        SupaAuth["Supabase Auth<br/>(JWT / Session Management)"]
+        RC["RevenueCat SDK<br/>(In-App Purchases / Entitlements)"]
+    end
+
+    subgraph Backend["Backend Layer"]
+        API["FastAPI REST Gateway<br/>(Python 3.13)"]
+        Worker["Python RQ Background Worker"]
+        Redis[("Redis Task Queue")]
+    end
+
+    subgraph DataAI["Data & AI Layer"]
+        DB[("PostgreSQL 17 + pgvector<br/>(Supabase Managed)")]
+        Gemini["Google Gemini AI<br/>(Embeddings & Cover Letters)"]
+        Storage[("Supabase Storage<br/>(CV & Avatar Buckets)")]
+    end
+
+    Mobile -->|Bearer JWT| API
+    Mobile -->|Auth Session| SupaAuth
+    Mobile -->|Purchase / Sync| RC
+    Web -.->|Future / Optional| Mobile
+
+    API -->|Validate JWT| SupaAuth
+    API -->|Enqueue Jobs| Redis
+    Redis -->|Process Tasks| Worker
+    Worker -->|Embeddings / LLM| Gemini
+    Worker -->|Store Embeddings| DB
+    API -->|CRUD & Vector Query| DB
+    API -->|Upload / Fetch Files| Storage
 ```
 
 ---
 
-## 3. Environment Prerequisites
+## Technology Stack
 
-Ensure the following runtimes are installed on your development machine:
-
-- **Python:** `3.13.x`
-- **Node.js:** `24.x LTS`
-- **Docker & Docker Compose:** `Docker Desktop v24+`
-- **Git:** `2.40+`
+| Domain | Technologies |
+|---|---|
+| **Mobile Client** | React Native 0.81.5, Expo SDK 54, TypeScript, React Navigation, Expo Haptics, Expo Localization |
+| **Monetization** | RevenueCat React Native SDK (`react-native-purchases` 10.7.2), RevenueCat Test Store |
+| **Authentication** | Supabase Auth (`@supabase/supabase-js` 2.45.0), Bearer JWT Validation |
+| **Backend API** | Python 3.13, FastAPI 0.115, Pydantic v2, SQLAlchemy 2.0, Uvicorn |
+| **Background Processing** | Redis 7, Python RQ (Redis Queue), RapidFuzz (Skill Match) |
+| **Database & Vector Search** | PostgreSQL 17, `pgvector` (1536-dim embeddings), Row-Level Security (RLS) |
+| **AI & LLM Services** | Google Gemini (`gemini-3.5-flash`, `gemini-embedding-2`) via `google-genai` SDK |
+| **Web Frontend (Optional)** | Next.js 14, React 18, Tailwind CSS |
+| **Infrastructure & CI** | Docker, Docker Compose, GitHub Actions, EAS Build |
 
 ---
 
-## 4. Local Development Setup Guide
+## Repository Structure
 
-### 4.1 Clone Repository & Environment Setup
+```
+.
+├── apps/
+│   ├── mobile/             # React Native / Expo mobile application
+│   └── landing/            # Next.js marketing landing page (optional)
+├── backend/                # FastAPI application, routers, services, and models
+├── database/               # SQL migrations, RLS policies, and seed data
+│   ├── migrations/         # Numbered schema migrations (001–007)
+│   └── seeds/              # Demo dataset scripts
+├── docs/                   # System documentation, architecture, and security
+├── scripts/                # Database seeding and management utilities
+├── tests/                  # Automated pytest test suite (518+ unit, integration, and security tests)
+├── worker/                 # RQ worker tasks (CV parsing, match calculation, cover letters)
+├── docker-compose.yml      # Local container orchestration
+└── JUDGE_RUNBOOK.md        # Comprehensive judge reproduction guide
+```
+
+---
+
+## Quick Start
+
+For detailed step-by-step instructions, refer to the **[Judge Reproduction Runbook](JUDGE_RUNBOOK.md)**.
+
+### 1. Start Backend Services
 ```bash
-# 1. Clone workspace repository
-git clone https://github.com/aissclub/internmatch-ai.git
-cd internmatch-ai
-
-# 2. Create environment file from template
+# Copy root environment template
 cp .env.example .env
-```
 
-### 4.2 Docker Services Startup (Backend, Worker, Redis)
-```bash
-# Build and launch FastAPI, Redis, and Python RQ Worker in detached mode
+# Launch backend, worker, redis, and database in Docker
 docker compose up --build -d
 
-# Check service container status
-docker compose ps
-
-# Verify API health endpoint
+# Verify API health
 curl http://localhost:8000/health
 ```
-- Interactive Swagger API Documentation: `http://localhost:8000/docs`
-- Root Health Endpoint: `http://localhost:8000/health`
 
-### 4.3 Mobile App Development (Selen)
+### 2. Start Mobile Development Client
 ```bash
 cd apps/mobile
-npm install
-npx expo start
-```
 
-### 4.4 Landing Page Development (Selen)
-```bash
-cd apps/landing
-npm install
-npm run dev
+# Copy mobile environment template
+cp .env.example .env
+
+# Install dependencies
+npm ci
+
+# Run on Android Emulator with native development client (required for RevenueCat)
+npx expo run:android
 ```
 
 ---
 
-## 5. Testing & Code Quality Commands
+## Environment Variables
+
+| Scope | File | Description |
+|---|---|---|
+| **Server & Worker** | `.env` | **Server-only secrets.** Contains database connection string, Supabase service role key, Gemini API key, and Redis configuration. |
+| **Mobile Client** | `apps/mobile/.env` | **Client-safe configuration.** Contains public Supabase URL, publishable key, backend API URL, and public RevenueCat API key. |
+
+> [!WARNING]
+> All variables prefixed with `EXPO_PUBLIC_*` are bundled into the client binary and are publicly accessible. Never place private keys or service role secrets in `apps/mobile/.env`.
+
+---
+
+## Automated Testing & Quality
+
+Run the test suite and static analysis tools:
 
 ```bash
-# Run pytest backend test suite
-pytest
+# Run backend pytest suite
+python -m pytest
 
-# Code quality linting check (Ruff)
+# Run Python linter & code formatting check
 ruff check .
+
+# Run mobile TypeScript typecheck
+cd apps/mobile && npx tsc --noEmit
 ```
 
 ---
 
-## 6. Project Directory Layout
+## Security
 
-```
-internmatch-ai/
-├── apps/
-│   ├── mobile/             # React Native / Expo Mobile App (Selen)
-│   └── landing/            # Next.js Marketing Landing Page (Selen)
-├── backend/                # FastAPI Gateway (Mohammad)
-│   ├── app/
-│   │   ├── api/            # API Endpoints & Versioned Routers
-│   │   ├── core/           # Config, Security & Logging
-│   │   └── main.py         # FastAPI Entrypoint
-│   ├── Dockerfile
-│   └── requirements.txt
-├── worker/                 # Python RQ Background Worker (Mohammad)
-│   ├── tasks/              # Asynchronous Worker Tasks
-│   ├── worker.py           # RQ Worker Entrypoint
-│   ├── Dockerfile
-│   └── requirements.txt
-├── database/               # SQL Migrations & Seeders
-│   ├── migrations/
-│   └── seeds/
-├── infrastructure/         # Environment templates
-├── docs/                   # Authoritative System Documentation (7 files)
-├── tests/                  # Pytest Unit & Liveness Tests
-├── docker-compose.yml      # Local Container Orchestration
-├── .env.example            # Master Environment Variable Template
-├── .gitignore
-├── pyproject.toml
-├── README.md
-└── LICENSE                 # MIT License
-```
+InternMatch AI follows a security-by-design model:
+- Row-Level Security (RLS) on all PostgreSQL tables.
+- Bearer JWT token verification on all protected endpoints.
+- Client-side subscription authority powered by RevenueCat CustomerInfo entitlements.
+- Sanitized public environment templates with zero tracked credentials.
+
+For full vulnerability management and security architecture details, see **[docs/SECURITY.md](docs/SECURITY.md)**.
+
+---
+
+## Documentation Index
+
+- **[Judge Reproduction Runbook](JUDGE_RUNBOOK.md)** — Step-by-step evaluator instructions
+- **[Shipaton 2026 Submission](docs/SHIPATON_2026_SUBMISSION.md)** — Video storyboard and project narrative
+- **[System Architecture](docs/ARCHITECTURE.md)** — Deep technical specification
+- **[API Contract](docs/API_CONTRACT.md)** — REST endpoint definitions and schemas
+- **[Database Schema](docs/DATABASE.md)** — Relational structure, RLS, and vector indexing
+- **[Security Policy](docs/SECURITY.md)** — Security controls and threat model
+- **[Development Guide](docs/DEVELOPMENT.md)** — Contributor guidelines and workflow
+- **[Deployment Runbook](docs/DEPLOYMENT.md)** — Deployment models and infrastructure specifications
+
+---
+
+## Team & Authors
+
+InternMatch AI is developed by a two-person student team:
+- **Mohamad Barakat** — Founder / Lead engineering and product implementation.
+- **Selanur Yurdakul** — Team member supporting presentation, visual assets, demo media, and project presentation.
+
+*Student Affiliation:* **AISS Club — Üsküdar University** *(Student club affiliation; does not imply university ownership or sponsorship).*
+
+---
+
+## License
+
+This project is licensed under the **[MIT License](LICENSE)**.

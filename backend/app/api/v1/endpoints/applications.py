@@ -4,6 +4,7 @@ Provides endpoints for personalized cover letter generation, application
 listing, and tracker status/notes updates.
 """
 
+from typing import Optional
 from uuid import UUID
 
 from app.core.rate_limit import enforce_rate_limit
@@ -13,13 +14,17 @@ from app.repositories.application import ApplicationRepository
 from app.repositories.match import MatchRepository
 from app.repositories.processing_job import ProcessingJobRepository
 from app.schemas.application import (
+    ApplicationDetailResponse,
     ApplicationGenerateAcceptedResponse,
     ApplicationGenerateRequest,
     ApplicationListResponse,
     ApplicationStatusUpdateRequest,
+    ApplicationSubmitRequest,
     ApplicationTrackerResponse,
 )
+from app.schemas.interview_prep import InterviewPrepResponse
 from app.services.application_enqueue import enqueue_application_generation
+from app.services.interview_prep import get_or_create_interview_prep
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -49,6 +54,93 @@ def get_my_applications(
     ]
 
     return ApplicationListResponse(applications=items)
+
+
+@router.get("/{id}", response_model=ApplicationDetailResponse)
+def get_application_detail(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Retrieve candidate application details including chronological status timeline.
+    Requires valid Supabase Bearer JWT authentication token.
+    Identity is strictly derived from the validated JWT subject UUID.
+    Returns 404 if application is not found or owned by another candidate.
+    """
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, internship = record
+    events = ApplicationRepository.list_events_for_application(
+        db=db,
+        application_id=id,
+    )
+
+    return ApplicationDetailResponse.from_orm_data(
+        application=application,
+        internship=internship,
+        events=events,
+    )
+
+
+@router.delete(
+    "/{id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def discard_saved_application_draft(
+    id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Permanently discard an unsubmitted candidate application draft.
+
+    Only applications currently in status 'saved' may be deleted.
+    Submitted application history is never deleted through this endpoint.
+    Ownership is enforced through the authenticated Supabase JWT subject.
+    """
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, _internship = record
+
+    if application.status != "saved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Only saved application drafts can be discarded "
+                f"(current status: '{application.status}')."
+            ),
+        )
+
+    try:
+        ApplicationRepository.delete(
+            db=db,
+            application=application,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return None
 
 
 @router.post(
@@ -126,18 +218,18 @@ def generate_application(
     )
 
 
-@router.patch("/{id}/status", response_model=ApplicationTrackerResponse)
-def update_application_status(
+@router.post("/{id}/submit", response_model=ApplicationTrackerResponse)
+def submit_application(
     id: UUID,
-    payload: ApplicationStatusUpdateRequest,
+    payload: Optional[ApplicationSubmitRequest] = None,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Update status and optional notes for an application in the tracker.
-    Requires valid Supabase Bearer JWT authentication token.
-    Identity is strictly derived from the validated JWT subject UUID.
-    Returns 404 if application is not found or owned by another user.
+    Candidate explicitly submits a saved application draft to the employer.
+    Transitions status from 'saved' -> 'applied'.
+    Sets applied_date and appends an authoritative ApplicationStatusEvent.
+    If internship is closed, rejects new submissions with 400.
     """
     record = ApplicationRepository.get_with_internship_for_user(
         db=db,
@@ -151,13 +243,107 @@ def update_application_status(
         )
 
     application, internship = record
-    notes_provided = "notes" in payload.model_fields_set
+
+    if application.status != "saved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Application is already submitted (current status: '{application.status}')."
+            ),
+        )
+
+    if application.internship_id and not application.internship.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "This internship opportunity has been closed "
+                "and is no longer accepting new submissions."
+            ),
+        )
+
+    cover_letter = payload.cover_letter if payload else None
+    notes = payload.notes if payload else None
+
+    if cover_letter is not None:
+        application.generated_cover_letter = cover_letter
 
     try:
         updated_app = ApplicationRepository.update_status(
             db=db,
             application=application,
-            status=payload.status,
+            status="applied",
+            notes=notes,
+            notes_provided=notes is not None,
+        )
+        db.commit()
+        db.refresh(updated_app)
+    except Exception:
+        db.rollback()
+        raise
+
+    return ApplicationTrackerResponse.from_orm_tuple(
+        application=updated_app,
+        internship=internship,
+    )
+
+
+@router.patch("/{id}/status", response_model=ApplicationTrackerResponse)
+def update_application_status(
+    id: UUID,
+    payload: ApplicationStatusUpdateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update candidate application notes or explicitly submit (saved -> applied).
+    Candidates cannot self-set status to interviewing, accepted, or rejected.
+    """
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, internship = record
+    target_status = payload.status
+    notes_provided = "notes" in payload.model_fields_set
+
+    # Candidate authority constraint: cannot self-transition to employer-controlled statuses
+    if target_status in ("interviewing", "accepted", "rejected"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Candidates cannot manually set application status to interviewing, "
+                "accepted, or rejected. Status transitions are managed by the employer."
+            ),
+        )
+
+    if target_status == "saved" and application.status != "saved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot revert a submitted application back to saved draft.",
+        )
+
+    if target_status == "applied" and application.status == "saved":
+        if internship and not getattr(internship, "is_active", True):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "This internship opportunity has been closed "
+                    "and is no longer accepting submissions."
+                ),
+            )
+
+    try:
+        updated_app = ApplicationRepository.update_status(
+            db=db,
+            application=application,
+            status=target_status,
             notes=payload.notes,
             notes_provided=notes_provided,
         )
@@ -171,3 +357,69 @@ def update_application_status(
         application=updated_app,
         internship=internship,
     )
+
+
+@router.post(
+    "/{id}/interview-prep",
+    response_model=InterviewPrepResponse,
+)
+def generate_interview_prep(
+    id: UUID,
+    content_locale: str = "en",
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate or retrieve cached AI interview preparation for the
+    authenticated candidate's scheduled interview.
+    """
+    enforce_rate_limit(
+        user_id=current_user.user_id,
+        scope="interview_prep",
+    )
+
+    record = ApplicationRepository.get_with_internship_for_user(
+        db=db,
+        application_id=id,
+        user_id=current_user.user_id,
+    )
+
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        )
+
+    application, internship = record
+
+    if internship is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Interview preparation requires an internship-linked application.",
+        )
+
+    if application.status != "interviewing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Interview preparation is available only during the interviewing stage.",
+        )
+
+    if application.interview_scheduled_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Interview preparation requires a scheduled interview.",
+        )
+
+    try:
+        return get_or_create_interview_prep(
+            db=db,
+            application=application,
+            internship=internship,
+            user_id=current_user.user_id,
+            content_locale=content_locale,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI interview preparation is temporarily unavailable.",
+        ) from exc

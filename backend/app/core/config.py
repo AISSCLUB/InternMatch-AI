@@ -25,6 +25,7 @@ class Settings(BaseSettings):
         "postgresql://postgres:placeholder_password@placeholder_project.supabase.co:5432/postgres"
     )
     CV_STORAGE_BUCKET: str = "cvs"
+    AVATAR_STORAGE_BUCKET: str = "avatars"
 
     # Redis Async Task Queue
     REDIS_URL: str = "redis://redis:6379/0"
@@ -99,6 +100,11 @@ def validate_production_config(cfg: Settings) -> None:
     cv_bucket = (cfg.CV_STORAGE_BUCKET or "").strip()
     if not cv_bucket:
         errors.append("CV_STORAGE_BUCKET (must be non-empty)")
+
+    # AVATAR_STORAGE_BUCKET
+    avatar_bucket = (cfg.AVATAR_STORAGE_BUCKET or "").strip()
+    if not avatar_bucket:
+        errors.append("AVATAR_STORAGE_BUCKET (must be non-empty)")
 
     # ALLOWED_ORIGINS
     origins = cfg.cors_origins_list

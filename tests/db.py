@@ -1,16 +1,19 @@
 """Shared SQLite test database infrastructure."""
 from app.db.models import (  # noqa: F401
+    Application,
+    ApplicationStatusEvent,
     EducationEntry,
     ExperienceEntry,
     InternshipListing,
     Match,
     ProcessingJob,
     ProjectEntry,
+    SavedInternship,
     Skill,
     StudentProfile,
     StudentSkill,
 )
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -21,6 +24,10 @@ test_engine = create_engine(
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
+
+@event.listens_for(test_engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 TestingSessionLocal = sessionmaker(
     autocommit=False,
