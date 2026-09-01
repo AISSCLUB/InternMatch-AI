@@ -35,6 +35,8 @@ export default function MainTabs() {
         screenOptions={{
           headerShown: false,
           tabBarStyle: { position: 'absolute' },
+          // Pre-mount primary tabs so first navigation feels immediate.
+          lazy: false,
         }}
         tabBar={(props) => <CustomTabBar {...props} />}
       >

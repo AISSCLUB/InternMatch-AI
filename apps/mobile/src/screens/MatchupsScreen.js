@@ -51,7 +51,6 @@ export default function MatchupsScreen({ navigation }) {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const isFocused = useIsFocused();
-  const autoRecalculateTriggeredRef = useRef(false);
   const passiveFetchTriggeredRef = useRef(false);
 
   const {
@@ -70,61 +69,66 @@ export default function MatchupsScreen({ navigation }) {
       (profile?.projects && profile.projects.length > 0)
   );
 
-  const fetchMatchesData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchMatchesData = useCallback(async ({ silent = false } = {}) => {
+    if (!hasAnalyZV) {
+      setMatches([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const res = await getMatches();
       setMatches(res.matches || []);
+      setError(null);
     } catch (err) {
       console.warn('Failed to load matchups:', err);
-      setError('MATCHES_LOAD_FAILED');
+
+      // A background refresh must never hide already rendered results.
+      if (!silent) {
+        setError('MATCHES_LOAD_FAILED');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [hasAnalyZV]);
 
   useEffect(() => {
-    if (!isFocused) {
-      autoRecalculateTriggeredRef.current = false;
+    if (!hasAnalyZV) {
       passiveFetchTriggeredRef.current = false;
       return;
     }
 
-    if (hasAnalyZV) {
-      if (autoRecalculateTriggeredRef.current) {
-        return;
-      }
-
-      if (isCalculating) {
-        autoRecalculateTriggeredRef.current = true;
-        return;
-      }
-
-      autoRecalculateTriggeredRef.current = true;
-      startCalculation(() => {
-        fetchMatchesData();
-      });
-      return;
-    }
-
+    // MainTabs eagerly mounts Matchups before the user opens this tab.
+    // Use that hidden time to preload the latest persisted matches.
     if (!passiveFetchTriggeredRef.current) {
       passiveFetchTriggeredRef.current = true;
       fetchMatchesData();
+      return;
+    }
+
+    // When the user opens Matchups later, keep rendered data visible
+    // and quietly check for fresher background-calculated matches.
+    if (isFocused) {
+      fetchMatchesData({ silent: true });
     }
   }, [
-    isFocused,
     hasAnalyZV,
-    isCalculating,
-    startCalculation,
+    isFocused,
     fetchMatchesData,
   ]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetchMatchesData();
+      await fetchMatchesData({ silent: true });
     } finally {
       setRefreshing(false);
     }
@@ -132,7 +136,7 @@ export default function MatchupsScreen({ navigation }) {
 
   const handleRecalculate = () => {
     startCalculation(() => {
-      fetchMatchesData();
+      fetchMatchesData({ silent: true });
     });
   };
 
@@ -232,7 +236,7 @@ export default function MatchupsScreen({ navigation }) {
         )}
 
         {/* Initial Loading */}
-        {loading && !refreshing && !isCalculating && (
+        {loading && hasAnalyZV && !refreshing && !isCalculating && (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={colors.accent || colors.teal} />
             <Text style={styles.loadingText}>{t('matchups.loading')}</Text>
@@ -240,7 +244,7 @@ export default function MatchupsScreen({ navigation }) {
         )}
 
         {/* API / Network Error */}
-        {!loading && error && !isCalculating && (
+        {!loading && hasAnalyZV && error && !isCalculating && (
           <Card style={styles.errorCard} padding="lg">
             <Ionicons name="alert-circle-outline" size={36} color={colors.danger || '#EF4444'} />
             <Text style={styles.errorTitle}>{t('matchups.errorTitle')}</Text>
@@ -259,7 +263,7 @@ export default function MatchupsScreen({ navigation }) {
         )}
 
         {/* Empty State: No CV Analyzed */}
-        {!loading && !error && !isCalculating && !hasAnalyZV && (
+        {!isCalculating && !hasAnalyZV && (
           <Reveal delay={0}>
             <Card style={styles.emptyCard} padding="lg">
               <Ionicons name="document-text-outline" size={48} color={colors.accent || colors.teal} />

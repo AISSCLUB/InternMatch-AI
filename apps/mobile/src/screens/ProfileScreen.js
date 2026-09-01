@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useScrollToTop } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../theme/colors';
 import { spacing } from '../theme/spacing';
@@ -62,13 +62,10 @@ export default function ProfileScreen({ navigation }) {
 
   const bottomPadding = getTabScreenBottomPadding(insets.bottom);
 
-  useFocusEffect(
-    useCallback(() => {
-      refreshProfile().catch((err) => {
-        console.warn('Failed to refresh profile on focus:', err);
-      });
-    }, [refreshProfile])
-  );
+  // Cache-first profile UX:
+  // show the shared ProfileContext snapshot immediately on tab entry.
+  // Fresh data remains available through explicit pull-to-refresh and
+  // through profile mutations that refresh the shared context.
 
   const skills = profile?.skills || [];
   const initials = getInitials(profile?.full_name);

@@ -498,7 +498,11 @@ export default function EditProfileScreen({ navigation }) {
             {isEmployer ? t('editProfile.employer.fullName') : t('editProfile.fullName')}
           </Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.compactMultilineInput]}
+            multiline
+            numberOfLines={2}
+            textAlignVertical="top"
+            maxLength={120}
             placeholder={isEmployer ? t('editProfile.employer.fullNamePlaceholder') : t('editProfile.fullName')}
             placeholderTextColor={colors.textTertiary || colors.textMuted}
             value={fullName}
@@ -507,7 +511,10 @@ export default function EditProfileScreen({ navigation }) {
 
           <Text style={styles.label}>{t('editProfile.headline')}</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.headlineInput]}
+            multiline
+            numberOfLines={2}
+            textAlignVertical="top"
             placeholder={
               isEmployer
                 ? t('editProfile.employer.headlinePlaceholder', { defaultValue: 'e.g. Technology company hiring interns' })
@@ -522,7 +529,11 @@ export default function EditProfileScreen({ navigation }) {
             <>
               <Text style={styles.label}>{t('editProfile.department')}</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.compactMultilineInput]}
+                multiline
+                numberOfLines={2}
+                textAlignVertical="top"
+                maxLength={120}
                 placeholder={t('editProfile.departmentPlaceholder', { defaultValue: 'e.g. Computer Engineering' })}
                 placeholderTextColor={colors.textTertiary || colors.textMuted}
                 value={department}
@@ -807,6 +818,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     color: colors.textPrimary || colors.textDark,
     ...typography.body,
+  },
+  headlineInput: {
+    minHeight: 72,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  compactMultilineInput: {
+    height: 72,
+    minHeight: 72,
+    maxHeight: 72,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   chipInputRow: {
     flexDirection: 'row',
