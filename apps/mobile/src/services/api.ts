@@ -278,6 +278,38 @@ export async function getProcessingJob(
   });
 }
 
+export type CVConfirmReplacementResponse = {
+  status: 'completed';
+  profile_id: string;
+  message: string;
+};
+
+export async function confirmCVReplacement(
+  jobId: string
+): Promise<CVConfirmReplacementResponse> {
+  return apiRequest<CVConfirmReplacementResponse>('/profile/cv/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ job_id: jobId }),
+  });
+}
+
+export type CVCancelResponse = {
+  job_id: string;
+  status: 'cancelled';
+  message: string;
+};
+
+export async function cancelCVAnalysis(
+  jobId: string
+): Promise<CVCancelResponse> {
+  return apiRequest<CVCancelResponse>(
+    `/profile/cv/${encodeURIComponent(jobId)}/cancel`,
+    {
+      method: 'POST',
+    }
+  );
+}
+
 export type InternshipSummary = {
   id: string;
   title: string;

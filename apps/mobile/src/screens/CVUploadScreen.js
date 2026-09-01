@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -19,27 +19,53 @@ import Card from '../components/Card';
 import GradientButton from '../components/GradientButton';
 import BrandedAILoader from '../components/motion/BrandedAILoader';
 import * as DocumentPicker from 'expo-document-picker';
-import { uploadCV, getProcessingJob, ApiError } from '../services/api';
+import {
+  uploadCV,
+  getProcessingJob,
+  confirmCVReplacement,
+  cancelCVAnalysis,
+  ApiError,
+} from '../services/api';
 import { useProfile } from '../context/ProfileContext';
 import haptics from '../services/haptics';
 
-const MAX_POLL_DURATION_MS = 60000;
+const MAX_POLL_DURATION_MS = 210000; // 210s: allow background CV extraction to complete before hard timeout
 const POLL_INTERVAL_MS = 1500;
+
+const CV_JOB_ERROR_CODES = {
+  'The uploaded document does not appear to be a valid CV or resume. Please upload a valid resume.':
+    'CV_INVALID_DOCUMENT',
+  "We couldn't read the uploaded document. Please make sure the file is not corrupted and is a valid PDF or DOCX file.":
+    'CV_UNREADABLE_DOCUMENT',
+};
+
+const getCVJobErrorCode = (jobError) =>
+  typeof jobError === 'string' && CV_JOB_ERROR_CODES[jobError]
+    ? CV_JOB_ERROR_CODES[jobError]
+    : 'CV_EXTRACTION_FAILED';
 
 export default function CVUploadScreen({ route, navigation }) {
   const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState(null);
-  const [status, setStatus] = useState('idle'); // 'idle' | 'uploading' | 'queued' | 'processing' | 'completed' | 'failed' | 'timeout'
+  const [status, setStatus] = useState('idle'); // 'idle' | 'uploading' | 'queued' | 'processing' | 'pending_confirmation' | 'completed' | 'failed' | 'timeout'
   const [progressPercent, setProgressPercent] = useState(0);
   const [errorMessage, setErrorMessage] = useState(null);
   const [jobId, setJobId] = useState(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
-  const { refreshProfile } = useProfile();
+  const { profile, refreshProfile } = useProfile();
+  const hasExistingCV = Boolean(profile?.cv_url || (profile?.skills && profile.skills.length > 0));
 
   const pollTimerRef = useRef(null);
   const isMountedRef = useRef(true);
   const isPollingRef = useRef(false);
+  const confirmInFlightRef = useRef(false);
+  const cancelInFlightRef = useRef(false);
+  const cancelledJobIdRef = useRef(null);
   const startTimeRef = useRef(0);
+  const visualProgressTimerRef = useRef(null);
+  const visualProgressTickRef = useRef(0);
 
   const clearPolling = () => {
     if (pollTimerRef.current) {
@@ -49,13 +75,64 @@ export default function CVUploadScreen({ route, navigation }) {
     isPollingRef.current = false;
   };
 
+  const clearVisualProgress = () => {
+    if (visualProgressTimerRef.current) {
+      clearInterval(visualProgressTimerRef.current);
+      visualProgressTimerRef.current = null;
+    }
+    visualProgressTickRef.current = 0;
+  };
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       clearPolling();
+      clearVisualProgress();
     };
   }, []);
+
+  useEffect(() => {
+    clearVisualProgress();
+
+    if (status !== 'queued' && status !== 'processing') {
+      return undefined;
+    }
+
+    visualProgressTimerRef.current = setInterval(() => {
+      if (!isMountedRef.current) return;
+
+      visualProgressTickRef.current += 1;
+      const tick = visualProgressTickRef.current;
+
+      setProgressPercent((current) => {
+        // 100% is reserved exclusively for confirmed backend completion.
+        if (current >= 94) return current;
+
+        // Move quickly at first, then progressively slow down as the
+        // operation approaches its visual waiting ceiling.
+        if (current < 35) {
+          return Math.min(35, current + 2);
+        }
+
+        if (current < 65) {
+          return Math.min(65, current + 1);
+        }
+
+        if (current < 80) {
+          return tick % 2 === 0 ? Math.min(80, current + 1) : current;
+        }
+
+        if (current < 90) {
+          return tick % 3 === 0 ? Math.min(90, current + 1) : current;
+        }
+
+        return tick % 4 === 0 ? Math.min(94, current + 1) : current;
+      });
+    }, 400);
+
+    return clearVisualProgress;
+  }, [status]);
 
   const pickFileAndUpload = async () => {
     clearPolling();
@@ -66,7 +143,6 @@ export default function CVUploadScreen({ route, navigation }) {
         type: [
           'application/pdf',
           'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          'application/msword',
         ],
         multiple: false,
         copyToCacheDirectory: true,
@@ -94,6 +170,7 @@ export default function CVUploadScreen({ route, navigation }) {
   };
 
   const startUploadAndPolling = async (fileAsset) => {
+    cancelledJobIdRef.current = null;
     setStatus('uploading');
     setProgressPercent(10);
     setErrorMessage(null);
@@ -146,35 +223,62 @@ export default function CVUploadScreen({ route, navigation }) {
     try {
       const job = await getProcessingJob(activeJobId);
 
-      if (!isMountedRef.current) return;
+      if (
+        !isMountedRef.current ||
+        cancelledJobIdRef.current === activeJobId
+      ) {
+        return;
+      }
 
       if (job.status === 'queued') {
         setStatus('queued');
-        setProgressPercent(job.progress_percent);
+        setProgressPercent((current) => {
+          const confirmed = Math.max(15, Number(job.progress_percent) || 0);
+          const ceiling = Math.min(20, confirmed + 5);
+
+          if (current >= ceiling) return current;
+          return Math.min(ceiling, current + 1);
+        });
         isPollingRef.current = false;
         scheduleNextPoll(activeJobId);
       } else if (job.status === 'processing') {
         setStatus('processing');
-        setProgressPercent(job.progress_percent);
+        setProgressPercent((current) => {
+          const confirmed = Math.max(15, Number(job.progress_percent) || 0);
+          const ceiling = Math.min(94, confirmed + 8);
+
+          // Progress never moves backwards. Between real backend checkpoints,
+          // move gently inside a small bounded window so the UI stays alive.
+          if (current >= ceiling) return current;
+
+          const step = confirmed > current ? 6 : 2;
+          return Math.min(ceiling, current + step);
+        });
         isPollingRef.current = false;
         scheduleNextPoll(activeJobId);
       } else if (job.status === 'completed') {
+        // Check requires_confirmation BEFORE normal completed success handling
+        if (job.result && job.result.requires_confirmation === true) {
+          clearPolling();
+          setStatus('pending_confirmation');
+          setProgressPercent(100);
+          haptics.warning?.() || haptics.selection?.();
+          return;
+        }
+
         setProgressPercent(100);
         clearPolling();
 
         try {
           await refreshProfile();
         } catch (profileErr) {
+          // The backend CV job already completed successfully. A temporary
+          // local refresh failure must not misrepresent that success.
           console.warn('Profile refresh after CV completion failed:', profileErr);
-          if (isMountedRef.current) {
-            setStatus('failed');
-            setErrorMessage('PROFILE_REFRESH_FAILED');
-            haptics.error();
-          }
-          return;
         }
 
         if (isMountedRef.current) {
+          setErrorMessage(null);
           setStatus('completed');
           haptics.success();
         }
@@ -182,7 +286,7 @@ export default function CVUploadScreen({ route, navigation }) {
         clearPolling();
         setStatus('failed');
         setProgressPercent(100);
-        setErrorMessage('CV_EXTRACTION_FAILED');
+        setErrorMessage(getCVJobErrorCode(job.error));
         haptics.error();
       }
     } catch (err) {
@@ -201,11 +305,114 @@ export default function CVUploadScreen({ route, navigation }) {
     }
   };
 
+  const handleConfirmReplacement = async () => {
+    if (!jobId || confirmInFlightRef.current) return;
+
+    // Ref guard is synchronous, unlike React state updates, so rapid taps
+    // cannot start multiple confirmation requests in the same render cycle.
+    confirmInFlightRef.current = true;
+    setIsConfirming(true);
+
+    try {
+      await confirmCVReplacement(jobId);
+
+      try {
+        await refreshProfile();
+      } catch (profileErr) {
+        // Confirmation already succeeded on the backend. Do not tell the user
+        // that confirmation failed just because the local refresh was transient.
+        console.warn('Profile refresh after CV confirmation failed:', profileErr);
+      }
+
+      if (isMountedRef.current) {
+        setErrorMessage(null);
+        setStatus('completed');
+        haptics.success();
+      }
+    } catch (err) {
+      console.warn('Confirm CV replacement error:', err);
+      if (isMountedRef.current) {
+        setStatus('failed');
+        setErrorMessage('CV_CONFIRMATION_FAILED');
+        haptics.error();
+      }
+    } finally {
+      confirmInFlightRef.current = false;
+      if (isMountedRef.current) {
+        setIsConfirming(false);
+      }
+    }
+  };
+
+  const resetAfterCancellation = (cancelledJobId) => {
+    cancelledJobIdRef.current = cancelledJobId;
+    clearPolling();
+    clearVisualProgress();
+    setStatus('idle');
+    setProgressPercent(0);
+    setErrorMessage(null);
+    setSelectedFile(null);
+    setJobId(null);
+  };
+
+  const handleCancelAnalysis = () => {
+    if (!jobId || cancelInFlightRef.current || isCancelling) return;
+
+    const activeJobId = jobId;
+
+    Alert.alert(
+      t('cvUpload.cancelAnalysisTitle'),
+      t('cvUpload.cancelAnalysisMessage'),
+      [
+        {
+          text: t('cvUpload.keepAnalyzing'),
+          style: 'cancel',
+        },
+        {
+          text: t('cvUpload.cancelAnalysis'),
+          style: 'destructive',
+          onPress: async () => {
+            if (cancelInFlightRef.current) return;
+
+            cancelInFlightRef.current = true;
+            setIsCancelling(true);
+
+            try {
+              await cancelCVAnalysis(activeJobId);
+
+              if (isMountedRef.current) {
+                resetAfterCancellation(activeJobId);
+                haptics.selection?.();
+              }
+            } catch (err) {
+              console.warn('Cancel CV analysis error:', err);
+
+              if (isMountedRef.current) {
+                Alert.alert(
+                  t('cvUpload.cancelFailedTitle'),
+                  t('cvUpload.cancelFailedMessage')
+                );
+                haptics.error();
+              }
+            } finally {
+              cancelInFlightRef.current = false;
+
+              if (isMountedRef.current) {
+                setIsCancelling(false);
+              }
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleStopPolling = () => {
     clearPolling();
     setStatus('idle');
     setProgressPercent(0);
     setErrorMessage(null);
+    setSelectedFile(null);
   };
 
   const handleFinish = () => {
@@ -222,7 +429,7 @@ export default function CVUploadScreen({ route, navigation }) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <ScreenHeader
-        title={t('cvUpload.title')}
+        title={hasExistingCV ? t('cvUpload.replaceTitle') : t('cvUpload.title')}
         showBack={true}
         navigation={navigation}
       />
@@ -233,28 +440,38 @@ export default function CVUploadScreen({ route, navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.subtitle}>
-          {t('cvUpload.subtitle')}
+          {hasExistingCV ? t('cvUpload.replaceSubtitle') : t('cvUpload.subtitle')}
         </Text>
 
         {/* Upload Drop Zone */}
-        {!isWorking && status !== 'completed' && (
-          <TouchableOpacity
-            style={styles.dropZone}
-            onPress={pickFileAndUpload}
-            accessibilityRole="button"
-            accessibilityLabel={t('cvUpload.dropZoneDefault')}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="cloud-upload-outline"
-              size={36}
-              color={colors.accent || colors.teal}
-            />
-            <Text style={styles.dropText}>
-              {selectedFile ? selectedFile.name : t('cvUpload.dropZoneDefault')}
+        {!isWorking && status !== 'completed' && status !== 'pending_confirmation' && (
+          <View>
+            <TouchableOpacity
+              style={styles.dropZone}
+              onPress={pickFileAndUpload}
+              accessibilityRole="button"
+              accessibilityLabel={hasExistingCV ? t('cvUpload.dropZoneReplace') : t('cvUpload.dropZoneDefault')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="cloud-upload-outline"
+                size={36}
+                color={colors.accent || colors.teal}
+              />
+              <Text style={styles.dropText}>
+                {selectedFile
+                  ? selectedFile.name
+                  : hasExistingCV
+                  ? t('cvUpload.dropZoneReplace')
+                  : t('cvUpload.dropZoneDefault')}
+              </Text>
+              <Text style={styles.dropHint}>{t('cvUpload.dropHint')}</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.guidanceText}>
+              {t('cvUpload.guidance')}
             </Text>
-            <Text style={styles.dropHint}>{t('cvUpload.dropHint')}</Text>
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* In-Progress State */}
@@ -282,16 +499,61 @@ export default function CVUploadScreen({ route, navigation }) {
             <Text style={styles.percentText}>{progressPercent}%</Text>
 
             <Text style={styles.workingNotice}>
-              {t('cvUpload.geminiNotice')}
+              {t('cvUpload.notice')}
             </Text>
 
             <TouchableOpacity
               style={styles.cancelBtn}
-              onPress={handleStopPolling}
+              onPress={handleCancelAnalysis}
+              disabled={isCancelling}
               accessibilityRole="button"
-              accessibilityLabel={t('cvUpload.cancelPolling')}
+              accessibilityLabel={t('cvUpload.cancelAnalysis')}
             >
-              <Text style={styles.cancelText}>{t('cvUpload.cancelPolling')}</Text>
+              <Text style={styles.cancelText}>
+                {isCancelling
+                  ? t('cvUpload.cancellingAnalysis')
+                  : t('cvUpload.cancelAnalysis')}
+              </Text>
+            </TouchableOpacity>
+
+
+          </Card>
+        )}
+
+        {/* Identity Mismatch Pending Confirmation State */}
+        {status === 'pending_confirmation' && (
+          <Card style={styles.warningCard} padding="lg">
+            <View style={styles.warningIconCircle}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={40}
+                color={colors.warning || '#F59E0B'}
+              />
+            </View>
+            <Text style={styles.warningTitle}>{t('cvUpload.mismatchTitle')}</Text>
+            <Text style={styles.warningDescription}>
+              {t('cvUpload.mismatchDescription')}
+            </Text>
+            <Text style={styles.warningHelper}>
+              {t('cvUpload.mismatchHelper')}
+            </Text>
+
+            <GradientButton
+              title={isConfirming ? t('common.loading') : t('cvUpload.mismatchConfirm')}
+              color={colors.warning || '#F59E0B'}
+              onPress={handleConfirmReplacement}
+              disabled={isConfirming}
+              style={{ marginTop: spacing.xl, width: '100%' }}
+            />
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={handleStopPolling}
+              disabled={isConfirming}
+              accessibilityRole="button"
+              accessibilityLabel={t('cvUpload.mismatchCancel')}
+            >
+              <Text style={styles.secondaryBtnText}>{t('cvUpload.mismatchCancel')}</Text>
             </TouchableOpacity>
           </Card>
         )}
@@ -343,11 +605,17 @@ export default function CVUploadScreen({ route, navigation }) {
                   ? t('errors.unauthenticated')
                   : errorMessage === 'CV_PICKER_ERROR'
                     ? t('cvUpload.errors.selectDoc', { defaultValue: t('cvUpload.errorTitle') })
-                    : errorMessage === 'CV_EXTRACTION_FAILED'
-                      ? t('cvUpload.errors.serverProcessingFailed', { defaultValue: t('errors.cvUploadFailed') })
-                      : errorMessage === 'PROFILE_REFRESH_FAILED'
-                        ? t('cvUpload.errors.profileLoadFailed', { defaultValue: t('cvUpload.errorTitle') })
-                        : t('errors.cvUploadFailed')}
+                    : errorMessage === 'CV_INVALID_DOCUMENT'
+                      ? t('cvUpload.errors.invalidDocument', { defaultValue: t('errors.cvUploadFailed') })
+                      : errorMessage === 'CV_UNREADABLE_DOCUMENT'
+                        ? t('cvUpload.errors.unreadableDocument', { defaultValue: t('errors.cvUploadFailed') })
+                        : errorMessage === 'CV_EXTRACTION_FAILED'
+                          ? t('cvUpload.errors.serverProcessingFailed', { defaultValue: t('errors.cvUploadFailed') })
+                          : errorMessage === 'CV_CONFIRMATION_FAILED'
+                            ? t('cvUpload.errors.confirmationFailed', { defaultValue: t('errors.cvUploadFailed') })
+                        : errorMessage === 'PROFILE_REFRESH_FAILED'
+                          ? t('cvUpload.errors.profileLoadFailed', { defaultValue: t('cvUpload.errorTitle') })
+                          : t('errors.cvUploadFailed')}
             </Text>
 
             <GradientButton
@@ -431,6 +699,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary || colors.textMuted,
     ...typography.caption,
   },
+  guidanceText: {
+    ...typography.caption,
+    color: colors.textSecondary || colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
+  },
   workingCard: {
     alignItems: 'center',
   },
@@ -491,6 +766,42 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary || colors.textMuted,
     textDecorationLine: 'underline',
+  },
+  warningCard: {
+    alignItems: 'center',
+    borderColor: '#FDE68A',
+    backgroundColor: '#FFFBEB',
+  },
+  warningIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  warningTitle: {
+    ...typography.cardTitle,
+    fontSize: 18,
+    color: '#92400E',
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  warningDescription: {
+    ...typography.body,
+    fontSize: 14,
+    color: '#78350F',
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    lineHeight: 20,
+  },
+  warningHelper: {
+    ...typography.caption,
+    color: '#92400E',
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
   },
   successCard: {
     alignItems: 'center',
