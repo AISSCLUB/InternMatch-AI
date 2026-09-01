@@ -2,7 +2,7 @@
 Structured CV Candidate Profile Extraction Service
 Uses Google Gemini structured output with strict Pydantic schemas to extract factual,
 grounded candidate profile details (skills, education, experience, projects, preferences)
-from raw parsed CV document text.
+from raw parsed CV document text or visual multimodal PDF documents.
 """
 
 from datetime import date
@@ -112,7 +112,7 @@ Extract structured candidate information from the CV into the exact requested JS
 Target content locale: {content_locale}
 
 STRICT EXTRACTION RULES:
-1. Extract ONLY facts explicitly supported by the CV text.
+1. Extract ONLY facts explicitly supported by the CV content.
 2. NEVER invent education, experience, employers, dates, technologies, locations, roles, or skills.
 3. If optional information is missing or not mentioned, set it to null.
 4. Missing skills, education, experience, projects, or preferences must be empty arrays [].
@@ -131,7 +131,7 @@ def extract_structured_candidate_profile(
     content_locale: str = "en",
 ) -> ExtractedCandidateProfile:
     """
-    Extract structured candidate profile from CV text using Google Gemini structured output.
+    Extract structured candidate profile from CV text using Google Gemini (Fast Path).
     Constructs Gemini client at call-time.
     Validates API key configuration before making external calls.
     Enforces strict Pydantic validation on the LLM response.
@@ -153,6 +153,67 @@ def extract_structured_candidate_profile(
     response = client.models.generate_content(
         model=settings.LLM_MODEL_NAME,
         contents=f"Candidate CV Document Text:\n\n{clean_text}",
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            response_json_schema=ExtractedCandidateProfile.model_json_schema(),
+        ),
+    )
+
+    if response is None:
+        raise ValueError("Gemini structured output response returned no content")
+
+    raw_text = getattr(response, "text", None)
+    if not raw_text or not isinstance(raw_text, str) or not raw_text.strip():
+        raise ValueError("Model returned unparseable or empty structured output")
+
+    try:
+        parsed = ExtractedCandidateProfile.model_validate_json(raw_text)
+    except Exception as err:
+        raise ValueError(
+            f"Model returned unparseable or empty structured output: {err}"
+        ) from err
+
+    if not parsed.full_name or not parsed.full_name.strip():
+        raise ValueError("Extracted candidate profile missing required non-blank full_name")
+
+    return parsed
+
+
+def extract_structured_candidate_profile_multimodal(
+    content: bytes,
+    mime_type: str = "application/pdf",
+    content_locale: str = "en",
+) -> ExtractedCandidateProfile:
+    """
+    Extract structured candidate profile from PDF bytes via Gemini multimodal understanding.
+    Constructs Gemini client at call-time.
+    Enforces strict Pydantic validation on the LLM response.
+    """
+    if not isinstance(content, bytes) or len(content) == 0:
+        raise ValueError("CV content cannot be empty")
+
+    clean_mime = (mime_type or "").strip().lower()
+    if clean_mime != "application/pdf":
+        raise ValueError(
+            f"Multimodal profile extraction is supported for PDF documents, got '{clean_mime}'"
+        )
+
+    api_key = settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else ""
+    if not api_key or "placeholder" in api_key.lower():
+        raise ValueError("GEMINI_API_KEY configuration is missing or placeholder value")
+
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    system_prompt = _build_system_prompt(content_locale=content_locale or "en")
+
+    doc_part = types.Part.from_bytes(data=content, mime_type="application/pdf")
+
+    response = client.models.generate_content(
+        model=settings.LLM_MODEL_NAME,
+        contents=[
+            doc_part,
+            "Extract structured candidate profile from this CV document into required schema.",
+        ],
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",

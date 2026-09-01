@@ -29,6 +29,29 @@ class ProcessingJobRepository:
         return db.scalar(stmt)
 
     @staticmethod
+    def get_by_id_and_user_id_for_update(
+        db: Session,
+        job_id: UUID,
+        user_id: UUID,
+    ) -> Optional[ProcessingJob]:
+        """
+        Fetch a user-owned processing job while acquiring a database row lock.
+
+        Used for state-changing authenticated flows that must serialize
+        concurrent requests for the same ProcessingJob. PostgreSQL holds the
+        row lock until the caller commits or rolls back the transaction.
+        """
+        stmt = (
+            select(ProcessingJob)
+            .where(
+                ProcessingJob.id == job_id,
+                ProcessingJob.user_id == user_id,
+            )
+            .with_for_update()
+        )
+        return db.scalar(stmt)
+
+    @staticmethod
     def get_by_id(db: Session, job_id: UUID) -> Optional[ProcessingJob]:
         """
         Internal worker lookup by primary key UUID.

@@ -8,9 +8,13 @@ from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
+from app.core.logging import get_logger
 from app.core.rate_limit import enforce_rate_limit
 from app.core.security import AuthenticatedUser, get_current_user
 from app.db.session import get_db
+from app.repositories.candidate_profile_write import (
+    replace_candidate_profile_from_extraction,
+)
 from app.repositories.matching_data import MatchingDataRepository
 from app.repositories.processing_job import ProcessingJobRepository
 from app.repositories.student_profile import StudentProfileRepository
@@ -21,17 +25,23 @@ from app.services.avatar_storage import (
     generate_avatar_signed_url,
     store_candidate_avatar,
 )
+from app.services.candidate_embedding import (
+    generate_and_persist_candidate_embedding,
+)
 from app.services.cv_enqueue import enqueue_cv_extraction
+from app.services.cv_profile_extraction import ExtractedCandidateProfile
 from app.services.cv_storage import (
     MAX_CV_SIZE_BYTES,
     CVStorageValidationError,
     delete_candidate_cv,
     store_candidate_cv,
 )
+from app.services.match_enqueue import enqueue_match_calculation
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -138,6 +148,28 @@ class CVProcessingResponse(BaseModel):
     status: Literal["queued"] = "queued"
     message: str = "CV processing enqueued successfully."
     estimated_seconds: int = 15
+
+
+class CVConfirmReplacementRequest(BaseModel):
+    """Request schema for confirming pending CV replacement."""
+
+    job_id: UUID
+
+
+class CVCancelResponse(BaseModel):
+    """Response schema for cancelling an active CV analysis."""
+
+    job_id: UUID
+    status: str = "cancelled"
+    message: str = "CV analysis cancelled."
+
+
+class CVConfirmReplacementResponse(BaseModel):
+    """Response schema for confirming pending CV replacement."""
+
+    status: str = "completed"
+    profile_id: UUID
+    message: str = "CV replacement confirmed and profile updated."
 
 
 def format_error_payload(code: str, message: str) -> Dict[str, Any]:
@@ -353,6 +385,247 @@ async def upload_candidate_cv(
         status="queued",
         message="CV processing enqueued successfully.",
         estimated_seconds=15,
+    )
+
+
+@router.post(
+    "/cv/{job_id}/cancel",
+    response_model=CVCancelResponse,
+    status_code=status.HTTP_200_OK,
+)
+def cancel_cv_analysis(
+    job_id: UUID,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CVCancelResponse:
+    """
+    Cancel an active user-owned CV analysis.
+
+    The cancellation marker is persisted before returning. A running worker
+    observes that marker at safe checkpoints and before any profile mutation.
+    """
+    job = ProcessingJobRepository.get_by_id_and_user_id_for_update(
+        db=db,
+        job_id=job_id,
+        user_id=current_user.user_id,
+    )
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=format_error_payload(
+                "NOT_FOUND",
+                "CV analysis job was not found.",
+            ),
+        )
+
+    if job.job_type != "cv_extraction":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_error_payload(
+                "INVALID_JOB_TYPE",
+                "This job is not a CV analysis.",
+            ),
+        )
+
+    job_result = job.result if isinstance(job.result, dict) else {}
+
+    # Idempotent replay after a successful cancellation request.
+    if job_result.get("cancel_requested") is True:
+        return CVCancelResponse(job_id=job.id)
+
+    # Once analysis has reached a terminal state, cancellation must not claim
+    # that already-committed work was stopped.
+    if job.status in {"completed", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=format_error_payload(
+                "CV_ANALYSIS_NOT_ACTIVE",
+                "This CV analysis is no longer active.",
+            ),
+        )
+
+    updated_result = dict(job_result)
+    updated_result["cancel_requested"] = True
+    updated_result["cancelled"] = True
+
+    # ProcessingJob currently supports queued/processing/completed/failed only.
+    # Store cancellation semantically in result while using failed as the
+    # existing terminal database state.
+    job.status = "failed"
+    job.progress_percent = 100
+    job.result = updated_result
+    job.error = "CV analysis cancelled by user."
+
+    db.commit()
+
+    return CVCancelResponse(job_id=job.id)
+
+
+@router.post(
+    "/cv/confirm",
+    response_model=CVConfirmReplacementResponse,
+    status_code=status.HTTP_200_OK,
+)
+def confirm_cv_replacement(
+    payload: CVConfirmReplacementRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Confirm and apply a pending CV profile replacement when identity mismatch warning was flagged.
+    Guarantees idempotency and safe transactional profile update.
+    """
+    enforce_rate_limit(user_id=current_user.user_id, scope="cv_confirm")
+
+    # Serialize confirmations for the same user-owned CV job.
+    # The row lock remains held through replacement, embedding, and the
+    # confirmed=True commit below, so concurrent replays observe final state.
+    job = ProcessingJobRepository.get_by_id_and_user_id_for_update(
+        db=db,
+        job_id=payload.job_id,
+        user_id=current_user.user_id,
+    )
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=format_error_payload("NOT_FOUND", "Processing job not found."),
+        )
+
+    if job.job_type != "cv_extraction":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_error_payload("INVALID_JOB_TYPE", "Job is not a CV extraction job."),
+        )
+
+    job_result = job.result if isinstance(job.result, dict) else {}
+
+    # Idempotent replay handling: if already confirmed, return success without repeating writes
+    if job_result.get("confirmed") is True and job_result.get("profile_id"):
+        try:
+            profile_id = UUID(str(job_result["profile_id"]))
+            return CVConfirmReplacementResponse(
+                status="completed",
+                profile_id=profile_id,
+                message="CV replacement was already confirmed.",
+            )
+        except Exception:
+            pass
+
+    if job_result.get("requires_confirmation") is not True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_error_payload(
+                "NO_CONFIRMATION_PENDING",
+                "This CV extraction job does not require confirmation.",
+            ),
+        )
+
+    extracted_data = job_result.get("extracted_profile")
+    cv_storage_path = job_result.get("cv_storage_path")
+
+    if not extracted_data or not cv_storage_path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_error_payload(
+                "MISSING_PENDING_PAYLOAD",
+                "Job result is missing pending extracted candidate profile data.",
+            ),
+        )
+
+    try:
+        extracted_profile = ExtractedCandidateProfile.model_validate(extracted_data)
+    except Exception as exc:
+        logger.warning(
+            "Pending CV replacement payload validation failed: %s",
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=format_error_payload(
+                "INVALID_PAYLOAD",
+                "Pending CV replacement data is invalid. Please upload the CV again.",
+            ),
+        ) from None
+
+    try:
+        profile = replace_candidate_profile_from_extraction(
+            db=db,
+            user_id=current_user.user_id,
+            cv_storage_path=cv_storage_path,
+            extracted=extracted_profile,
+        )
+
+        generate_and_persist_candidate_embedding(
+            db=db,
+            user_id=current_user.user_id,
+        )
+
+        updated_result = dict(job_result)
+        updated_result["requires_confirmation"] = False
+        updated_result["confirmed"] = True
+        updated_result["profile_id"] = str(profile.id)
+        updated_result["confirmed_at"] = datetime.now(timezone.utc).isoformat()
+        job.result = updated_result
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    # Trigger initial match calculation after successful confirmed commit
+    try:
+        match_job = ProcessingJobRepository.create(
+            db=db,
+            user_id=current_user.user_id,
+            job_type="match_calculation",
+        )
+        db.commit()
+
+        try:
+            enqueue_match_calculation(
+                job_id=match_job.id,
+                user_id=current_user.user_id,
+                candidate_limit=50,
+            )
+        except Exception as queue_exc:
+            logger.warning(
+                "Match calculation enqueue failed after confirmed CV replacement: %s",
+                type(queue_exc).__name__,
+            )
+
+            # The match job was already committed before enqueue. Do not leave
+            # a durable queued job behind when RQ rejected the enqueue.
+            try:
+                db.rollback()
+                failed_match_job = ProcessingJobRepository.get_by_id(
+                    db=db,
+                    job_id=match_job.id,
+                )
+                if failed_match_job:
+                    failed_match_job.status = "failed"
+                    failed_match_job.progress_percent = 100
+                    failed_match_job.result = None
+                    failed_match_job.error = (
+                        "Failed to enqueue automatic match calculation."
+                    )
+                    db.commit()
+            except Exception as state_exc:
+                db.rollback()
+                logger.warning(
+                    "Failed to persist match enqueue failure state: %s",
+                    type(state_exc).__name__,
+                )
+    except Exception as match_err:
+        logger.warning(
+            "Match job persistence failed after confirmed CV replacement: %s",
+            type(match_err).__name__,
+        )
+
+    return CVConfirmReplacementResponse(
+        status="completed",
+        profile_id=profile.id,
+        message="CV replacement confirmed and profile updated.",
     )
 
 

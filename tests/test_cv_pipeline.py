@@ -29,6 +29,7 @@ from app.services.cv_profile_extraction import (
     ExtractedProject,
     ExtractedSkill,
     extract_structured_candidate_profile,
+    extract_structured_candidate_profile_multimodal,
 )
 from app.services.cv_storage import (
     CVStorageValidationError,
@@ -39,6 +40,7 @@ from app.services.cv_validation import (
     CVValidationServiceError,
     InvalidCVDocumentError,
     validate_cv_document,
+    validate_cv_document_multimodal,
 )
 from docx import Document
 
@@ -556,13 +558,16 @@ def test_second_cv_extraction_replaces_prior_candidate_related_rows():
         assert exp[0].company == "Google DeepMind"
 
         skills = MatchingDataRepository.get_skill_names_for_student(db, prof2.id)
-        assert sorted(skills) == ["Go", "PyTorch", "Python", "Rust"]
+        assert sorted(skills) == ["Go", "Rust"]
     finally:
         db.close()
 
 
-def test_cv_extraction_merges_skills_without_duplicates():
-    """Test 22: Subsequent CV extraction merges skills and avoids duplicates."""
+def test_cv_extraction_replaces_skills_without_merging_old_skills():
+    """
+    Test 22: Subsequent CV extraction replaces candidate skills fresh
+    and does not merge old ones.
+    """
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
@@ -575,7 +580,7 @@ def test_cv_extraction_merges_skills_without_duplicates():
         )
         db.commit()
 
-        # Update with Skill2 (existing) and Skill3 (new)
+        # Update with Skill2 and Skill3 (Skill1 must be removed)
         ext2 = ExtractedCandidateProfile(
             full_name="Dev",
             skills=[ExtractedSkill(name="Skill2"), ExtractedSkill(name="Skill3")],
@@ -586,9 +591,9 @@ def test_cv_extraction_merges_skills_without_duplicates():
         db.commit()
 
         student_skills = db.query(StudentSkill).filter_by(student_id=prof.id).all()
-        assert len(student_skills) == 3
+        assert len(student_skills) == 2
         skill_names = MatchingDataRepository.get_skill_names_for_student(db, prof.id)
-        assert sorted(skill_names) == ["Skill1", "Skill2", "Skill3"]
+        assert sorted(skill_names) == ["Skill2", "Skill3"]
     finally:
         db.close()
 
@@ -871,3 +876,73 @@ def test_validate_cv_document_turkish_and_arabic_supported(monkeypatch):
     result = validate_cv_document(turkish_cv, content_locale="tr")
     assert result.is_cv is True
     assert result.confidence == 0.96
+
+
+def test_validate_cv_document_multimodal_pdf_passes(monkeypatch):
+    """Test 35: Multimodal PDF validation passes when semantic classifier approves bytes."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = '{"is_cv": true, "confidence": 0.97, "reason_code": "valid_cv"}'
+    mock_client.models.generate_content.return_value = mock_response
+
+    monkeypatch.setattr("app.services.cv_validation.genai.Client", lambda api_key: mock_client)
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-valid-test-key")
+
+    pdf_bytes = b"%PDF-1.4 mock scanned image resume"
+    result = validate_cv_document_multimodal(content=pdf_bytes, mime_type="application/pdf")
+
+    assert isinstance(result, CVValidationResult)
+    assert result.is_cv is True
+    assert result.confidence == 0.97
+
+
+def test_extract_structured_candidate_profile_multimodal_pdf(monkeypatch):
+    """Test 36: Multimodal PDF structured extraction returns typed candidate profile."""
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = """{
+        "full_name": "Visual Resume Candidate",
+        "headline": "Full-Stack Designer",
+        "skills": [
+            {"name": "Figma", "proficiency_level": "advanced"},
+            {"name": "React", "proficiency_level": "intermediate"}
+        ],
+        "education": [{
+            "institution": "Design Academy",
+            "degree": "B.A. Interaction Design",
+            "start_year": 2021,
+            "end_year": 2025
+        }],
+        "experience": [],
+        "projects": [{
+            "title": "Portfolio App",
+            "tech_stack": ["React", "CSS"],
+            "description": "Interactive showcase"
+        }],
+        "preferences": {
+            "work_types": ["remote"],
+            "desired_locations": ["Istanbul"],
+            "target_roles": ["Product Designer"]
+        }
+    }"""
+    mock_client.models.generate_content.return_value = mock_response
+
+    monkeypatch.setattr(
+        "app.services.cv_profile_extraction.genai.Client",
+        lambda api_key: mock_client,
+    )
+    monkeypatch.setattr("app.core.config.settings.GEMINI_API_KEY", "gemini-valid-test-key")
+
+    pdf_bytes = b"%PDF-1.4 mock complex layout resume"
+    extracted = extract_structured_candidate_profile_multimodal(
+        content=pdf_bytes,
+        mime_type="application/pdf",
+    )
+
+    assert isinstance(extracted, ExtractedCandidateProfile)
+    assert extracted.full_name == "Visual Resume Candidate"
+    assert extracted.headline == "Full-Stack Designer"
+    assert len(extracted.skills) == 2
+    assert extracted.skills[0].name == "Figma"
+    assert len(extracted.education) == 1
+    assert extracted.education[0].institution == "Design Academy"

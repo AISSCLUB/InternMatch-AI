@@ -363,9 +363,9 @@ def test_13_cv_extraction_merges_with_existing_skills():
         )
         db.commit()
 
-        # Verify all skills are present (union)
+        # Verify extracted skills replaced previous skills
         skills = MatchingDataRepository.get_skill_names_for_student(db, prof.id)
-        assert sorted(skills) == ["Docker", "FastAPI", "PostgreSQL", "Python"]
+        assert sorted(skills) == ["FastAPI", "PostgreSQL", "Python"]
     finally:
         db.close()
 
@@ -408,12 +408,12 @@ def test_14_cv_extraction_does_not_duplicate_existing_skills():
         db.close()
 
 
-def test_15_manual_skill_remains_after_later_cv_extraction():
-    """Test 15: Manually added skill survives a later CV upload and extraction."""
+def test_15_extracted_skills_replace_prior_skills():
+    """Test 15: Newly extracted skills replace prior student skills."""
     user_id = uuid4()
     db = TestingSessionLocal()
     try:
-        # Candidate manually adds a rare/specialized skill
+        # Candidate manually adds a skill
         prof = StudentProfileRepository.upsert_by_user_id(
             db, user_id=user_id, full_name="Surviving Skill Student"
         )
@@ -443,9 +443,7 @@ def test_15_manual_skill_remains_after_later_cv_extraction():
         db.commit()
 
         skills = MatchingDataRepository.get_skill_names_for_student(db, prof.id)
-        assert "SpecializedManualSkill" in skills
-        assert "React" in skills
-        assert "Python" in skills
+        assert sorted(skills) == ["Python", "React"]
     finally:
         db.close()
 
@@ -592,6 +590,6 @@ def test_19_cv_extraction_preserves_manual_metadata_and_updates_semantic_prefere
         assert updated.preferences['target_roles'] == ['Backend Engineer']
 
         skills = MatchingDataRepository.get_skill_names_for_student(db, updated.id)
-        assert sorted(skills) == ['ManualOnlySkill', 'Python']
+        assert sorted(skills) == ['Python']
     finally:
         db.close()

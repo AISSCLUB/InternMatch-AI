@@ -18,7 +18,6 @@ from app.db.models import (
     StudentProfile,
     StudentSkill,
 )
-from app.repositories.matching_data import MatchingDataRepository
 from app.repositories.student_profile import StudentProfileRepository
 from app.services.cv_profile_extraction import ExtractedCandidateProfile
 from sqlalchemy import delete, func, select
@@ -35,7 +34,7 @@ def replace_candidate_profile_from_extraction(
     """
     Atomically update candidate profile and structured CV data in a single transaction.
     Invalidates summary_embedding prior to replacement.
-    Preserves existing candidate skills and merges newly extracted CV skills without duplicates.
+    Replaces previous candidate CV skills with the skills extracted from the new CV.
     Flushes all mutations to the current session.
     Caller owns transaction lifecycle (commit/rollback).
     """
@@ -89,13 +88,11 @@ def replace_candidate_profile_from_extraction(
     db.execute(delete(ExperienceEntry).where(ExperienceEntry.student_id == profile.id))
     db.execute(delete(ProjectEntry).where(ProjectEntry.student_id == profile.id))
 
-    # 5. Merge Extracted Skills with Existing Skills (preserving manual skills)
-    existing_skills = MatchingDataRepository.get_skill_names_for_student(db, student_id=profile.id)
-    seen_skills: Set[str] = {
-        re.sub(r"\s+", " ", s.strip()).casefold()
-        for s in existing_skills
-        if re.sub(r"\s+", " ", s.strip())
-    }
+    # 5. Replace previous candidate skills with skills from the new CV.
+    # StudentSkill associations are profile-specific; master Skill taxonomy rows remain intact.
+    db.execute(delete(StudentSkill).where(StudentSkill.student_id == profile.id))
+
+    seen_skills: Set[str] = set()
 
     for s in extracted.skills:
         if not s.name or not isinstance(s.name, str):
@@ -108,7 +105,7 @@ def replace_candidate_profile_from_extraction(
             continue
         seen_skills.add(folded)
 
-        # Check existing Skill in taxonomy table (case-insensitive)
+        # Reuse the global Skill taxonomy row when it already exists.
         stmt = select(Skill).where(func.lower(Skill.name) == folded)
         skill_row = db.scalar(stmt)
         if not skill_row:

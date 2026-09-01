@@ -1,7 +1,8 @@
 """
 RQ CV Extraction Task
 Provides background execution boundary for candidate CV document download,
-parsing, structured LLM extraction, profile persistence, and embedding generation.
+fast-path/multimodal parsing, structured LLM extraction, candidate identity evaluation,
+profile persistence, and embedding generation.
 """
 
 from typing import Any, Dict, Union
@@ -12,18 +13,27 @@ from app.repositories.candidate_profile_write import (
     replace_candidate_profile_from_extraction,
 )
 from app.repositories.processing_job import ProcessingJobRepository
+from app.repositories.student_profile import StudentProfileRepository
 from app.services.candidate_embedding import (
     generate_and_persist_candidate_embedding,
 )
-from app.services.cv_parser import extract_cv_text
+from app.services.candidate_identity import (
+    IdentityVerdict,
+    evaluate_candidate_identity,
+)
+from app.services.cv_parser import CVParsingError, extract_cv_text
 from app.services.cv_profile_extraction import (
+    ExtractedCandidateProfile,
     extract_structured_candidate_profile,
+    extract_structured_candidate_profile_multimodal,
 )
 from app.services.cv_storage import download_candidate_cv
 from app.services.cv_validation import (
     InvalidCVDocumentError,
     validate_cv_document,
+    validate_cv_document_multimodal,
 )
+from app.services.match_enqueue import enqueue_match_calculation
 
 
 def _normalize_uuid(val: Union[UUID, str], param_name: str) -> UUID:
@@ -38,6 +48,88 @@ def _normalize_uuid(val: Union[UUID, str], param_name: str) -> UUID:
     raise ValueError(
         f"Invalid UUID type for {param_name}: expected UUID or str, got {type(val).__name__}"
     )
+
+
+class CVExtractionCancelled(Exception):
+    """Internal control-flow signal for a user-cancelled CV extraction."""
+
+
+def _job_cancel_requested(job: Any) -> bool:
+    result = job.result if isinstance(job.result, dict) else {}
+    return result.get("cancel_requested") is True
+
+
+def _raise_if_cancel_requested(job_id: UUID, user_id: UUID) -> None:
+    """Read the latest durable cancellation marker in a short transaction."""
+    cancel_db = SessionLocal()
+    try:
+        cancel_job = ProcessingJobRepository.get_by_id_and_user_id(
+            db=cancel_db,
+            job_id=job_id,
+            user_id=user_id,
+        )
+        if cancel_job is not None and _job_cancel_requested(cancel_job):
+            raise CVExtractionCancelled()
+    finally:
+        cancel_db.close()
+
+
+def _lock_active_cv_job(
+    db: Any,
+    job_id: UUID,
+    user_id: UUID,
+) -> Any:
+    """
+    Lock the target ProcessingJob immediately before a state commit or
+    destructive profile mutation and re-read its latest cancellation state.
+    """
+    locked_job = ProcessingJobRepository.get_by_id_and_user_id_for_update(
+        db=db,
+        job_id=job_id,
+        user_id=user_id,
+    )
+
+    if locked_job is None:
+        raise ValueError(f"ProcessingJob with id '{job_id}' not found.")
+
+    # The job may already exist in this Session's identity map from the initial
+    # lookup. Refresh after acquiring FOR UPDATE so cancellation committed by a
+    # competing transaction cannot remain hidden behind stale ORM attributes.
+    db.refresh(locked_job)
+
+    if _job_cancel_requested(locked_job):
+        raise CVExtractionCancelled()
+
+    return locked_job
+
+
+def _publish_progress(job_id: UUID, progress_percent: int) -> None:
+    """Persist a best-effort CV progress checkpoint in a short transaction."""
+    progress_db = SessionLocal()
+    try:
+        current_job = ProcessingJobRepository.get_by_id(
+            db=progress_db,
+            job_id=job_id,
+        )
+
+        if current_job is None or _job_cancel_requested(current_job):
+            progress_db.rollback()
+            return
+
+        updated = ProcessingJobRepository.update_state(
+            db=progress_db,
+            job_id=job_id,
+            status="processing",
+            progress_percent=progress_percent,
+        )
+        if updated is None:
+            progress_db.rollback()
+            return
+        progress_db.commit()
+    except Exception:
+        progress_db.rollback()
+    finally:
+        progress_db.close()
 
 
 def run_cv_extraction(
@@ -81,38 +173,146 @@ def run_cv_extraction(
         # Precondition checks passed for target job
         job_validated = True
 
-        # Transition to processing state
-        job.status = "processing"
-        job.progress_percent = 10
-        job.result = None
-        job.error = None
-        db.flush()
+        # Publish the first visible processing checkpoint separately.
+        _raise_if_cancel_requested(norm_job_id, norm_user_id)
+        _publish_progress(norm_job_id, 10)
 
         # Step 1: Download private CV object from storage
         cv_bytes = download_candidate_cv(
             user_id=norm_user_id,
             storage_path=clean_path,
         )
+        _raise_if_cancel_requested(norm_job_id, norm_user_id)
+        _publish_progress(norm_job_id, 20)
 
-        # Step 2: In-memory document parsing
-        extracted_text = extract_cv_text(
-            storage_path=clean_path,
-            content=cv_bytes,
+        ext = clean_path.rsplit(".", 1)[-1].lower() if "." in clean_path else ""
+
+        extracted_profile: ExtractedCandidateProfile
+        used_fast_path = False
+
+        # Step 2 & 3 & 4: Fast-path text extraction + fallback strategy
+        if ext == "pdf":
+            # Attempt the fast text path first. A PDF with a weak/partial text
+            # layer must fall back to multimodal document understanding rather
+            # than being rejected solely because text extraction was poor.
+            fallback_to_multimodal = False
+
+            try:
+                extracted_text = extract_cv_text(
+                    storage_path=clean_path,
+                    content=cv_bytes,
+                )
+                used_fast_path = bool(extracted_text and len(extracted_text.strip()) > 0)
+            except CVParsingError:
+                used_fast_path = False
+                fallback_to_multimodal = True
+
+            if used_fast_path:
+                _publish_progress(norm_job_id, 35)
+
+                try:
+                    validate_cv_document(
+                        text=extracted_text,
+                        content_locale=content_locale or "en",
+                    )
+                except InvalidCVDocumentError as validation_exc:
+                    if validation_exc.reason_code != "insufficient_content":
+                        raise
+                    fallback_to_multimodal = True
+
+                if not fallback_to_multimodal:
+                    _publish_progress(norm_job_id, 55)
+                    extracted_profile = extract_structured_candidate_profile(
+                        text=extracted_text,
+                        content_locale=content_locale or "en",
+                    )
+
+            if fallback_to_multimodal:
+                # Fallback Path: Gemini multimodal PDF document understanding.
+                #
+                # Once multimodal processing starts, its result/error is authoritative.
+                # Do not mask a validation or structured-extraction failure with the
+                # earlier text-parser exception.
+                _publish_progress(norm_job_id, 35)
+                validate_cv_document_multimodal(
+                    content=cv_bytes,
+                    mime_type="application/pdf",
+                    content_locale=content_locale or "en",
+                )
+                _publish_progress(norm_job_id, 55)
+                extracted_profile = extract_structured_candidate_profile_multimodal(
+                    content=cv_bytes,
+                    mime_type="application/pdf",
+                    content_locale=content_locale or "en",
+                )
+        else:
+            # DOCX: Normal text extraction fast path
+            extracted_text = extract_cv_text(
+                storage_path=clean_path,
+                content=cv_bytes,
+            )
+            _publish_progress(norm_job_id, 35)
+            validate_cv_document(
+                text=extracted_text,
+                content_locale=content_locale or "en",
+            )
+            _publish_progress(norm_job_id, 55)
+            extracted_profile = extract_structured_candidate_profile(
+                text=extracted_text,
+                content_locale=content_locale or "en",
+            )
+
+        _raise_if_cancel_requested(norm_job_id, norm_user_id)
+        _publish_progress(norm_job_id, 70)
+
+        # Step 5: Candidate Identity Guard check BEFORE profile mutation
+        existing_profile = StudentProfileRepository.get_by_user_id(db, user_id=norm_user_id)
+        identity_result = evaluate_candidate_identity(
+            existing_profile=existing_profile,
+            extracted=extracted_profile,
+            db=db,
         )
 
-        # Step 3: Semantic CV Validation (before any profile extraction/mutation)
-        validate_cv_document(
-            text=extracted_text,
-            content_locale=content_locale or "en",
+        if identity_result.verdict == IdentityVerdict.POSSIBLE_MISMATCH:
+            # Do NOT replace candidate profile. Persist pending confirmation state.
+            # Serialize this terminal commit against a concurrent cancellation.
+            job = _lock_active_cv_job(
+                db=db,
+                job_id=norm_job_id,
+                user_id=norm_user_id,
+            )
+            job.status = "completed"
+            job.progress_percent = 100
+            job.error = None
+            job.result = {
+                "requires_confirmation": True,
+                "confirmed": False,
+                "reason": "possible_identity_mismatch",
+                "extracted_name": extracted_profile.full_name,
+                "existing_name": existing_profile.full_name if existing_profile else None,
+                "cv_storage_path": clean_path,
+                "extracted_profile": extracted_profile.model_dump(mode="json"),
+            }
+            db.commit()
+
+            return {
+                "job_id": str(norm_job_id),
+                "status": "completed",
+                "requires_confirmation": True,
+            }
+
+        # Step 6: Transactional structured candidate data persistence
+        #
+        # Serialize the final mutation boundary against cancellation. If the
+        # cancellation transaction committed first, abort before touching the
+        # candidate profile. If this worker locks first, cancellation waits
+        # until this atomic profile+embedding transaction reaches completion.
+        job = _lock_active_cv_job(
+            db=db,
+            job_id=norm_job_id,
+            user_id=norm_user_id,
         )
 
-        # Step 4: Structured LLM extraction
-        extracted_profile = extract_structured_candidate_profile(
-            text=extracted_text,
-            content_locale=content_locale or "en",
-        )
-
-        # Step 5: Transactional structured candidate data persistence
         profile = replace_candidate_profile_from_extraction(
             db=db,
             user_id=norm_user_id,
@@ -120,24 +320,72 @@ def run_cv_extraction(
             extracted=extracted_profile,
         )
 
-        # Step 6: Candidate summary embedding generation & persistence
+        # Step 7: Candidate summary embedding generation & persistence
+        #
+        # Do not publish progress from a separate database session between
+        # profile replacement and embedding generation. These mutations must
+        # remain atomic so an embedding failure can roll back the entire
+        # candidate replacement.
         generate_and_persist_candidate_embedding(
             db=db,
             user_id=norm_user_id,
         )
 
-        # Step 7: Mark job completed
+        # Step 8: Mark job completed
         job.status = "completed"
         job.progress_percent = 100
         job.error = None
-        job.result = {"profile_id": str(profile.id)}
+        job.result = {
+            "profile_id": str(profile.id),
+        }
 
         db.commit()
+
+        # Start initial match calculation after the completed CV/profile transaction.
+        # This optimization is best-effort: matching failure must never fail CV extraction.
+        match_job_id = None
+        match_db = SessionLocal()
+        try:
+            match_job = ProcessingJobRepository.create(
+                db=match_db,
+                user_id=norm_user_id,
+                job_type="match_calculation",
+            )
+            match_job_id = match_job.id
+            match_db.commit()
+
+            try:
+                enqueue_match_calculation(
+                    job_id=match_job_id,
+                    user_id=norm_user_id,
+                    candidate_limit=50,
+                )
+            except Exception:
+                match_db.rollback()
+                failed_match_job = ProcessingJobRepository.get_by_id(
+                    match_db, match_job_id
+                )
+                if failed_match_job:
+                    failed_match_job.status = "failed"
+                    failed_match_job.progress_percent = 100
+                    failed_match_job.result = None
+                    failed_match_job.error = "Failed to enqueue automatic match calculation."
+                    match_db.commit()
+        except Exception:
+            match_db.rollback()
+        finally:
+            match_db.close()
 
         return {
             "job_id": str(norm_job_id),
             "status": "completed",
             "profile_id": str(profile.id),
+        }
+    except CVExtractionCancelled:
+        db.rollback()
+        return {
+            "job_id": str(norm_job_id),
+            "status": "cancelled",
         }
     except Exception as exc:
         try:
@@ -150,7 +398,7 @@ def run_cv_extraction(
             fail_db = SessionLocal()
             try:
                 fail_job = ProcessingJobRepository.get_by_id(fail_db, norm_job_id)
-                if fail_job:
+                if fail_job and not _job_cancel_requested(fail_job):
                     fail_job.status = "failed"
                     fail_job.progress_percent = 100
                     fail_job.result = None
@@ -158,6 +406,11 @@ def run_cv_extraction(
                         fail_job.error = (
                             "The uploaded document does not appear to be a valid CV or resume. "
                             "Please upload a valid resume."
+                        )
+                    elif isinstance(exc, CVParsingError):
+                        fail_job.error = (
+                            "We couldn't read the uploaded document. Please make sure the "
+                            "file is not corrupted and is a valid PDF or DOCX file."
                         )
                     else:
                         fail_job.error = "CV processing failed."
